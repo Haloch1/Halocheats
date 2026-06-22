@@ -9,6 +9,7 @@ import { initReveal, renderMessage } from "./site.js";
 initReveal();
 
 const statusBox = document.querySelector("[data-account-message]");
+const cardStatusBox = document.querySelector("[data-account-card-message]");
 const guestView = document.querySelector("[data-guest-view]");
 const memberView = document.querySelector("[data-member-view]");
 const sessionEmail = document.querySelector("[data-session-email]");
@@ -27,12 +28,18 @@ const nextPath = new URLSearchParams(window.location.search).get("next") || "/pr
 let isPasswordRecovery = false;
 
 function showStatusMessage(message, tone = "info") {
-  if (!statusBox) {
-    return;
-  }
+  [statusBox, cardStatusBox].forEach((target) => {
+    if (!target) {
+      return;
+    }
 
-  statusBox.hidden = false;
-  renderMessage(statusBox, message, tone);
+    target.hidden = false;
+    renderMessage(target, message, tone);
+  });
+
+  if (window.matchMedia("(max-width: 760px)").matches) {
+    cardStatusBox?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 }
 
 function setAuthTab(tabName) {
