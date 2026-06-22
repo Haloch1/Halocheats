@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Account | Halo Cheats</title>
+    <meta
+      name="description"
+      content="Create a member account or sign in to purchase partner products through Halo Cheats."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Oxanium:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <div class="page-shell page-shell-inner">
+      <div class="ambient ambient-left"></div>
+      <div class="ambient ambient-right"></div>
+
+      <header class="topbar reveal" data-delay="0">
+        <div class="topbar-shell">
+          <a class="brand" href="/" aria-label="Halo Cheats home">
+            <img src="../assets/hc-logo.png" alt="Halo Cheats logo" />
+            <div>
+              <strong>Halo Cheats</strong>
+              <span>Authorized reseller hub</span>
+            </div>
+          </a>
+
+          <nav class="nav">
+            <a href="/">Home</a>
+            <a href="/products/">Products</a>
+            <a href="/status/">Status</a>
+            <a href="/desk/">Desk Help</a>
+          </nav>
+
+          <a class="nav-cta" href="/products/">Products</a>
+        </div>
+      </header>
+
+      <main class="section">
+        <div class="section-heading reveal" data-delay="10">
+          <p class="eyebrow">Account</p>
+          <h2>Create your member account and connect checkout.</h2>
+        </div>
+
+        <div class="inline-message info reveal" data-delay="40" data-account-message hidden></div>
+
+        <section class="auth-grid">
+          <div class="auth-card auth-entry-card reveal" data-delay="70" data-guest-view>
+            <div class="auth-entry-shell">
+              <div class="auth-entry-main">
+                <div class="auth-panel-switch">
+                  <button class="auth-switch-button is-active" type="button" data-auth-tab="signup">
+                    Create account
+                  </button>
+                  <button class="auth-switch-button" type="button" data-auth-tab="signin">
+                    Have an account? Sign in
+                  </button>
+                </div>
+
+                <div class="auth-block auth-pane is-active" data-auth-pane="signup">
+                  <p class="eyebrow">Create account</p>
+                  <form class="auth-form" data-signup-form>
+                    <label>
+                      Email
+                      <input type="email" name="email" autocomplete="email" required />
+                    </label>
+                    <label>
+                      Password
+                      <input type="password" name="password" autocomplete="new-password" minlength="8" required />
+                    </label>
+                    <button class="button button-primary" type="submit">Create Account</button>
+                  </form>
+                </div>
+
+                <div class="auth-block auth-pane" data-auth-pane="signin" hidden>
+                  <p class="eyebrow">Sign in</p>
+                  <form class="auth-form" data-signin-form>
+                    <label>
+                      Email
+                      <input type="email" name="email" autocomplete="email" required />
+                    </label>
+                    <label>
+                      Password
+                      <input type="password" name="password" autocomplete="current-password" required />
+                    </label>
+                    <button class="button button-secondary" type="submit">Sign In</button>
+                  </form>
+                </div>
+              </div>
+
+              <aside class="auth-entry-side">
+                <p class="eyebrow">Access flow</p>
+                <h3>Secure member login before checkout.</h3>
+                <p>
+                  Create your member account once, confirm the email link, then
+                  come back here to sign in and unlock product checkout.
+                </p>
+
+                <div class="auth-tip-card">
+                  <span class="auth-tip-label">Check your inbox</span>
+                  <strong>Email verification is part of the sign-up flow.</strong>
+                  <p>
+                    After account creation, look for the verification email,
+                    click the link, and then sign in from this page.
+                  </p>
+                </div>
+
+                <div class="auth-flow-list">
+                  <div class="auth-flow-item">
+                    <span>01</span>
+                    <div>
+                      <strong>Create account</strong>
+                      <p>Use a real email you can open right away.</p>
+                    </div>
+                  </div>
+                  <div class="auth-flow-item">
+                    <span>02</span>
+                    <div>
+                      <strong>Confirm email</strong>
+                      <p>Open the verification link before trying to sign in.</p>
+                    </div>
+                  </div>
+                  <div class="auth-flow-item">
+                    <span>03</span>
+                    <div>
+                      <strong>Return to products</strong>
+                      <p>Your member session will attach to checkout and key delivery.</p>
+                    </div>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+
+          <div class="auth-card auth-card-dashboard reveal" data-delay="120" data-member-view hidden>
+            <p class="eyebrow">Signed in</p>
+            <h3>Member session active</h3>
+            <p class="dashboard-email" data-session-email></p>
+            <p>
+              Your account is live. Orders, paid sessions, and delivered license keys
+              will show up here after checkout.
+            </p>
+            <div class="dashboard-actions">
+              <a class="button button-primary" href="/products/">Open Products</a>
+              <a class="button button-secondary" href="/desk/">Desk Inbox</a>
+              <button class="button button-secondary" type="button" data-signout>Sign Out</button>
+            </div>
+
+            <div class="member-grid">
+              <section class="member-panel">
+                <div class="member-panel-heading">
+                  <p class="eyebrow">Orders</p>
+                  <h4>Payment history</h4>
+                </div>
+                <div class="member-list" data-orders-list>
+                  <div class="member-empty">No orders yet. Use the products page to start your first checkout.</div>
+                </div>
+              </section>
+
+              <section class="member-panel">
+                <div class="member-panel-heading">
+                  <p class="eyebrow">Keys</p>
+                  <h4>Delivered access</h4>
+                </div>
+                <div class="member-list" data-keys-list>
+                  <div class="member-empty">No keys assigned yet. Paid orders will appear here after stock is available.</div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="../scripts/account-page.js"></script>
+  </body>
+</html>
