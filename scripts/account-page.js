@@ -189,22 +189,6 @@ async function refreshSession() {
   }
 }
 
-if (supabase) {
-  supabase.auth.onAuthStateChange(async (event, session) => {
-    if (event === "PASSWORD_RECOVERY") {
-      isPasswordRecovery = true;
-      setAuthTab("update-password");
-      setView(session);
-      showStatusMessage("Enter a new password to finish your reset.", "info");
-      return;
-    }
-
-    await refreshSession();
-  });
-}
-
-await refreshSession();
-
 authSwitchButtons.forEach((button) => {
   button.addEventListener("click", () => {
     setAuthTab(button.dataset.authTab);
@@ -225,6 +209,27 @@ passwordToggleButtons.forEach((button) => {
     button.textContent = isHidden ? "Hide" : "Show";
     button.setAttribute("aria-label", isHidden ? "Hide password" : "Show password");
   });
+});
+
+if (supabase) {
+  supabase.auth.onAuthStateChange(async (event, session) => {
+    if (event === "PASSWORD_RECOVERY") {
+      isPasswordRecovery = true;
+      setAuthTab("update-password");
+      setView(session);
+      showStatusMessage("Enter a new password to finish your reset.", "info");
+      return;
+    }
+
+    await refreshSession();
+  });
+}
+
+refreshSession().catch((error) => {
+  showStatusMessage(
+    error instanceof Error ? error.message : "Unable to load account session.",
+    "error"
+  );
 });
 
 signUpForm?.addEventListener("submit", async (event) => {
