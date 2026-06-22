@@ -80,7 +80,7 @@ function renderCategoryStrip(groups) {
 function renderProductCard(product, index) {
   const item = document.createElement("article");
   const statusClass = product.available ? "live" : "unavailable";
-  item.className = `product-card product-card-page catalog-product reveal${
+  item.className = `product-card product-card-page catalog-product${
     product.featured ? " featured" : ""
   }`;
   item.dataset.delay = String(30 + (index % 4) * 35);
@@ -268,8 +268,7 @@ function renderProductGroups(products) {
 
   const sections = [...groups.entries()].map(([category, categoryProducts], groupIndex) => {
     const section = document.createElement("section");
-    section.className = "catalog-group reveal";
-    section.dataset.delay = String(60 + groupIndex * 35);
+    section.className = "catalog-group";
     section.id = slugify(category);
     section.innerHTML = `
       <div class="catalog-group-heading">
