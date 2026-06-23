@@ -7,12 +7,16 @@ const grid = document.querySelector("[data-products-grid]");
 const notice = document.querySelector("[data-products-message]");
 const accountLink = document.querySelector("[data-account-link]");
 const categoryStrip = document.querySelector("[data-category-strip]");
+const productSearch = document.querySelector("[data-product-search]");
 const gamesStat = document.querySelector("[data-catalog-games]");
 const productsStat = document.querySelector("[data-catalog-products]");
 const lowestStat = document.querySelector("[data-catalog-lowest]");
 let catalogProducts = [];
 let activeProduct = null;
 let activeVariant = null;
+let activeCategory = "all";
+let searchQuery = "";
+const excludedCatalogTerms = ["account", "spoofer"];
 
 if (accountLink) {
   accountLink.textContent = "Account";
@@ -57,6 +61,20 @@ function groupProducts(products) {
   }, new Map());
 }
 
+function isAllowedProduct(product) {
+  const searchable = [
+    product.name,
+    product.vendor,
+    product.game,
+    product.category,
+    product.slug,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return !excludedCatalogTerms.some((term) => searchable.includes(term));
+}
+
 function getStartingPrice(product) {
   const match = product.priceDisplay.match(/\$([0-9]+(?:\.[0-9]{2})?)/);
   return match ? Number(match[1]) : Infinity;
@@ -67,14 +85,85 @@ function renderCategoryStrip(groups) {
     return;
   }
 
-  const links = [...groups.keys()].map((category) => {
-    const link = document.createElement("a");
-    link.href = `#${slugify(category)}`;
-    link.textContent = category;
-    return link;
+  const categories = ["all", ...groups.keys()];
+  const links = categories.map((category) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.categoryFilter = category;
+    button.className = category === activeCategory ? "is-active" : "";
+    button.textContent = category === "all" ? "All" : category;
+    return button;
   });
 
   categoryStrip.replaceChildren(...links);
+}
+
+function categoryImageLabel(category) {
+  if (/rainbow six/i.test(category)) {
+    return "R6";
+  }
+
+  return category
+    .split(/\s+/)
+    .map((word) => word[0])
+    .join("")
+    .slice(0, 3)
+    .toUpperCase();
+}
+
+function renderCategoryCard(category, products) {
+  const card = document.createElement("article");
+  const label = categoryImageLabel(category);
+  card.className = "catalog-category-card";
+  card.dataset.categoryCard = category;
+  card.innerHTML = `
+    <div class="category-card-art">
+      <img src="../assets/hc-logo.png" alt="" />
+      <strong>${label}</strong>
+    </div>
+    <div class="category-card-body">
+      <div>
+        <h3>${category}</h3>
+        <p>${products.length} ${products.length === 1 ? "product" : "products"}</p>
+      </div>
+      <div class="category-card-action">
+        <span>Browse ${category}</span>
+        <button class="button button-primary" type="button">View</button>
+      </div>
+    </div>
+  `;
+  return card;
+}
+
+function renderCategoryCards(products) {
+  const groups = groupProducts(products);
+  renderCategoryStrip(groups);
+
+  if (!groups.size) {
+    grid.innerHTML = '<div class="member-empty">No product categories available yet.</div>';
+    return;
+  }
+
+  const section = document.createElement("section");
+  section.className = "catalog-category-grid";
+  section.replaceChildren(
+    ...[...groups.entries()].map(([category, categoryProducts]) =>
+      renderCategoryCard(category, categoryProducts)
+    )
+  );
+
+  grid.replaceChildren(section);
+}
+
+function productMatchesSearch(product) {
+  if (!searchQuery) {
+    return true;
+  }
+
+  return [product.name, product.summary, product.vendor, product.game, product.category]
+    .join(" ")
+    .toLowerCase()
+    .includes(searchQuery);
 }
 
 function renderProductCard(product, index) {
@@ -264,9 +353,14 @@ function selectVariant(variantSlug) {
 
 function renderProductGroups(products) {
   const groups = groupProducts(products);
-  renderCategoryStrip(groups);
+  renderCategoryStrip(groupProducts(catalogProducts));
 
-  const sections = [...groups.entries()].map(([category, categoryProducts], groupIndex) => {
+  if (!products.length) {
+    grid.innerHTML = '<div class="member-empty">No products match that search.</div>';
+    return;
+  }
+
+  const sections = [...groups.entries()].map(([category, categoryProducts]) => {
     const section = document.createElement("section");
     section.className = "catalog-group";
     section.id = slugify(category);
@@ -276,7 +370,7 @@ function renderProductGroups(products) {
           <span>${String(categoryProducts.length).padStart(2, "0")} listings</span>
           <h3>${category}</h3>
         </div>
-        <p>${categoryProducts.some((product) => product.available) ? "Available now" : "Stock watch"}</p>
+        <button class="button button-secondary" type="button" data-category-filter="all">Back to categories</button>
       </div>
     `;
 
@@ -288,6 +382,20 @@ function renderProductGroups(products) {
   });
 
   grid.replaceChildren(...sections);
+}
+
+function renderCatalogView() {
+  const baseProducts = catalogProducts.filter((product) => {
+    return activeCategory === "all" || (product.category || product.game) === activeCategory;
+  });
+  const matchingProducts = baseProducts.filter(productMatchesSearch);
+
+  if (activeCategory === "all" && !searchQuery) {
+    renderCategoryCards(catalogProducts);
+    return;
+  }
+
+  renderProductGroups(matchingProducts);
 }
 
 function updateStats(products) {
@@ -360,15 +468,43 @@ async function checkoutSelectedVariant(button) {
 }
 
 try {
-  catalogProducts = await loadProducts();
+  catalogProducts = (await loadProducts()).filter(isAllowedProduct);
   updateStats(catalogProducts);
-  renderProductGroups(catalogProducts);
+  renderCatalogView();
   initReveal();
 } catch (error) {
   renderMessage(notice, error.message, "error");
 }
 
+categoryStrip?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-category-filter]");
+
+  if (!button) {
+    return;
+  }
+
+  activeCategory = button.dataset.categoryFilter;
+  renderCatalogView();
+});
+
 grid?.addEventListener("click", async (event) => {
+  const categoryCard = event.target.closest("[data-category-card]");
+
+  if (categoryCard) {
+    activeCategory = categoryCard.dataset.categoryCard;
+    renderCatalogView();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+
+  const categoryButton = event.target.closest("[data-category-filter]");
+
+  if (categoryButton) {
+    activeCategory = categoryButton.dataset.categoryFilter;
+    renderCatalogView();
+    return;
+  }
+
   const button = event.target.closest(".pay-button");
 
   if (!button) {
@@ -377,6 +513,11 @@ grid?.addEventListener("click", async (event) => {
 
   const product = catalogProducts.find((item) => item.slug === button.dataset.productSlug);
   openVariantModal(product);
+});
+
+productSearch?.addEventListener("input", (event) => {
+  searchQuery = event.target.value.trim().toLowerCase();
+  renderCatalogView();
 });
 
 document.addEventListener("keydown", (event) => {
