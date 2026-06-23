@@ -16,6 +16,9 @@ const threadMeta = document.querySelector("[data-admin-thread-meta]");
 const threadMessages = document.querySelector("[data-admin-thread-messages]");
 const replyForm = document.querySelector("[data-admin-reply-form]");
 const deleteThreadButton = document.querySelector("[data-admin-delete-thread]");
+const deleteKeyModal = document.querySelector("[data-delete-key-modal]");
+const deleteKeyForm = document.querySelector("[data-delete-key-form]");
+const deleteKeyCloseButton = document.querySelector("[data-delete-key-close]");
 
 let activeThreads = [];
 let activeThreadId = null;
@@ -54,6 +57,26 @@ function setPendingAccess(value) {
 
 function clearPendingAccess() {
   window.localStorage.removeItem(ADMIN_PENDING_ACCESS_STORAGE);
+}
+
+function openDeleteKeyModal() {
+  if (!deleteKeyModal) {
+    return;
+  }
+
+  deleteKeyModal.hidden = false;
+  document.body.classList.add("modal-open");
+  deleteKeyForm?.elements?.deleteKey?.focus();
+}
+
+function closeDeleteKeyModal() {
+  if (!deleteKeyModal) {
+    return;
+  }
+
+  deleteKeyModal.hidden = true;
+  document.body.classList.remove("modal-open");
+  deleteKeyForm?.reset();
 }
 
 function getStaffHeaders() {
@@ -384,21 +407,87 @@ deleteThreadButton?.addEventListener("click", async () => {
 
   const thread = activeThreads.find((item) => item.id === activeThreadId);
   const label = thread?.subject || "this ticket";
-  const confirmed = window.confirm(`Delete "${label}" and all of its messages? This will be logged.`);
+  const confirmed = window.confirm(
+    `Request a one-time delete key for "${label}"? The owner webhook will receive the key.`
+  );
 
   if (!confirmed) {
     return;
   }
 
   deleteThreadButton.disabled = true;
-  deleteThreadButton.textContent = "Deleting...";
+  deleteThreadButton.textContent = "Requesting Key...";
 
   try {
     const response = await fetch(
-      `/api/admin/live-desk/${encodeURIComponent(activeThreadId)}`,
+      `/api/admin/live-desk/${encodeURIComponent(activeThreadId)}/request-delete-key`,
       {
-        method: "DELETE",
+        method: "POST",
         headers: getStaffHeaders(),
+      }
+    );
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to request a delete key.");
+    }
+
+    renderMessage(
+      messageBox,
+      "Delete key requested. Ask the owner for the one-time key from Discord.",
+      "success"
+    );
+    openDeleteKeyModal();
+  } catch (error) {
+    renderMessage(
+      messageBox,
+      error instanceof Error ? error.message : "Unable to request a delete key.",
+      "error"
+    );
+  } finally {
+    deleteThreadButton.disabled = false;
+    deleteThreadButton.textContent = "Delete Ticket";
+  }
+});
+
+deleteKeyCloseButton?.addEventListener("click", closeDeleteKeyModal);
+
+deleteKeyModal?.addEventListener("click", (event) => {
+  if (event.target === deleteKeyModal) {
+    closeDeleteKeyModal();
+  }
+});
+
+deleteKeyForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  if (!activeThreadId) {
+    return;
+  }
+
+  const formData = new FormData(deleteKeyForm);
+  const deleteKey = String(formData.get("deleteKey") || "").trim();
+  const submitButton = deleteKeyForm.querySelector('button[type="submit"]');
+
+  if (!deleteKey) {
+    return;
+  }
+
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Deleting...";
+  }
+
+  try {
+    const response = await fetch(
+      `/api/admin/live-desk/${encodeURIComponent(activeThreadId)}/confirm-delete`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getStaffHeaders(),
+        },
+        body: JSON.stringify({ deleteKey }),
       }
     );
     const payload = await response.json();
@@ -407,9 +496,10 @@ deleteThreadButton?.addEventListener("click", async () => {
       throw new Error(payload.error || "Unable to delete the ticket.");
     }
 
+    closeDeleteKeyModal();
     activeThreadId = null;
     await loadThreads();
-    renderMessage(messageBox, "Ticket deleted and logged.", "success");
+    renderMessage(messageBox, "Ticket deleted with one-time key and logged.", "success");
   } catch (error) {
     renderMessage(
       messageBox,
@@ -417,8 +507,10 @@ deleteThreadButton?.addEventListener("click", async () => {
       "error"
     );
   } finally {
-    deleteThreadButton.disabled = false;
-    deleteThreadButton.textContent = "Delete Ticket";
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = "Confirm Delete";
+    }
   }
 });
 

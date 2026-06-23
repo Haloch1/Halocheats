@@ -37,3 +37,24 @@ create table if not exists public.admin_audit_logs (
 
 create index if not exists admin_audit_logs_created_at_idx
   on public.admin_audit_logs (created_at desc);
+
+create table if not exists public.admin_delete_approvals (
+  id uuid primary key default gen_random_uuid(),
+  thread_id text not null,
+  staff_request_id uuid references public.admin_access_requests(id) on delete set null,
+  staff_discord_username text not null,
+  token_hash text not null,
+  status text not null default 'pending'
+    check (status in ('pending', 'used', 'expired')),
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  ip_address text,
+  user_agent text
+);
+
+create index if not exists admin_delete_approvals_thread_staff_idx
+  on public.admin_delete_approvals (thread_id, staff_request_id, status, created_at desc);
+
+create index if not exists admin_delete_approvals_token_hash_idx
+  on public.admin_delete_approvals (token_hash);
