@@ -1487,8 +1487,16 @@ a {
 
   .hero {
     gap: 26px;
-    padding-top: 34px;
+    padding-top: 24px;
     padding-bottom: 24px;
+  }
+
+  .hero-copy {
+    order: 2;
+  }
+
+  .hero-visual {
+    order: 1;
   }
 
   .hero h1 {
