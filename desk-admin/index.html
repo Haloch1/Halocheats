@@ -124,6 +124,34 @@
           </div>
         </section>
       </main>
+
+      <div class="security-modal" data-delete-key-modal hidden>
+        <div class="security-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-key-title">
+          <button class="security-modal-close" type="button" data-delete-key-close aria-label="Close">
+            ×
+          </button>
+          <p class="eyebrow">Owner approval required</p>
+          <h3 id="delete-key-title">Enter one-time delete key</h3>
+          <p>
+            The owner webhook was pinged with a key for this ticket. Paste it
+            below to finish deletion.
+          </p>
+          <form class="auth-form" data-delete-key-form>
+            <label>
+              Delete key
+              <input
+                type="text"
+                name="deleteKey"
+                autocomplete="one-time-code"
+                maxlength="32"
+                placeholder="Example: A1B2C3D4E5F6"
+                required
+              />
+            </label>
+            <button class="button button-danger" type="submit">Confirm Delete</button>
+          </form>
+        </div>
+      </div>
     </div>
 
     <script type="module" src="../scripts/desk-admin-page.js"></script>

@@ -92,6 +92,9 @@ function renderRequests(requests) {
             <button class="button button-danger" type="button" data-deny-request="${request.id}" ${
               request.status === "pending" ? "" : "disabled"
             }>Deny</button>
+            <button class="button button-secondary" type="button" data-delete-request="${request.id}">
+              Delete Request
+            </button>
           </div>
         </article>
       `
@@ -166,6 +169,30 @@ async function updateRequest(requestId, action) {
   renderMessage(messageBox, `Request ${action === "approve" ? "approved" : "denied"}.`, "success");
 }
 
+async function deleteRequest(requestId) {
+  const confirmed = window.confirm("Delete this staff access request from the list?");
+
+  if (!confirmed) {
+    return;
+  }
+
+  const response = await fetch(`/api/admin/access-requests/${requestId}`, {
+    method: "DELETE",
+    headers: ownerHeaders(),
+    body: JSON.stringify({
+      deletedBy: getOwnerLabel(),
+    }),
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Unable to delete request.");
+  }
+
+  await loadRequests();
+  renderMessage(messageBox, "Request deleted and logged.", "success");
+}
+
 ownerAccessForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -193,15 +220,24 @@ ownerAccessForm?.addEventListener("submit", async (event) => {
 requestList?.addEventListener("click", async (event) => {
   const approveButton = event.target.closest("[data-approve-request]");
   const denyButton = event.target.closest("[data-deny-request]");
+  const deleteButton = event.target.closest("[data-delete-request]");
 
-  if (!approveButton && !denyButton) {
+  if (!approveButton && !denyButton && !deleteButton) {
     return;
   }
 
-  const requestId = approveButton?.dataset.approveRequest || denyButton?.dataset.denyRequest;
+  const requestId =
+    approveButton?.dataset.approveRequest ||
+    denyButton?.dataset.denyRequest ||
+    deleteButton?.dataset.deleteRequest;
   const action = approveButton ? "approve" : "deny";
 
   try {
+    if (deleteButton) {
+      await deleteRequest(requestId);
+      return;
+    }
+
     await updateRequest(requestId, action);
   } catch (error) {
     renderMessage(

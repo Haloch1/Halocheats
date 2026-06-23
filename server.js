@@ -27,6 +27,7 @@ const ownerRequestsKey = process.env.OWNER_REQUESTS_KEY || "";
 const liveDeskCooldownMs = 45_000;
 const liveDeskCooldownByIp = new Map();
 const staffAccessTtlMs = 1000 * 60 * 60 * 8;
+const deleteApprovalTtlMs = 1000 * 60 * 15;
 
 function isConfiguredValue(value) {
   return Boolean(value && !/(replace_me|your_supabase|your-project|your_)/i.test(value));
@@ -263,6 +264,10 @@ function createSecretToken(bytes = 32) {
 
 function hashToken(value) {
   return crypto.createHash("sha256").update(String(value || "")).digest("hex");
+}
+
+function createOneTimeDeleteKey() {
+  return crypto.randomBytes(6).toString("hex").toUpperCase();
 }
 
 function getClientIp(req) {
@@ -1344,6 +1349,62 @@ app.post("/api/admin/access-requests/:requestId/deny", async (req, res) => {
   }
 });
 
+app.delete("/api/admin/access-requests/:requestId", async (req, res) => {
+  try {
+    ensureOwnerAccess(req);
+
+    const requestId = trimField(req.params?.requestId, 80);
+    const deletedBy = trimField(req.body?.deletedBy, 80) || "owner";
+
+    if (!requestId) {
+      return res.status(400).json({ error: "Access request is required." });
+    }
+
+    const requestLookup = await supabaseAdmin
+      .from("admin_access_requests")
+      .select("id, discord_username, reason, status")
+      .eq("id", requestId)
+      .maybeSingle();
+
+    if (requestLookup.error) {
+      throw requestLookup.error;
+    }
+
+    if (!requestLookup.data) {
+      return res.status(404).json({ error: "Access request was not found." });
+    }
+
+    await insertAdminAuditLog(
+      req,
+      "delete_staff_access_request",
+      "admin_access_request",
+      requestId,
+      {
+        id: requestId,
+        discordUsername: deletedBy,
+      },
+      {
+        deletedRequest: requestLookup.data,
+      }
+    );
+
+    const deleteResult = await supabaseAdmin
+      .from("admin_access_requests")
+      .delete()
+      .eq("id", requestId);
+
+    if (deleteResult.error) {
+      throw deleteResult.error;
+    }
+
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to delete access request.",
+    });
+  }
+});
+
 app.get("/api/admin/live-desk", async (req, res) => {
   try {
     await getApprovedStaffAccess(req);
@@ -1442,15 +1503,112 @@ app.post("/api/admin/live-desk/reply", async (req, res) => {
   }
 });
 
-app.delete("/api/admin/live-desk/:threadId", async (req, res) => {
+app.post("/api/admin/live-desk/:threadId/request-delete-key", async (req, res) => {
   try {
     const staffAccess = await getApprovedStaffAccess(req);
-
     const threadId = trimField(req.params?.threadId, 80);
 
     if (!threadId) {
       return res.status(400).json({
         error: "Thread is required.",
+      });
+    }
+
+    const threadLookup = await supabaseAdmin
+      .from("support_threads")
+      .select("id, subject, contact_name, contact_method")
+      .eq("id", threadId)
+      .maybeSingle();
+
+    if (threadLookup.error) {
+      throw threadLookup.error;
+    }
+
+    if (!threadLookup.data) {
+      return res.status(404).json({
+        error: "That support thread was not found.",
+      });
+    }
+
+    const deleteKey = createOneTimeDeleteKey();
+    const expiresAt = new Date(Date.now() + deleteApprovalTtlMs).toISOString();
+    const approvalInsert = await supabaseAdmin
+      .from("admin_delete_approvals")
+      .insert({
+        thread_id: threadId,
+        staff_request_id: staffAccess.id,
+        staff_discord_username: staffAccess.discordUsername,
+        token_hash: hashToken(deleteKey),
+        status: "pending",
+        expires_at: expiresAt,
+        ip_address: getClientIp(req),
+        user_agent: trimField(req.headers["user-agent"], 300),
+      })
+      .select("id")
+      .single();
+
+    if (approvalInsert.error) {
+      throw approvalInsert.error;
+    }
+
+    await insertAdminAuditLog(
+      req,
+      "request_ticket_delete_key",
+      "support_thread",
+      threadId,
+      staffAccess,
+      {
+        deleteApprovalId: approvalInsert.data.id,
+        expiresAt,
+      }
+    );
+
+    await sendSecurityDiscordAlert("Ticket delete key requested", [
+      {
+        name: "Staff",
+        value: staffAccess.discordUsername || "unknown",
+        inline: true,
+      },
+      {
+        name: "Ticket",
+        value: `${threadLookup.data.subject || "Unknown"} (${threadId})`,
+        inline: false,
+      },
+      {
+        name: "One-time delete key",
+        value: deleteKey,
+        inline: false,
+      },
+      {
+        name: "Expires",
+        value: new Date(expiresAt).toLocaleString("en-US", {
+          timeZone: "America/Chicago",
+        }),
+        inline: true,
+      },
+    ]).catch((error) => console.error(error));
+
+    return res.json({
+      ok: true,
+      expiresAt,
+      message: "Delete key requested. Ask the owner for the one-time key from Discord.",
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to request a delete key.",
+    });
+  }
+});
+
+app.post("/api/admin/live-desk/:threadId/confirm-delete", async (req, res) => {
+  try {
+    const staffAccess = await getApprovedStaffAccess(req);
+    const threadId = trimField(req.params?.threadId, 80);
+    const deleteKey = trimField(req.body?.deleteKey, 80).replace(/\s+/g, "").toUpperCase();
+
+    if (!threadId || !deleteKey) {
+      return res.status(400).json({
+        error: "Thread and delete key are required.",
       });
     }
 
@@ -1467,6 +1625,38 @@ app.delete("/api/admin/live-desk/:threadId", async (req, res) => {
     if (!threadLookup.data) {
       return res.status(404).json({
         error: "That support thread was not found.",
+      });
+    }
+
+    const approvalLookup = await supabaseAdmin
+      .from("admin_delete_approvals")
+      .select("id, expires_at, status")
+      .eq("thread_id", threadId)
+      .eq("staff_request_id", staffAccess.id)
+      .eq("token_hash", hashToken(deleteKey))
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (approvalLookup.error) {
+      throw approvalLookup.error;
+    }
+
+    if (!approvalLookup.data) {
+      return res.status(401).json({
+        error: "Invalid delete key for this ticket.",
+      });
+    }
+
+    if (new Date(approvalLookup.data.expires_at).getTime() <= Date.now()) {
+      await supabaseAdmin
+        .from("admin_delete_approvals")
+        .update({ status: "expired" })
+        .eq("id", approvalLookup.data.id);
+
+      return res.status(401).json({
+        error: "Delete key expired. Request a new one.",
       });
     }
 
@@ -1488,8 +1678,21 @@ app.delete("/api/admin/live-desk/:threadId", async (req, res) => {
       throw threadDelete.error;
     }
 
+    const approvalUpdate = await supabaseAdmin
+      .from("admin_delete_approvals")
+      .update({
+        status: "used",
+        used_at: new Date().toISOString(),
+      })
+      .eq("id", approvalLookup.data.id);
+
+    if (approvalUpdate.error) {
+      throw approvalUpdate.error;
+    }
+
     await insertAdminAuditLog(req, "delete_ticket", "support_thread", threadId, staffAccess, {
       threadId,
+      deleteApprovalId: approvalLookup.data.id,
     });
 
     return res.json({ ok: true });
