@@ -1,7 +1,9 @@
 import {
   authConfigured,
+  clearServerSession,
   getAuthConfigMessage,
   getCurrentSession,
+  signInWithServerSession,
   supabase,
 } from "./supabase-client.js";
 import { initReveal, renderMessage } from "./site.js";
@@ -286,19 +288,17 @@ signUpForm?.addEventListener("submit", async (event) => {
     return;
   }
 
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-
-  if (!signInError) {
+  try {
+    await signInWithServerSession(email, password);
     await finishAuth("Account created.");
     return;
-  }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to sign in.";
 
-  if (!/confirm|verified|verification/i.test(signInError.message)) {
-    showStatusMessage(signInError.message, "error");
-    return;
+    if (!/confirm|verified|verification/i.test(message)) {
+      showStatusMessage(message, "error");
+      return;
+    }
   }
 
   showStatusMessage(
@@ -320,13 +320,10 @@ signInForm?.addEventListener("submit", async (event) => {
   const email = formData.get("email");
   const password = formData.get("password");
 
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-
-  if (error) {
-    showStatusMessage(error.message, "error");
+  try {
+    await signInWithServerSession(email, password);
+  } catch (error) {
+    showStatusMessage(error instanceof Error ? error.message : "Unable to sign in.", "error");
     return;
   }
 
@@ -377,6 +374,7 @@ passwordUpdateForm?.addEventListener("submit", async (event) => {
   passwordUpdateForm.reset();
   isPasswordRecovery = false;
   await supabase.auth.signOut();
+  await clearServerSession();
   setView(null);
   setAuthTab("signin");
   showStatusMessage("Password updated. Sign in with your new password.", "success");
@@ -388,7 +386,9 @@ signOutButton?.addEventListener("click", async () => {
   }
 
   await supabase.auth.signOut();
+  await clearServerSession();
   clearMemberData();
+  setView(null);
   showStatusMessage("Signed out.", "info");
 });
  
