@@ -24,7 +24,7 @@ const authSwitchButtons = document.querySelectorAll("[data-auth-tab]");
 const authPanes = document.querySelectorAll("[data-auth-pane]");
 const passwordToggleButtons = document.querySelectorAll("[data-password-toggle]");
 
-const nextPath = new URLSearchParams(window.location.search).get("next") || "/products/";
+const nextPath = new URLSearchParams(window.location.search).get("next");
 let isPasswordRecovery = false;
 
 function showStatusMessage(message, tone = "info") {
@@ -189,6 +189,17 @@ async function refreshSession() {
   }
 }
 
+async function finishAuth(message) {
+  if (nextPath && nextPath !== window.location.pathname) {
+    showStatusMessage(`${message} Redirecting...`, "success");
+    window.location.href = nextPath;
+    return;
+  }
+
+  await refreshSession();
+  showStatusMessage(message, "success");
+}
+
 authSwitchButtons.forEach((button) => {
   button.addEventListener("click", () => {
     setAuthTab(button.dataset.authTab);
@@ -260,8 +271,7 @@ signUpForm?.addEventListener("submit", async (event) => {
   signUpForm.reset();
 
   if (data.session) {
-    showStatusMessage("Account created. Redirecting...", "success");
-    window.location.href = nextPath;
+    await finishAuth("Account created.");
     return;
   }
 
@@ -271,8 +281,7 @@ signUpForm?.addEventListener("submit", async (event) => {
   });
 
   if (!signInError) {
-    showStatusMessage("Account created. Redirecting...", "success");
-    window.location.href = nextPath;
+    await finishAuth("Account created.");
     return;
   }
 
@@ -310,8 +319,7 @@ signInForm?.addEventListener("submit", async (event) => {
     return;
   }
 
-  showStatusMessage("Signed in successfully. Redirecting...", "success");
-  window.location.href = nextPath;
+  await finishAuth("Signed in successfully.");
 });
 
 resetRequestForm?.addEventListener("submit", async (event) => {

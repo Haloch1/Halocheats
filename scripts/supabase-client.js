@@ -6,7 +6,14 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export const authConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
 export const supabase = authConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        persistSession: true,
+        storageKey: "halo-cheats-auth",
+      },
+    })
   : null;
 
 export function getAuthConfigMessage() {
