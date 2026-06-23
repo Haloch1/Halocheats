@@ -11,7 +11,6 @@ export const supabase = authConfigured
         autoRefreshToken: true,
         detectSessionInUrl: true,
         persistSession: true,
-        storageKey: "halo-cheats-auth",
       },
     })
   : null;
