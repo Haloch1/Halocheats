@@ -20,15 +20,56 @@ export function getAuthConfigMessage() {
 }
 
 export async function getCurrentSession() {
-  if (!supabase) {
-    return null;
+  if (supabase) {
+    const { data } = await supabase.auth.getSession();
+
+    if (data.session) {
+      return data.session;
+    }
   }
 
-  const { data } = await supabase.auth.getSession();
-  return data.session ?? null;
+  try {
+    const response = await fetch("/api/auth/session", {
+      credentials: "same-origin",
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    return data.session ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getAccessToken() {
   const session = await getCurrentSession();
   return session?.access_token || null;
+}
+
+export async function signInWithServerSession(email, password) {
+  const response = await fetch("/api/auth/sign-in", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    credentials: "same-origin",
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Unable to sign in.");
+  }
+
+  return data.session ?? null;
+}
+
+export async function clearServerSession() {
+  await fetch("/api/auth/sign-out", {
+    method: "POST",
+    credentials: "same-origin",
+  });
 }

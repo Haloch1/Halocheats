@@ -13,6 +13,7 @@ const port = Number(process.env.PORT || 4242);
 const distDir = path.join(__dirname, "dist");
 const baseUrl = process.env.BASE_URL || "http://localhost:3000";
 const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
 const supabaseSecretKey =
   process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const discordWebhookUrl = process.env.DISCORD_WEBHOOK_URL || "";
@@ -46,6 +47,75 @@ const supabaseAdmin =
         },
       })
     : null;
+const supabaseAuth =
+  isConfiguredValue(supabaseUrl) && isConfiguredValue(supabaseAnonKey)
+    ? createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      })
+    : null;
+
+const accessCookieName = "hc_access_token";
+const refreshCookieName = "hc_refresh_token";
+const authCookieMaxAgeSeconds = 60 * 60 * 24 * 30;
+const secureCookie = baseUrl.startsWith("https://");
+
+function parseCookies(req) {
+  const cookieHeader = req.headers.cookie || "";
+
+  return cookieHeader.split(";").reduce((cookies, item) => {
+    const [rawName, ...rawValue] = item.trim().split("=");
+
+    if (!rawName) {
+      return cookies;
+    }
+
+    cookies[rawName] = decodeURIComponent(rawValue.join("=") || "");
+    return cookies;
+  }, {});
+}
+
+function serializeCookie(name, value, options = {}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`];
+
+  parts.push("Path=/");
+  parts.push("SameSite=Lax");
+  parts.push("HttpOnly");
+
+  if (secureCookie) {
+    parts.push("Secure");
+  }
+
+  if (options.maxAge === 0) {
+    parts.push("Max-Age=0");
+  } else {
+    parts.push(`Max-Age=${options.maxAge || authCookieMaxAgeSeconds}`);
+  }
+
+  return parts.join("; ");
+}
+
+function setAuthCookies(res, session) {
+  if (!session?.access_token || !session?.refresh_token) {
+    return;
+  }
+
+  res.setHeader("Set-Cookie", [
+    serializeCookie(accessCookieName, session.access_token, {
+      maxAge: session.expires_in || 3600,
+    }),
+    serializeCookie(refreshCookieName, session.refresh_token),
+  ]);
+}
+
+function clearAuthCookies(res) {
+  res.setHeader("Set-Cookie", [
+    serializeCookie(accessCookieName, "", { maxAge: 0 }),
+    serializeCookie(refreshCookieName, "", { maxAge: 0 }),
+  ]);
+}
 
 function getProductBySlug(productSlug) {
   return products.find((item) => item.slug === productSlug);
@@ -107,7 +177,7 @@ function getAuthToken(req) {
   const authorization = req.headers.authorization || "";
 
   if (!authorization.startsWith("Bearer ")) {
-    return null;
+    return parseCookies(req)[accessCookieName] || null;
   }
 
   return authorization.slice("Bearer ".length).trim();
@@ -477,6 +547,88 @@ app.use(express.json());
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.post("/api/auth/sign-in", async (req, res) => {
+  if (!supabaseAuth) {
+    return res.status(500).json({ error: "Account sign-in is not configured." });
+  }
+
+  const email = trimField(req.body?.email, 320);
+  const password = String(req.body?.password || "");
+
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password are required." });
+  }
+
+  const { data, error } = await supabaseAuth.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error || !data.session) {
+    return res.status(401).json({ error: error?.message || "Invalid login credentials." });
+  }
+
+  setAuthCookies(res, data.session);
+  return res.json({
+    session: {
+      access_token: data.session.access_token,
+      expires_at: data.session.expires_at,
+      user: data.user,
+    },
+  });
+});
+
+app.get("/api/auth/session", async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: "Account sessions are not configured." });
+  }
+
+  const cookies = parseCookies(req);
+  const accessToken = cookies[accessCookieName];
+  const refreshToken = cookies[refreshCookieName];
+
+  if (accessToken) {
+    const { data, error } = await supabaseAdmin.auth.getUser(accessToken);
+
+    if (!error && data.user) {
+      return res.json({
+        session: {
+          access_token: accessToken,
+          user: data.user,
+        },
+      });
+    }
+  }
+
+  if (!refreshToken || !supabaseAuth) {
+    clearAuthCookies(res);
+    return res.json({ session: null });
+  }
+
+  const { data, error } = await supabaseAuth.auth.refreshSession({
+    refresh_token: refreshToken,
+  });
+
+  if (error || !data.session) {
+    clearAuthCookies(res);
+    return res.json({ session: null });
+  }
+
+  setAuthCookies(res, data.session);
+  return res.json({
+    session: {
+      access_token: data.session.access_token,
+      expires_at: data.session.expires_at,
+      user: data.user,
+    },
+  });
+});
+
+app.post("/api/auth/sign-out", (_req, res) => {
+  clearAuthCookies(res);
+  return res.json({ ok: true });
 });
 
 app.get("/api/products", (_req, res) => {
