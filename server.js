@@ -25,6 +25,15 @@ function isConfiguredValue(value) {
   return Boolean(value && !/(replace_me|your_supabase|your-project|your_)/i.test(value));
 }
 
+function maskSecret(value) {
+  if (!isConfiguredValue(value)) {
+    return "Not configured";
+  }
+
+  const visible = value.slice(-6);
+  return `Configured (ends in ${visible})`;
+}
+
 const stripe = isConfiguredValue(process.env.STRIPE_SECRET_KEY)
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
   : null;
@@ -264,6 +273,11 @@ async function sendLiveDeskDiscordAlert(thread, message, user, eventLabel = "New
             {
               name: "Desk Inbox",
               value: `${baseUrl}/desk-admin/`,
+              inline: false,
+            },
+            {
+              name: "Admin Access",
+              value: `${maskSecret(adminAccessKey)}. Use the full ADMIN_ACCESS_KEY from Render env.`,
               inline: false,
             },
           ],
