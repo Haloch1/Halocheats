@@ -13,6 +13,7 @@ const threadTitle = document.querySelector("[data-admin-thread-title]");
 const threadMeta = document.querySelector("[data-admin-thread-meta]");
 const threadMessages = document.querySelector("[data-admin-thread-messages]");
 const replyForm = document.querySelector("[data-admin-reply-form]");
+const deleteThreadButton = document.querySelector("[data-admin-delete-thread]");
 
 let activeThreads = [];
 let activeThreadId = null;
@@ -50,6 +51,7 @@ function renderActiveThread(thread) {
     thread.contactMethod || "No contact"
   } | ${thread.status.toUpperCase()}`;
   replyForm.hidden = false;
+  deleteThreadButton.hidden = false;
   replyForm.elements.status.value = thread.status;
 
   threadMessages.innerHTML = thread.messages
@@ -73,11 +75,13 @@ function renderThreads(threads) {
   activeThreads = threads;
 
   if (!threads.length) {
+    activeThreadId = null;
     threadList.innerHTML = '<div class="member-empty">No support threads yet.</div>';
     threadTitle.textContent = "Select a thread";
     threadMeta.textContent = "Pick a thread from the left to review the conversation and send a reply.";
     threadMessages.innerHTML = '<div class="member-empty">No thread selected.</div>';
     replyForm.hidden = true;
+    deleteThreadButton.hidden = true;
     return;
   }
 
@@ -222,6 +226,54 @@ replyForm?.addEventListener("submit", async (event) => {
       submitButton.disabled = false;
       submitButton.textContent = "Send Reply";
     }
+  }
+});
+
+deleteThreadButton?.addEventListener("click", async () => {
+  if (!activeThreadId) {
+    return;
+  }
+
+  const thread = activeThreads.find((item) => item.id === activeThreadId);
+  const label = thread?.subject || "this ticket";
+  const confirmed = window.confirm(`Delete "${label}" and all of its messages?`);
+
+  if (!confirmed) {
+    return;
+  }
+
+  const adminKey = getAdminKey();
+  deleteThreadButton.disabled = true;
+  deleteThreadButton.textContent = "Deleting...";
+
+  try {
+    const response = await fetch(
+      `/api/admin/live-desk/${encodeURIComponent(activeThreadId)}`,
+      {
+        method: "DELETE",
+        headers: {
+          "x-admin-key": adminKey,
+        },
+      }
+    );
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to delete the ticket.");
+    }
+
+    activeThreadId = null;
+    await loadThreads();
+    renderMessage(messageBox, "Ticket deleted from the admin desk.", "success");
+  } catch (error) {
+    renderMessage(
+      messageBox,
+      error instanceof Error ? error.message : "Unable to delete the ticket.",
+      "error"
+    );
+  } finally {
+    deleteThreadButton.disabled = false;
+    deleteThreadButton.textContent = "Delete Ticket";
   }
 });
 

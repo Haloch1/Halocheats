@@ -976,6 +976,60 @@ app.post("/api/admin/live-desk/reply", async (req, res) => {
   }
 });
 
+app.delete("/api/admin/live-desk/:threadId", async (req, res) => {
+  try {
+    ensureAdminAccess(req);
+
+    const threadId = trimField(req.params?.threadId, 80);
+
+    if (!threadId) {
+      return res.status(400).json({
+        error: "Thread is required.",
+      });
+    }
+
+    const threadLookup = await supabaseAdmin
+      .from("support_threads")
+      .select("id")
+      .eq("id", threadId)
+      .maybeSingle();
+
+    if (threadLookup.error) {
+      throw threadLookup.error;
+    }
+
+    if (!threadLookup.data) {
+      return res.status(404).json({
+        error: "That support thread was not found.",
+      });
+    }
+
+    const messagesDelete = await supabaseAdmin
+      .from("support_messages")
+      .delete()
+      .eq("thread_id", threadId);
+
+    if (messagesDelete.error) {
+      throw messagesDelete.error;
+    }
+
+    const threadDelete = await supabaseAdmin
+      .from("support_threads")
+      .delete()
+      .eq("id", threadId);
+
+    if (threadDelete.error) {
+      throw threadDelete.error;
+    }
+
+    return res.json({ ok: true });
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to delete the ticket.",
+    });
+  }
+});
+
 app.get("/api/account", async (req, res) => {
   try {
     const member = await getAuthenticatedUser(req);

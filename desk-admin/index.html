@@ -60,8 +60,18 @@
 
           <div class="desk-thread-panel">
             <div class="desk-thread-panel-header">
-              <p class="eyebrow">Reply view</p>
-              <h3 data-admin-thread-title>Select a thread</h3>
+              <div>
+                <p class="eyebrow">Reply view</p>
+                <h3 data-admin-thread-title>Select a thread</h3>
+              </div>
+              <button
+                class="button button-danger desk-delete-button"
+                type="button"
+                data-admin-delete-thread
+                hidden
+              >
+                Delete Ticket
+              </button>
             </div>
             <div class="desk-thread-meta" data-admin-thread-meta>
               Pick a thread from the left to review the conversation and send a reply.
