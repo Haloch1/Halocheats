@@ -111,14 +111,23 @@ function categoryImageLabel(category) {
     .toUpperCase();
 }
 
+function categoryImageSrc(category) {
+  if (/rainbow six/i.test(category)) {
+    return "../assets/rainbow-six-siege-category.png";
+  }
+
+  return "../assets/hc-logo.png";
+}
+
 function renderCategoryCard(category, products) {
   const card = document.createElement("article");
   const label = categoryImageLabel(category);
+  const imageSrc = categoryImageSrc(category);
   card.className = "catalog-category-card";
   card.dataset.categoryCard = category;
   card.innerHTML = `
     <div class="category-card-art">
-      <img src="../assets/hc-logo.png" alt="" />
+      <img src="${imageSrc}" alt="" />
       <strong>${label}</strong>
     </div>
     <div class="category-card-body">

@@ -1800,18 +1800,20 @@ a {
 }
 
 .category-card-art img {
-  width: min(68%, 240px);
-  border-radius: 28px;
-  filter: saturate(1.05) contrast(1.08);
-  transform: rotate(-4deg) scale(1.08);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: saturate(1.08) contrast(1.08) brightness(0.82);
 }
 
 .category-card-art strong {
   position: absolute;
   z-index: 2;
-  color: rgba(255, 255, 255, 0.94);
+  right: 22px;
+  top: 22px;
+  color: rgba(255, 255, 255, 0.88);
   font-family: "Oxanium", sans-serif;
-  font-size: clamp(3.4rem, 8vw, 5.8rem);
+  font-size: clamp(2rem, 5vw, 3.4rem);
   line-height: 1;
   text-shadow: 0 18px 50px rgba(0, 0, 0, 0.7);
 }
