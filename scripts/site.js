@@ -85,6 +85,7 @@ function sendVisitorHeartbeat() {
       body: JSON.stringify({
         visitorId: getVisitorId(),
         pagePath: `${window.location.pathname}${window.location.search}`,
+        referrer: document.referrer,
       }),
       keepalive: true,
     })

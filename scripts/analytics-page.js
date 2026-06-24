@@ -13,6 +13,7 @@ const activeVisitors = document.querySelector("[data-active-visitors]");
 const activeWindow = document.querySelector("[data-active-window]");
 const updatedAt = document.querySelector("[data-analytics-updated]");
 const pageActivityList = document.querySelector("[data-page-activity-list]");
+const visitorViewList = document.querySelector("[data-visitor-view-list]");
 
 let refreshTimer = null;
 
@@ -95,6 +96,29 @@ function renderPages(pages) {
     .join("");
 }
 
+function renderRecentViews(views) {
+  if (!views.length) {
+    visitorViewList.innerHTML = '<div class="member-empty">No page views logged yet.</div>';
+    return;
+  }
+
+  visitorViewList.innerHTML = views
+    .map(
+      (view) => `
+        <article class="analytics-view-row">
+          <div>
+            <strong>${escapeHtml(view.pagePath)}</strong>
+            <span>${escapeHtml(view.referrer || "Direct")}</span>
+          </div>
+          <small>${escapeHtml(view.visitorLabel || "anonymous")} - ${formatTimestamp(
+        view.viewedAt
+      )}</small>
+        </article>
+      `
+    )
+    .join("");
+}
+
 async function loadAnalytics() {
   const session = await getCurrentSession();
 
@@ -118,6 +142,7 @@ async function loadAnalytics() {
   activeWindow.textContent = `Active in the last ${payload.activeWindowSeconds || 75} seconds`;
   updatedAt.textContent = `Updated ${formatTimestamp(payload.updatedAt)}`;
   renderPages(payload.pages || []);
+  renderRecentViews(payload.recentViews || []);
   renderMessage(messageBox, "Analytics panel unlocked.", "success");
 }
 

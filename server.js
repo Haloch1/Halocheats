@@ -29,7 +29,10 @@ const liveDeskCooldownByIp = new Map();
 const staffAccessTtlMs = 1000 * 60 * 60 * 8;
 const deleteApprovalTtlMs = 1000 * 60 * 15;
 const visitorHeartbeatTtlMs = 75_000;
+const visitorPageViewCooldownMs = 1000 * 60 * 10;
+const visitorViewLogLimit = 120;
 const visitorSessions = new Map();
+const recentVisitorViews = [];
 
 function isConfiguredValue(value) {
   return Boolean(value && !/(replace_me|your_supabase|your-project|your_)/i.test(value));
@@ -355,6 +358,41 @@ function normalizeVisitorPath(value) {
   }
 
   return pagePath.replace(/[<>"'`]/g, "").slice(0, 160);
+}
+
+function normalizeVisitorReferrer(value) {
+  const referrer = trimField(value, 220);
+
+  if (!referrer) {
+    return "Direct";
+  }
+
+  try {
+    const referrerUrl = new URL(referrer);
+    const siteHost = new URL(baseUrl).host;
+
+    if (referrerUrl.host === siteHost) {
+      return `Internal ${normalizeVisitorPath(`${referrerUrl.pathname}${referrerUrl.search}`)}`;
+    }
+
+    return referrerUrl.hostname.slice(0, 120);
+  } catch {
+    return "Unknown";
+  }
+}
+
+function recordVisitorPageView({ visitorId, pagePath, referrer, now }) {
+  recentVisitorViews.unshift({
+    id: createSecretToken(8),
+    visitorLabel: hashToken(visitorId).slice(0, 10),
+    pagePath,
+    referrer: normalizeVisitorReferrer(referrer),
+    viewedAt: new Date(now).toISOString(),
+  });
+
+  if (recentVisitorViews.length > visitorViewLogLimit) {
+    recentVisitorViews.length = visitorViewLogLimit;
+  }
 }
 
 function pruneVisitorSessions() {
@@ -846,11 +884,26 @@ app.post("/api/visitors/heartbeat", (req, res) => {
 
   const now = Date.now();
   const existing = visitorSessions.get(visitorId);
+  const pagePath = normalizeVisitorPath(req.body?.pagePath);
+  const shouldLogPageView =
+    !existing ||
+    existing.pagePath !== pagePath ||
+    now - (existing.lastLoggedAt || 0) > visitorPageViewCooldownMs;
+
+  if (shouldLogPageView) {
+    recordVisitorPageView({
+      visitorId,
+      pagePath,
+      referrer: req.body?.referrer,
+      now,
+    });
+  }
 
   visitorSessions.set(visitorId, {
     firstSeenAt: existing?.firstSeenAt || now,
     lastSeenAt: now,
-    pagePath: normalizeVisitorPath(req.body?.pagePath),
+    lastLoggedAt: shouldLogPageView ? now : existing?.lastLoggedAt || now,
+    pagePath,
   });
 
   pruneVisitorSessions();
@@ -1630,6 +1683,7 @@ app.get("/api/admin/visitors", async (req, res) => {
       activeVisitors: visitorSessions.size,
       activeWindowSeconds: Math.round(visitorHeartbeatTtlMs / 1000),
       pages: pageBreakdown,
+      recentViews: recentVisitorViews.slice(0, 40),
       updatedAt: new Date().toISOString(),
     });
   } catch (error) {
