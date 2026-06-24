@@ -74,7 +74,7 @@ async function unlockOwnerPanel(ownerKey) {
   const payload = await response.json();
 
   if (!response.ok) {
-    throw new Error(payload.error || "Unable to unlock analytics.");
+    throw new Error(payload.error || "Unable to unlock panel.");
   }
 }
 
@@ -124,7 +124,7 @@ async function loadAnalytics() {
 
   if (!session) {
     lockAnalyticsPanel();
-    renderMessage(messageBox, "Sign in first, then reload this analytics page.", "warn");
+    renderMessage(messageBox, "Sign in required.", "warn");
     return;
   }
 
@@ -134,7 +134,7 @@ async function loadAnalytics() {
   const payload = await response.json();
 
   if (!response.ok) {
-    throw new Error(payload.error || "Unable to load live visitor stats.");
+    throw new Error(payload.error || "Unable to load panel.");
   }
 
   unlockAnalyticsPanel();
@@ -143,7 +143,7 @@ async function loadAnalytics() {
   updatedAt.textContent = `Updated ${formatTimestamp(payload.updatedAt)}`;
   renderPages(payload.pages || []);
   renderRecentViews(payload.recentViews || []);
-  renderMessage(messageBox, "Analytics panel unlocked.", "success");
+  renderMessage(messageBox, "Panel unlocked.", "success");
 }
 
 function startRefreshLoop() {
@@ -152,7 +152,7 @@ function startRefreshLoop() {
     loadAnalytics().catch((error) => {
       renderMessage(
         messageBox,
-        error instanceof Error ? error.message : "Unable to refresh analytics.",
+        error instanceof Error ? error.message : "Unable to refresh panel.",
         "error"
       );
     });
@@ -176,7 +176,7 @@ accessForm?.addEventListener("submit", async (event) => {
   } catch (error) {
     renderMessage(
       messageBox,
-      error instanceof Error ? error.message : "Unable to unlock analytics.",
+      error instanceof Error ? error.message : "Unable to unlock panel.",
       "error"
     );
   }

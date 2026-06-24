@@ -1688,7 +1688,7 @@ app.get("/api/admin/visitors", async (req, res) => {
     });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to load visitor stats.",
+      error: error instanceof Error ? error.message : "Unable to load panel.",
     });
   }
 });
