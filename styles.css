@@ -2715,10 +2715,20 @@ a {
   padding: 18px;
 }
 
+.variant-feature-card-compact {
+  display: flex;
+  align-items: center;
+  min-height: 58px;
+}
+
 .variant-feature-card strong {
   display: block;
   margin-bottom: 12px;
   color: #fff;
+}
+
+.variant-feature-card-compact strong {
+  margin-bottom: 0;
 }
 
 .variant-feature-card ul {
