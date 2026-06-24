@@ -2456,6 +2456,13 @@ a {
   font-size: 0.82rem;
 }
 
+.variant-status-row span[data-variant-price] small {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  text-decoration: line-through;
+}
+
 .variant-label {
   display: block;
   margin: 18px 0 10px;
@@ -2564,6 +2571,216 @@ a {
   grid-template-columns: 0.82fr 1.18fr;
   gap: 12px;
   margin-top: 24px;
+}
+
+.variant-promo-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.variant-promo-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.variant-promo-form span,
+.variant-terms {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.variant-promo-form input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.045);
+  color: #fff;
+  font: inherit;
+}
+
+.variant-promo-form .button {
+  align-self: end;
+  min-width: 96px;
+}
+
+.variant-promo-message {
+  margin: 10px 0 0;
+  font-weight: 800;
+}
+
+.variant-promo-message.success {
+  color: #7cffaa;
+}
+
+.variant-promo-message.error {
+  color: #ff9a9a;
+}
+
+.variant-terms {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 48, 48, 0.4);
+  background: rgba(255, 48, 48, 0.065);
+}
+
+.variant-terms input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: #ff3030;
+}
+
+.variant-terms a {
+  color: #ff7777;
+}
+
+.variant-trust-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  margin-top: 16px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.variant-trust-row span {
+  padding: 11px 10px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.variant-extra {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 28px;
+}
+
+.variant-extra h4 {
+  position: relative;
+  margin: 0 0 14px;
+  padding-left: 24px;
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+}
+
+.variant-extra h4::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 14px;
+  height: 3px;
+  border-radius: 999px;
+  background: #ff3030;
+  transform: translateY(-50%);
+}
+
+.variant-about p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.variant-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.variant-feature-card,
+.variant-info-list div,
+.variant-requirements div,
+.terms-card,
+.terms-grid article {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.variant-feature-card {
+  min-height: 190px;
+  padding: 18px;
+}
+
+.variant-feature-card strong {
+  display: block;
+  margin-bottom: 12px;
+  color: #fff;
+}
+
+.variant-feature-card ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+}
+
+.variant-feature-card li::before,
+.variant-info-list div::before {
+  content: ">";
+  margin-right: 8px;
+  color: #ff3030;
+}
+
+.variant-info-list,
+.variant-requirements {
+  display: grid;
+  gap: 10px;
+}
+
+.variant-info-list div,
+.variant-requirements div {
+  padding: 16px 18px;
+  color: var(--muted);
+}
+
+.variant-requirements {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.terms-shell {
+  width: min(calc(100% - 32px), 1040px);
+  margin: 0 auto;
+}
+
+.terms-card,
+.terms-grid article {
+  padding: 24px;
+}
+
+.terms-card h3,
+.terms-grid h3 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+}
+
+.terms-card p,
+.terms-grid p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.terms-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-top: 16px;
 }
 
 .auth-grid {
@@ -3139,6 +3356,17 @@ a {
 
   .variant-actions {
     grid-template-columns: 1fr;
+  }
+
+  .variant-promo-form,
+  .variant-feature-grid,
+  .variant-requirements,
+  .terms-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .variant-trust-row {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .product-footer {

@@ -1149,6 +1149,9 @@ app.get("/api/products", (_req, res) => {
     badge: product.badge,
     summary: product.summary,
     features: product.features,
+    featureGroups: product.featureGroups || [],
+    generalInfo: product.generalInfo || [],
+    requirements: product.requirements || [],
     featured: product.featured,
     available: product.available !== false,
     variants: (product.variants || []).map((variant) => ({
@@ -2261,6 +2264,7 @@ const pageRoutes = new Map([
   ["/products", "products/index.html"],
   ["/account", "account/index.html"],
   ["/status", "status/index.html"],
+  ["/terms", "terms/index.html"],
   ["/desk", "desk/index.html"],
   ["/desk-admin", "desk-admin/index.html"],
   ["/requests", "requests/index.html"],
