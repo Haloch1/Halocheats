@@ -26,7 +26,7 @@ let activeVariant = null;
 let activePromo = null;
 let activeCategory = "all";
 let searchQuery = "";
-const excludedCatalogTerms = ["account", "spoofer"];
+const excludedCatalogTerms = [];
 const promoCodes = {
   HALO10: 10,
   R6SAVE: 15,
@@ -267,7 +267,7 @@ function ensureVariantModal() {
               <strong>Halo<span>Cheats</span></strong>
             </div>
             <div class="variant-box-title">
-              <span>R6</span>
+              <span data-variant-art-category>R6</span>
               <strong data-variant-art-title>Access Key</strong>
             </div>
             <div class="variant-box-footer">
@@ -521,6 +521,7 @@ function openVariantModal(product) {
   resetVariantControls(modal);
   modal.querySelector("[data-variant-title]").textContent = product.name;
   modal.querySelector("[data-variant-art-title]").textContent = product.name;
+  modal.querySelector("[data-variant-art-category]").textContent = product.category || product.game || "Product";
   modal.querySelector("[data-variant-status]").textContent = product.badge;
   modal.querySelector("[data-variant-summary]").textContent = product.summary;
   modal.querySelector("[data-detail-about]").textContent = product.summary;
