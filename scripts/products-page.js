@@ -2,6 +2,13 @@ import { getCurrentSession, authConfigured } from "./supabase-client.js";
 import { initReveal, renderMessage } from "./site.js";
 import haloLogoImage from "../assets/hc-logo.png";
 import rainbowSixCategoryImage from "../assets/rainbow-six-siege-category.png";
+import productCrusaderImage from "../assets/product-crusader-r6.png";
+import productVegaImage from "../assets/product-vega-r6-external.png";
+import productFrostImage from "../assets/product-r6-frost.png";
+import productAncientImage from "../assets/product-r6-ancient.png";
+import productRecoilImage from "../assets/product-r6-recoil-private.png";
+import productExodusImage from "../assets/product-exodus-r6.png";
+import productInvisionImage from "../assets/product-invision-chams.png";
 
 initReveal();
 
@@ -23,6 +30,15 @@ const excludedCatalogTerms = ["account", "spoofer"];
 const promoCodes = {
   HALO10: 10,
   R6SAVE: 15,
+};
+const productArtwork = {
+  "crusader-r6": productCrusaderImage,
+  "vega-r6-external": productVegaImage,
+  "r6-frost": productFrostImage,
+  "r6-ancient": productAncientImage,
+  "r6-recoil-private": productRecoilImage,
+  "exodus-r6": productExodusImage,
+  "invision-chams": productInvisionImage,
 };
 
 if (accountLink) {
@@ -246,17 +262,9 @@ function ensureVariantModal() {
             <strong>Cheats</strong>
           </div>
           <div class="variant-box-front">
+            <img class="variant-product-image" data-variant-product-image alt="" />
             <div class="variant-box-brand">
               <strong>Halo<span>Cheats</span></strong>
-              <small>because winning is everything</small>
-            </div>
-            <div class="variant-operator" aria-hidden="true">
-              <span class="operator-head"></span>
-              <span class="operator-body"></span>
-              <span class="operator-vest"></span>
-              <span class="operator-arm operator-arm-left"></span>
-              <span class="operator-arm operator-arm-right"></span>
-              <span class="operator-rifle"></span>
             </div>
             <div class="variant-box-title">
               <span>R6</span>
@@ -519,6 +527,13 @@ function openVariantModal(product) {
   modal.querySelector("[data-detail-features]").innerHTML = renderFeatureGroups(product);
   modal.querySelector("[data-detail-info]").innerHTML = renderInfoList(product.generalInfo);
   modal.querySelector("[data-detail-requirements]").innerHTML = renderInfoList(product.requirements);
+
+  const artwork = modal.querySelector("[data-variant-product-image]");
+
+  if (artwork) {
+    artwork.src = productArtwork[product.slug] || haloLogoImage;
+    artwork.alt = `${product.name} artwork`;
+  }
 
   const options = modal.querySelector("[data-variant-options]");
   options.replaceChildren(
