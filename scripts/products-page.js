@@ -238,18 +238,34 @@ function ensureVariantModal() {
   modal.innerHTML = `
     <div class="variant-backdrop" data-variant-close></div>
     <section class="variant-dialog" role="dialog" aria-modal="true" aria-labelledby="variant-title">
-      <button class="variant-close" type="button" data-variant-close aria-label="Close variant selector">×</button>
+      <button class="variant-close" type="button" data-variant-close aria-label="Close variant selector">&times;</button>
       <div class="variant-art">
-        <div class="variant-art-card">
-          <div class="variant-logo-mark">HC</div>
-          <div class="variant-art-copy">
-            <span>Rainbow Six Siege</span>
-            <strong data-variant-art-title>Access Key</strong>
-            <small>Instant member delivery</small>
+        <div class="variant-box-scene">
+          <div class="variant-box-side">
+            <span>Halo</span>
+            <strong>Cheats</strong>
           </div>
-          <div class="variant-card-strip">
-            <span>01</span>
-            <span>Verified Route</span>
+          <div class="variant-box-front">
+            <div class="variant-box-brand">
+              <strong>Halo<span>Cheats</span></strong>
+              <small>because winning is everything</small>
+            </div>
+            <div class="variant-operator" aria-hidden="true">
+              <span class="operator-head"></span>
+              <span class="operator-body"></span>
+              <span class="operator-vest"></span>
+              <span class="operator-arm operator-arm-left"></span>
+              <span class="operator-arm operator-arm-right"></span>
+              <span class="operator-rifle"></span>
+            </div>
+            <div class="variant-box-title">
+              <span>R6</span>
+              <strong data-variant-art-title>Access Key</strong>
+            </div>
+            <div class="variant-box-footer">
+              <span>Instant delivery</span>
+              <span>Global compatibility</span>
+            </div>
           </div>
         </div>
       </div>
