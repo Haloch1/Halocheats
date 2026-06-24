@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live Analytics | Halo Cheats</title>
+    <meta
+      name="description"
+      content="Owner-only Halo Cheats anonymous live visitor counter."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Oxanium:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <div class="page-shell page-shell-inner">
+      <div class="ambient ambient-left"></div>
+      <div class="ambient ambient-right"></div>
+
+      <main class="section admin-shell">
+        <div class="section-heading reveal" data-delay="0">
+          <p class="eyebrow">Owner analytics</p>
+          <h2>See live visitors without tracking identities.</h2>
+          <p>
+            This panel counts anonymous browser sessions active in the last minute
+            and shows which pages are currently being viewed.
+          </p>
+        </div>
+
+        <div class="inline-message info reveal" data-delay="20" data-analytics-message>
+          Enter the owner key to load live visitors.
+        </div>
+
+        <section class="admin-access-card reveal" data-delay="40">
+          <form class="auth-form admin-access-form" data-analytics-access-form>
+            <label>
+              Owner requests key
+              <input type="password" name="ownerKey" autocomplete="current-password" required />
+            </label>
+            <button class="button button-primary" type="submit">Open Analytics</button>
+          </form>
+        </section>
+
+        <section class="analytics-shell reveal" data-delay="60" data-analytics-shell hidden>
+          <div class="analytics-hero-card">
+            <p class="eyebrow">Live now</p>
+            <strong data-active-visitors>0</strong>
+            <span data-active-window>Active in the last 75 seconds</span>
+          </div>
+
+          <div class="desk-thread-panel analytics-breakdown">
+            <div class="desk-thread-panel-header">
+              <div>
+                <p class="eyebrow">Pages</p>
+                <h3>Current page activity</h3>
+              </div>
+              <small data-analytics-updated>Not loaded yet</small>
+            </div>
+            <div class="request-list" data-page-activity-list>
+              <div class="member-empty">No live visitors yet.</div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="../scripts/analytics-page.js"></script>
+  </body>
+</html>
