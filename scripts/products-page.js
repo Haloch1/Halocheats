@@ -16,9 +16,14 @@ const lowestStat = document.querySelector("[data-catalog-lowest]");
 let catalogProducts = [];
 let activeProduct = null;
 let activeVariant = null;
+let activePromo = null;
 let activeCategory = "all";
 let searchQuery = "";
 const excludedCatalogTerms = ["account", "spoofer"];
+const promoCodes = {
+  HALO10: 10,
+  R6SAVE: 15,
+};
 
 if (accountLink) {
   accountLink.textContent = "Account";
@@ -210,10 +215,8 @@ function renderProductCard(product, index) {
     </ul>
     <div class="product-footer">
       <strong>${escapeHtml(product.priceDisplay)}</strong>
-      <button class="button button-primary pay-button" data-product-slug="${escapeHtml(product.slug)}" ${
-        product.available ? "" : "disabled"
-      }>
-        ${product.available ? "Buy Now" : "Unavailable"}
+      <button class="button button-primary pay-button" data-product-slug="${escapeHtml(product.slug)}">
+        View
       </button>
     </div>
   `;
@@ -251,33 +254,100 @@ function ensureVariantModal() {
         </div>
       </div>
       <div class="variant-details">
-        <p class="eyebrow">Select Variant</p>
+        <p class="eyebrow">Product view</p>
         <h3 id="variant-title" data-variant-title></h3>
         <div class="variant-status-row">
           <span class="variant-dot"></span>
           <strong data-variant-status></strong>
           <span data-variant-price></span>
-          <em>In Stock</em>
+          <em data-variant-stock>In Stock</em>
         </div>
         <p data-variant-summary></p>
-        <label class="variant-label">Variant</label>
+        <label class="variant-label">Select option</label>
         <div class="variant-options" data-variant-options></div>
-        <div class="variant-quantity">
-          <label>Quantity</label>
-          <div>
-            <button type="button" disabled>-</button>
-            <span>1</span>
-            <button type="button" disabled>+</button>
-          </div>
-        </div>
+        <form class="variant-promo-form" data-promo-form>
+          <label>
+            <span>Promo code</span>
+            <input type="text" name="promoCode" placeholder="Enter promo code" autocomplete="off" />
+          </label>
+          <button class="button button-secondary" type="submit">Apply</button>
+        </form>
+        <p class="variant-promo-message" data-promo-message hidden></p>
+        <label class="variant-terms">
+          <input type="checkbox" data-terms-check />
+          <span>
+            I understand all sales are final. I have read and agree to the
+            <a href="/terms/" target="_blank" rel="noreferrer">Terms of Service</a>.
+          </span>
+        </label>
         <div class="variant-actions">
           <button class="button button-secondary" type="button" data-variant-close>Cancel</button>
           <button class="button button-primary" type="button" data-variant-checkout>Buy Now</button>
         </div>
+        <div class="variant-trust-row">
+          <span>Secure</span>
+          <span>Instant</span>
+          <span>HWID Lock</span>
+          <span>24/7</span>
+        </div>
+      </div>
+      <div class="variant-extra">
+        <section class="variant-about">
+          <h4>About this product</h4>
+          <p data-detail-about></p>
+        </section>
+        <section class="variant-feature-section">
+          <h4>Features</h4>
+          <div class="variant-feature-grid" data-detail-features></div>
+        </section>
+        <section class="variant-info-section">
+          <h4>General Information</h4>
+          <div class="variant-info-list" data-detail-info></div>
+        </section>
+        <section class="variant-requirements-section">
+          <h4>System Requirements</h4>
+          <div class="variant-requirements" data-detail-requirements></div>
+        </section>
       </div>
     </section>
   `;
   document.body.append(modal);
+
+  modal.addEventListener("submit", (event) => {
+    const promoForm = event.target.closest("[data-promo-form]");
+
+    if (!promoForm) {
+      return;
+    }
+
+    event.preventDefault();
+    const code = String(new FormData(promoForm).get("promoCode") || "")
+      .trim()
+      .toUpperCase();
+    const message = modal.querySelector("[data-promo-message]");
+
+    if (!code || !promoCodes[code]) {
+      activePromo = null;
+      renderPromoMessage(message, "Invalid promo code.", "error");
+      updateVariantPricing();
+      updateCheckoutButtonState();
+      return;
+    }
+
+    activePromo = {
+      code,
+      discountPercent: promoCodes[code],
+    };
+    renderPromoMessage(message, `${code} applied: ${promoCodes[code]}% off.`, "success");
+    updateVariantPricing();
+    updateCheckoutButtonState();
+  });
+
+  modal.addEventListener("change", (event) => {
+    if (event.target.matches("[data-terms-check]")) {
+      updateCheckoutButtonState();
+    }
+  });
 
   modal.addEventListener("click", async (event) => {
     const closeButton = event.target.closest("[data-variant-close]");
@@ -302,25 +372,131 @@ function ensureVariantModal() {
   return modal;
 }
 
+function renderPromoMessage(target, message, tone) {
+  if (!target) {
+    return;
+  }
+
+  target.hidden = false;
+  target.textContent = message;
+  target.className = `variant-promo-message ${tone}`;
+}
+
+function parseMoney(value) {
+  const match = String(value || "").match(/\$([0-9]+(?:\.[0-9]{2})?)/);
+  return match ? Number(match[1]) : null;
+}
+
+function formatMoney(value) {
+  return `$${value.toFixed(2)}`;
+}
+
+function getVariantDisplayPrice(variant) {
+  const basePrice = parseMoney(variant?.priceDisplay);
+
+  if (!basePrice) {
+    return escapeHtml(variant?.priceDisplay || "");
+  }
+
+  if (!activePromo) {
+    return escapeHtml(variant.priceDisplay);
+  }
+
+  const discounted = basePrice * (1 - activePromo.discountPercent / 100);
+  return `${formatMoney(discounted)} <small>${escapeHtml(variant.priceDisplay)}</small>`;
+}
+
+function renderFeatureGroups(product) {
+  const featureGroups = product.featureGroups?.length
+    ? product.featureGroups
+    : [
+        {
+          title: "Included",
+          items: product.features || [],
+        },
+      ];
+
+  return featureGroups
+    .map(
+      (group) => `
+        <article class="variant-feature-card">
+          <strong>${escapeHtml(group.title)}</strong>
+          <ul>
+            ${(group.items || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          </ul>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderInfoList(items) {
+  const safeItems = items?.length ? items : ["Open a support ticket if you need setup guidance."];
+  return safeItems.map((item) => `<div>${escapeHtml(item)}</div>`).join("");
+}
+
+function resetVariantControls(modal) {
+  activePromo = null;
+  const promoForm = modal.querySelector("[data-promo-form]");
+  const promoMessage = modal.querySelector("[data-promo-message]");
+  const termsCheck = modal.querySelector("[data-terms-check]");
+
+  promoForm?.reset();
+
+  if (promoMessage) {
+    promoMessage.hidden = true;
+    promoMessage.textContent = "";
+  }
+
+  if (termsCheck) {
+    termsCheck.checked = false;
+  }
+}
+
+function termsAccepted() {
+  return Boolean(document.querySelector("[data-terms-check]")?.checked);
+}
+
+function updateVariantPricing() {
+  const modal = ensureVariantModal();
+  const priceTarget = modal.querySelector("[data-variant-price]");
+
+  if (priceTarget) {
+    priceTarget.innerHTML = getVariantDisplayPrice(activeVariant);
+  }
+}
+
+function updateCheckoutButtonState() {
+  const modal = ensureVariantModal();
+  const checkoutButton = modal.querySelector("[data-variant-checkout]");
+  const canAttempt = Boolean(activeVariant?.checkoutReady || activeVariant?.checkoutBlocked);
+
+  checkoutButton.disabled = !canAttempt || !termsAccepted();
+  checkoutButton.textContent = canAttempt ? "Buy Now" : "Unavailable";
+}
+
 function openVariantModal(product) {
   if (!product) {
     renderMessage(notice, "That product could not be loaded. Refresh and try again.", "error");
     return;
   }
 
-  if (!product.available) {
-    renderMessage(notice, "This listing is unavailable right now.", "warn");
-    return;
-  }
-
   activeProduct = product;
-  activeVariant = product.variants?.find((variant) => variant.checkoutReady) || product.variants?.[0] || null;
+  activeVariant =
+    product.variants?.find((variant) => variant.checkoutReady || variant.checkoutBlocked) ||
+    product.variants?.[0] ||
+    null;
 
   const modal = ensureVariantModal();
+  resetVariantControls(modal);
   modal.querySelector("[data-variant-title]").textContent = product.name;
   modal.querySelector("[data-variant-art-title]").textContent = product.name;
   modal.querySelector("[data-variant-status]").textContent = product.badge;
   modal.querySelector("[data-variant-summary]").textContent = product.summary;
+  modal.querySelector("[data-detail-about]").textContent = product.summary;
+  modal.querySelector("[data-detail-features]").innerHTML = renderFeatureGroups(product);
+  modal.querySelector("[data-detail-info]").innerHTML = renderInfoList(product.generalInfo);
+  modal.querySelector("[data-detail-requirements]").innerHTML = renderInfoList(product.requirements);
 
   const options = modal.querySelector("[data-variant-options]");
   options.replaceChildren(
@@ -372,10 +548,14 @@ function selectVariant(variantSlug) {
     option.classList.toggle("is-selected", option.dataset.variantSlug === activeVariant?.slug);
   });
 
-  modal.querySelector("[data-variant-price]").textContent = activeVariant?.priceDisplay || "";
-  checkoutButton.disabled = !(activeVariant?.checkoutReady || activeVariant?.checkoutBlocked);
-  checkoutButton.textContent =
-    activeVariant?.checkoutReady || activeVariant?.checkoutBlocked ? "Buy Now" : "Unavailable";
+  const stockBadge = modal.querySelector("[data-variant-stock]");
+
+  if (stockBadge) {
+    stockBadge.textContent = activeVariant?.stockLabel || "0 In Stock";
+  }
+
+  updateVariantPricing();
+  updateCheckoutButtonState();
 }
 
 function renderProductGroups(products) {
@@ -474,6 +654,11 @@ async function startCheckout(productSlug, variantSlug) {
 async function checkoutSelectedVariant(button) {
   if (!activeProduct || !activeVariant) {
     renderMessage(notice, "Pick a variant before checkout.", "warn");
+    return;
+  }
+
+  if (!termsAccepted()) {
+    renderMessage(notice, "Agree to the Terms of Service before continuing.", "warn");
     return;
   }
 

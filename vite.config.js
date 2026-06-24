@@ -24,6 +24,7 @@ export default defineConfig({
         products: path.resolve(__dirname, "products/index.html"),
         account: path.resolve(__dirname, "account/index.html"),
         status: path.resolve(__dirname, "status/index.html"),
+        terms: path.resolve(__dirname, "terms/index.html"),
         desk: path.resolve(__dirname, "desk/index.html"),
         deskAdmin: path.resolve(__dirname, "desk-admin/index.html"),
         requests: path.resolve(__dirname, "requests/index.html"),
