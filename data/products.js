@@ -51,8 +51,23 @@ function adjustedBlockedVariant(productSlug, slug, name, baseAmount, stockCount,
   return stockedButBlockedVariant(productSlug, slug, name, adjustAmount(baseAmount, multiplier), stockCount);
 }
 
-const r6Multiplier = 0.9;
-const newProductMultiplier = 1.1;
+function disabledVariants(productSlug, rows) {
+  return rows.map(([slug, name, amount]) => unavailableVariant(productSlug, slug, name, amount));
+}
+
+function categoryMeta(category) {
+  return {
+    vendor: category,
+    game: category,
+    category,
+    badge: "Online",
+    featured: false,
+    available: true,
+  };
+}
+
+const r6Multiplier = 1;
+const newProductMultiplier = 1;
 const defaultGeneralInfo = "Open the setup instructions before using this product.";
 const universalSetupNotes = [];
 
@@ -91,6 +106,10 @@ const accountsMeta = {
   featured: false,
   available: true,
 };
+
+const apexMeta = categoryMeta("Apex Legends");
+const rustMeta = categoryMeta("Rust");
+const eftMeta = categoryMeta("EFT");
 
 const productCatalog = [
   {
@@ -370,7 +389,7 @@ const productCatalog = [
     ...fortniteMeta,
     slug: "fortnite-full",
     name: "Fortnite Full",
-    priceDisplay: `From ${money(adjustAmount(479, newProductMultiplier))}`,
+    priceDisplay: `From ${money(adjustAmount(599, newProductMultiplier))}`,
     summary:
       "Full Fortnite access with aim tuning, visual awareness, and loot information in one setup.",
     features: ["Aimbot tools", "ESP visuals", "Loot awareness"],
@@ -386,16 +405,16 @@ const productCatalog = [
     ],
     requirements: ["Windows 10 / 11", "Administrator access", "Stable internet connection"],
     variants: [
-      adjustedUnavailableVariant("fortnite-full", "day", "1 Day Key", 479, newProductMultiplier),
-      adjustedUnavailableVariant("fortnite-full", "week", "7 Day Key", 1039, newProductMultiplier),
-      adjustedUnavailableVariant("fortnite-full", "month", "30 Day Key", 2000, newProductMultiplier),
+      adjustedUnavailableVariant("fortnite-full", "day", "1 Day Key", 599, newProductMultiplier),
+      adjustedUnavailableVariant("fortnite-full", "week", "7 Day Key", 1299, newProductMultiplier),
+      adjustedUnavailableVariant("fortnite-full", "month", "30 Day Key", 2499, newProductMultiplier),
     ],
   },
   {
     ...fortniteMeta,
     slug: "fortnite-ancient",
     name: "Fortnite Ancient",
-    priceDisplay: `From ${money(adjustAmount(319, newProductMultiplier))}`,
+    priceDisplay: `From ${money(adjustAmount(399, newProductMultiplier))}`,
     summary:
       "Fortnite setup with advanced aim options, radar-style awareness, loot visuals, and config sharing.",
     features: ["Advanced aim", "Radar awareness", "Config sharing"],
@@ -411,16 +430,16 @@ const productCatalog = [
     ],
     requirements: ["Windows 10 / 11", "Intel or AMD CPU", "Secure setup guidance recommended"],
     variants: [
-      adjustedUnavailableVariant("fortnite-ancient", "day", "1 Day Key", 319, newProductMultiplier),
-      adjustedUnavailableVariant("fortnite-ancient", "week", "7 Day Key", 1599, newProductMultiplier),
-      adjustedUnavailableVariant("fortnite-ancient", "month", "30 Day Key", 3199, newProductMultiplier),
+      adjustedUnavailableVariant("fortnite-ancient", "day", "1 Day Key", 399, newProductMultiplier),
+      adjustedUnavailableVariant("fortnite-ancient", "week", "7 Day Key", 1999, newProductMultiplier),
+      adjustedUnavailableVariant("fortnite-ancient", "month", "30 Day Key", 3999, newProductMultiplier),
     ],
   },
   {
     ...spooferMeta,
     slug: "xim-spoofer",
     name: "Xim Spoofer",
-    priceDisplay: `From ${money(adjustAmount(399, newProductMultiplier))}`,
+    priceDisplay: `From ${money(adjustAmount(499, newProductMultiplier))}`,
     summary:
       "Hardware reset support for users who need a clean device-identity setup path across supported games.",
     features: ["Hardware reset support", "Multi-game support", "Guided setup"],
@@ -436,18 +455,18 @@ const productCatalog = [
     ],
     requirements: ["Windows 10 / 11", "UEFI motherboard preferred", "Administrator access"],
     variants: [
-      adjustedUnavailableVariant("xim-spoofer", "day", "1 Day Key", 399, newProductMultiplier),
-      adjustedUnavailableVariant("xim-spoofer", "three-day", "3 Day Key", 650, newProductMultiplier),
-      adjustedUnavailableVariant("xim-spoofer", "week", "1 Week Key", 1376, newProductMultiplier),
-      adjustedUnavailableVariant("xim-spoofer", "month", "1 Month Key", 2826, newProductMultiplier),
-      adjustedUnavailableVariant("xim-spoofer", "lifetime", "Lifetime Key", 970, newProductMultiplier),
+      adjustedUnavailableVariant("xim-spoofer", "day", "1 Day Key", 499, newProductMultiplier),
+      adjustedUnavailableVariant("xim-spoofer", "three-day", "3 Days Key", 813, newProductMultiplier),
+      adjustedUnavailableVariant("xim-spoofer", "week", "1 Week Key", 1720, newProductMultiplier),
+      adjustedUnavailableVariant("xim-spoofer", "month", "1 Month Key", 3532, newProductMultiplier),
+      adjustedUnavailableVariant("xim-spoofer", "lifetime", "Lifetime Key", 11462, newProductMultiplier),
     ],
   },
   {
     ...accountsMeta,
     slug: "linked-nfa",
     name: "Linked NFA",
-    priceDisplay: `From ${money(adjustAmount(479, newProductMultiplier))}`,
+    priceDisplay: `From ${money(adjustAmount(599, newProductMultiplier))}`,
     summary:
       "Not full-access ranked-ready account option for users who want a quick account handoff.",
     features: ["NFA account", "Ranked-ready option", "Ticket delivery"],
@@ -462,14 +481,14 @@ const productCatalog = [
     ],
     requirements: ["Member account", "Valid contact method", "Support ticket required"],
     variants: [
-      adjustedUnavailableVariant("linked-nfa", "account", "Account", 479, newProductMultiplier),
+      adjustedUnavailableVariant("linked-nfa", "account", "1 NFA Account", 599, newProductMultiplier),
     ],
   },
   {
     ...accountsMeta,
     slug: "stacked-pc-account",
     name: "Stacked PC Account",
-    priceDisplay: `From ${money(adjustAmount(1599, newProductMultiplier))}`,
+    priceDisplay: `From ${money(adjustAmount(1999, newProductMultiplier))}`,
     summary:
       "Stacked linked Rainbow Six Siege PC account with ranked-ready inventory and account notes.",
     features: ["Stacked PC account", "Loaded inventory", "Ranked-ready"],
@@ -484,8 +503,355 @@ const productCatalog = [
     ],
     requirements: ["Member account", "Valid contact method", "Support ticket required"],
     variants: [
-      adjustedUnavailableVariant("stacked-pc-account", "account", "Account", 1599, newProductMultiplier),
+      adjustedUnavailableVariant("stacked-pc-account", "account", "1 NFA Stacked Linked Account", 1999, newProductMultiplier),
     ],
+  },
+  {
+    ...fortniteMeta,
+    slug: "disconnect-fortnite-external",
+    name: "Disconnect - Fortnite External",
+    priceDisplay: `From ${money(900)}`,
+    summary:
+      "External Fortnite option with aim control, ESP, radar, item visuals, and streamproof-focused support.",
+    features: ["External build", "Player and item ESP", "Radar tools"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Prediction", "Hitbox selection", "Smoothing", "FOV"] },
+      { title: "Visuals", items: ["Box", "Skeleton", "Name", "Distance", "Snaplines"] },
+      { title: "Utility", items: ["Radar", "Item ESP", "Config system", "Streamproof mode"] },
+    ],
+    generalInfo: ["Use this if you want an external Fortnite setup with stream-friendly behavior."],
+    requirements: ["CPU: Intel / AMD", "OS: Windows 10 / 11"],
+    variants: disabledVariants("disconnect-fortnite-external", [
+      ["day", "1 Day Key", 900],
+      ["three-day", "3 Days Key", 1800],
+      ["week", "7 Days Key", 3500],
+      ["month", "30 Days Key", 6500],
+      ["lifetime", "Lifetime Key", 30000],
+    ]),
+  },
+  {
+    ...fortniteMeta,
+    slug: "fortnite-ignite-aimbot",
+    name: "Fortnite Ignite Aimbot",
+    priceDisplay: `From ${money(1000)}`,
+    summary:
+      "Fortnite aim-focused package with customizable targeting, player visuals, world ESP, and trigger tools.",
+    features: ["Custom aimbot", "World ESP", "Triggerbot"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Speed", "FOV", "Max distance", "Prediction", "Hitbox selection"] },
+      { title: "Player ESP", items: ["Box", "Skeleton", "Weapon", "Name", "Distance"] },
+      { title: "Config", items: ["Load", "Save", "Delete", "Clear"] },
+    ],
+    generalInfo: ["A stronger Fortnite option for users who want deeper aim and visual tuning."],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: disabledVariants("fortnite-ignite-aimbot", [
+      ["day", "1 Day Key", 1000],
+      ["three-day", "3 Days Key", 2000],
+      ["week", "7 Days Key", 3150],
+      ["month", "30 Days Key", 7000],
+      ["lifetime", "Lifetime Key", 42000],
+    ]),
+  },
+  {
+    ...fortniteMeta,
+    slug: "fortnite-exodus",
+    name: "Fortnite Exodus",
+    priceDisplay: `From ${money(200)}`,
+    summary:
+      "Fortnite package with aim assistance, loot visuals, player ESP, fight mode, and weapon-specific settings.",
+    features: ["Weapon configs", "Loot ESP", "Fight mode"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Prediction", "Visible check", "Ignore knocked", "Aim step"] },
+      { title: "Visuals", items: ["Box", "Skeleton", "Name", "Weapon", "Distance"] },
+      { title: "Loot", items: ["Categories", "Render distance", "Containers", "Vehicles"] },
+    ],
+    generalInfo: ["Good budget option for Fortnite users who still want a full feature spread."],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: disabledVariants("fortnite-exodus", [
+      ["day", "1 Day Key", 200],
+      ["three-day", "3 Days Key", 400],
+      ["week", "7 Days Key", 1000],
+      ["month", "30 Days Key", 2000],
+    ]),
+  },
+  {
+    ...rustMeta,
+    slug: "rust-ancient",
+    name: "Ancient - Rust",
+    priceDisplay: `From ${money(300)}`,
+    summary:
+      "Rust setup with silent aim support, player and world ESP, radar, and configurable entity visuals.",
+    features: ["Silent aim", "World ESP", "Radar"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Smooth", "FOV", "Bone selection", "Target filters"] },
+      { title: "Visuals", items: ["Players", "NPCs", "Sleepers", "Skeleton", "Off-screen arrows"] },
+      { title: "World", items: ["Ore", "Crates", "Animals", "Deployables", "Vehicles"] },
+    ],
+    generalInfo: ["Rust option for users who want both combat support and world awareness."],
+    requirements: ["Windows 10 / 11", "Intel or AMD CPU"],
+    variants: disabledVariants("rust-ancient", [
+      ["day", "1 Day Key", 300],
+      ["week", "7 Days Key", 1250],
+      ["month", "30 Days Key", 2500],
+    ]),
+  },
+  {
+    ...rustMeta,
+    slug: "rust-exodus",
+    name: "Exodus - Rust External",
+    priceDisplay: `From ${money(200)}`,
+    summary:
+      "External Rust product with aim tools, player ESP, world filters, radar, movement tools, and config support.",
+    features: ["External Rust build", "Player ESP", "Movement tools"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Memory mode", "Silent mode", "Prediction", "FOV"] },
+      { title: "Player ESP", items: ["Skeleton", "Username", "Held item", "Distance", "Chams"] },
+      { title: "Utility", items: ["Radar", "World ESP", "Omni sprint", "Third person"] },
+    ],
+    generalInfo: ["External Rust access with a wide feature set and many visual filters."],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: disabledVariants("rust-exodus", [
+      ["day", "1 Day Key", 200],
+      ["three-day", "3 Days Key", 400],
+      ["week", "7 Days Key", 1000],
+      ["month", "30 Days Key", 2000],
+    ]),
+  },
+  {
+    ...rustMeta,
+    slug: "rust-ignite",
+    name: "Ignite - Rust External",
+    priceDisplay: `From ${money(480)}`,
+    summary:
+      "Rust external with silent aim, player and item ESP, combat utilities, movement tools, and config handling.",
+    features: ["Silent aimbot", "Item ESP", "Combat utilities"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Speed", "FOV", "Max distance", "Hitbox selection"] },
+      { title: "ESP", items: ["Players", "Items", "Prefabs", "Custom colors"] },
+      { title: "Misc", items: ["Instant tools", "Movement helpers", "Config save/load"] },
+    ],
+    generalInfo: ["Higher-feature Rust external option with deep item and prefab controls."],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: disabledVariants("rust-ignite", [
+      ["day", "1 Day Key", 480],
+      ["three-day", "3 Days Key", 1080],
+      ["week", "7 Days Key", 1500],
+      ["month", "30 Days Key", 3600],
+      ["lifetime", "Lifetime Key", 21600],
+    ]),
+  },
+  {
+    ...rustMeta,
+    slug: "rust-krush",
+    name: "Krush - Rust External",
+    priceDisplay: `From ${money(300)}`,
+    summary:
+      "Rust external with normal and silent aim modes, detailed ESP filters, out-of-FOV arrows, and exploit toggles.",
+    features: ["Normal and silent aim", "ESP filters", "OOF arrows"],
+    featureGroups: [
+      { title: "Aim", items: ["Silent aimbot", "Standard aimbot", "Priority modes", "Bone selection"] },
+      { title: "ESP", items: ["Player", "NPC", "World", "Raid", "Ores", "Loot"] },
+      { title: "Misc", items: ["No recoil", "Bright night", "Crosshair", "Config manager"] },
+    ],
+    generalInfo: ["Rust listing built around granular filters and readable visual controls."],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: disabledVariants("rust-krush", [
+      ["day", "1 Day Key", 300],
+      ["week", "7 Days Key", 1500],
+      ["month", "30 Days Key", 3000],
+    ]),
+  },
+  {
+    ...rustMeta,
+    slug: "rust-mek",
+    name: "MEK - Rust External",
+    priceDisplay: `From ${money(480)}`,
+    summary:
+      "Rust external package with silent and memory aim, streamproof visuals, combat utilities, and config management.",
+    features: ["Streamproof external", "Silent and memory aim", "Combat tools"],
+    featureGroups: [
+      { title: "Misc", items: ["Fast loot", "No fall damage", "Spider-man", "Infinite jump"] },
+      { title: "Aimbot", items: ["Silent aim", "Memory aim", "Hit chance", "FOV controls"] },
+      { title: "Visuals", items: ["Player ESP", "Teammate ESP", "Chams", "Resources", "Crates"] },
+    ],
+    generalInfo: ["Rust tool for users who want a streamproof external workflow."],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: disabledVariants("rust-mek", [
+      ["day", "1 Day Key", 480],
+      ["three-day", "3 Days Key", 960],
+      ["week", "7 Days Key", 1800],
+      ["month", "30 Days Key", 3600],
+      ["long", "9999 Day Key", 15000],
+    ]),
+  },
+  {
+    ...spooferMeta,
+    slug: "spoofer-exodus-temp",
+    name: "Exodus Temp Spoofer",
+    priceDisplay: `From ${money(150)}`,
+    summary:
+      "Temporary HWID masking product with cleaner support and coverage for several major anti-cheat environments.",
+    features: ["Temporary spoofing", "Cleaner support", "Multi-game coverage"],
+    featureGroups: [
+      { title: "Spoof list", items: ["Disk serials", "RAM serials", "Monitor serials", "Network IDs"] },
+      { title: "Cleaner support", items: ["Rust", "Apex Legends", "Escape From Tarkov"] },
+      { title: "Anti-cheat coverage", items: ["EAC", "BE", "FiveM", "Ricochet"] },
+    ],
+    generalInfo: ["Use support before running if you are unsure whether temporary spoofing is enough."],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: disabledVariants("spoofer-exodus-temp", [
+      ["day", "1 Day Key", 150],
+      ["three-day", "3 Days Key", 300],
+      ["week", "7 Days Key", 500],
+      ["month", "30 Days Key", 1000],
+    ]),
+  },
+  {
+    ...spooferMeta,
+    slug: "spoofer-verse-perm",
+    name: "Verse - Perm Spoofer",
+    priceDisplay: `From ${money(1200)}`,
+    summary:
+      "Permanent spoofing option for supported games and motherboard brands, with setup checks before purchase.",
+    features: ["Permanent spoofing", "Motherboard coverage", "Setup checks"],
+    featureGroups: [
+      { title: "Supported games", items: ["League of Legends", "Fortnite", "Apex Legends", "Rust"] },
+      { title: "Motherboards", items: ["ASUS", "Gigabyte", "MSI", "ASRock", "HP"] },
+      { title: "Notes", items: ["Open a ticket for Lenovo, Acer, or Dell", "TPM bypass not included"] },
+    ],
+    generalInfo: ["Open a support ticket first if your motherboard brand is not listed."],
+    requirements: ["Windows 10 / 11", "Supported motherboard"],
+    variants: disabledVariants("spoofer-verse-perm", [
+      ["one-time", "One Time Key", 1200],
+      ["lifetime", "Lifetime Key", 3500],
+    ]),
+  },
+  {
+    ...eftMeta,
+    slug: "eft-coffee-chams",
+    name: "Coffee Chams - EFT",
+    priceDisplay: `From ${money(750)}`,
+    summary:
+      "Escape From Tarkov chams-focused option with visual clarity tools, recoil/stamina tweaks, and loot visibility.",
+    features: ["Chams visuals", "Loot visibility", "Recoil tweaks"],
+    featureGroups: [
+      { title: "Visuals", items: ["Enemy chams", "Local player chams", "Loot chams", "Corpse chams"] },
+      { title: "Misc", items: ["Infinite stamina", "No sway", "No recoil", "FOV helpers"] },
+    ],
+    generalInfo: ["EFT listing focused on visual readability and quality-of-life controls."],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: disabledVariants("eft-coffee-chams", [
+      ["week", "7 Days Key", 750],
+      ["month", "30 Days Key", 1500],
+    ]),
+  },
+  {
+    ...eftMeta,
+    slug: "eft-coffee-lite",
+    name: "Coffee Lite - EFT",
+    priceDisplay: `From ${money(400)}`,
+    summary:
+      "Escape From Tarkov suite with silent aim, loot filtering, world ESP, player ESP, and exploit-style tools.",
+    features: ["Silent aim", "Loot filtering", "World ESP"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Silent aim", "Aim key", "Crosshair", "Bone selector"] },
+      { title: "Loot ESP", items: ["Top loot list", "Price modes", "Distance controls", "Custom loot"] },
+      { title: "World ESP", items: ["Exfils", "Minefields", "Quest locations", "Grenades"] },
+    ],
+    generalInfo: ["Broad EFT option for users who want loot and player information in one setup."],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: disabledVariants("eft-coffee-lite", [
+      ["day", "1 Day Key", 400],
+      ["week", "7 Days Key", 2250],
+      ["month", "30 Days Key", 4500],
+    ]),
+  },
+  {
+    ...eftMeta,
+    slug: "eft-ancient",
+    name: "Ancient - EFT External",
+    priceDisplay: `From ${money(300)}`,
+    summary:
+      "External EFT package with aim tools, player and scav visuals, loot presets, exfil info, radar, and config support.",
+    features: ["External EFT build", "Loot presets", "Radar"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Smart bone", "Prediction", "Priority modes", "Force bone"] },
+      { title: "Visuals", items: ["Players", "Bots", "Bosses", "Chams", "Skeleton"] },
+      { title: "Loot", items: ["Price modes", "Category colors", "Presets", "Containers"] },
+    ],
+    generalInfo: ["Feature-heavy EFT external with many setup and filtering controls."],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: disabledVariants("eft-ancient", [
+      ["day", "1 Day Key", 300],
+      ["week", "7 Days Key", 1250],
+      ["month", "30 Days Key", 2500],
+    ]),
+  },
+  {
+    ...apexMeta,
+    slug: "apex-ancient",
+    name: "Ancient - Apex Legends",
+    priceDisplay: `From ${money(200)}`,
+    summary:
+      "Apex Legends option with dual-bind aim tools, trigger support, player/loot ESP, movement helpers, and map radar.",
+    features: ["Dual-bind aimbot", "Loot ESP", "Movement helpers"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Smooth", "FOV", "Bone selector", "RCS"] },
+      { title: "Player ESP", items: ["Box", "Skeleton", "Glow", "Health", "Shield"] },
+      { title: "Movement", items: ["Auto grapple", "Wall jump", "Super glide", "Tap strafe"] },
+    ],
+    generalInfo: ["Apex setup with combat, movement, and loot awareness tools."],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: disabledVariants("apex-ancient", [
+      ["day", "1 Day Key", 200],
+      ["week", "7 Days Key", 750],
+      ["month", "30 Days Key", 1500],
+    ]),
+  },
+  {
+    ...apexMeta,
+    slug: "apex-ignite",
+    name: "Ignite - Apex Legends",
+    priceDisplay: `From ${money(400)}`,
+    summary:
+      "Apex Legends product with precision aim assist, magnetic triggerbot, player/world ESP, and movement tools.",
+    features: ["Precision aim", "Magnetic triggerbot", "World ESP"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Speed", "FOV", "Max distance", "Retarget timing"] },
+      { title: "ESP", items: ["Box", "Skeleton", "Glow", "OOF arrows", "Weapon filters"] },
+      { title: "Misc", items: ["BHOP", "Tap strafe", "Wall jump", "Config save/load"] },
+    ],
+    generalInfo: ["Apex option for users who want aim, trigger, and movement tools together."],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: disabledVariants("apex-ignite", [
+      ["day", "1 Day Key", 400],
+      ["three-day", "3 Days Key", 750],
+      ["week", "7 Days Key", 1000],
+      ["month", "30 Days Key", 2250],
+      ["lifetime", "Lifetime Key", 10000],
+    ]),
+  },
+  {
+    ...apexMeta,
+    slug: "apex-exodus",
+    name: "Exodus - Apex Legends",
+    priceDisplay: `From ${money(150)}`,
+    summary:
+      "Apex external with weapon-specific aim settings, player and loot visuals, smart loot, and movement utilities.",
+    features: ["External Apex build", "Smart loot", "Movement utilities"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Prediction", "Visible check", "Ignore knocked", "Weapon configs"] },
+      { title: "Visuals", items: ["Box", "Name", "Health", "Shield", "Skeleton", "Glow"] },
+      { title: "Loot", items: ["Rarity groups", "Smart loot", "Custom loot", "Render distance"] },
+    ],
+    generalInfo: ["Budget Apex option with broad visuals and movement helper coverage."],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: disabledVariants("apex-exodus", [
+      ["day", "1 Day Key", 150],
+      ["three-day", "3 Days Key", 300],
+      ["week", "7 Days Key", 750],
+      ["month", "30 Days Key", 1500],
+    ]),
   },
 ];
 
