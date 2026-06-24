@@ -5,6 +5,7 @@ initReveal();
 
 const messageBox = document.querySelector("[data-users-message]");
 const accessForm = document.querySelector("[data-users-access-form]");
+const accessCard = accessForm?.closest(".admin-access-card");
 const usersShell = document.querySelector("[data-users-shell]");
 const usersList = document.querySelector("[data-users-list]");
 
@@ -58,6 +59,22 @@ function renderUsers(users) {
     .join("");
 }
 
+function lockUsersPanel() {
+  usersShell.hidden = true;
+  usersShell.classList.remove("is-visible");
+  if (accessCard) {
+    accessCard.hidden = false;
+  }
+}
+
+function unlockUsersPanel() {
+  usersShell.hidden = false;
+  usersShell.classList.add("is-visible");
+  if (accessCard) {
+    accessCard.hidden = true;
+  }
+}
+
 async function unlockOwnerPanel(ownerKey) {
   const response = await fetch("/api/owner/sign-in", {
     method: "POST",
@@ -78,7 +95,7 @@ async function loadUsers() {
   const session = await getCurrentSession();
 
   if (!session) {
-    usersShell.hidden = true;
+    lockUsersPanel();
     renderMessage(messageBox, "Sign in first, then reload this owner page.", "warn");
     return;
   }
@@ -92,7 +109,7 @@ async function loadUsers() {
     throw new Error(payload.error || "Unable to load users.");
   }
 
-  usersShell.hidden = false;
+  unlockUsersPanel();
   renderUsers(payload.users || []);
   renderMessage(messageBox, "Users loaded. Passwords are intentionally never exposed.", "success");
 }

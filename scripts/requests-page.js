@@ -7,6 +7,7 @@ const OWNER_LABEL_STORAGE = "halo-owner-label";
 
 const messageBox = document.querySelector("[data-requests-message]");
 const ownerAccessForm = document.querySelector("[data-owner-access-form]");
+const ownerAccessCard = ownerAccessForm?.closest(".admin-access-card");
 const requestsShell = document.querySelector("[data-requests-shell]");
 const requestList = document.querySelector("[data-access-request-list]");
 const auditLogList = document.querySelector("[data-audit-log-list]");
@@ -34,6 +35,22 @@ function ownerHeaders() {
   return {
     "Content-Type": "application/json",
   };
+}
+
+function lockRequestsPanel() {
+  requestsShell.hidden = true;
+  requestsShell.classList.remove("is-visible");
+  if (ownerAccessCard) {
+    ownerAccessCard.hidden = false;
+  }
+}
+
+function unlockRequestsPanel() {
+  requestsShell.hidden = false;
+  requestsShell.classList.add("is-visible");
+  if (ownerAccessCard) {
+    ownerAccessCard.hidden = true;
+  }
 }
 
 async function unlockOwnerPanel(ownerKey) {
@@ -140,7 +157,7 @@ async function loadRequests() {
   const session = await getCurrentSession();
 
   if (!session) {
-    requestsShell.hidden = true;
+    lockRequestsPanel();
     renderMessage(messageBox, "Sign in first, then reload this owner panel.", "warn");
     return;
   }
@@ -154,7 +171,7 @@ async function loadRequests() {
     throw new Error(payload.error || "Unable to load staff requests.");
   }
 
-  requestsShell.hidden = false;
+  unlockRequestsPanel();
   renderRequests(payload.requests || []);
   renderAuditLogs(payload.auditLogs || []);
   renderMessage(messageBox, "Owner panel unlocked.", "success");
