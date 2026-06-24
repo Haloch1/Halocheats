@@ -385,10 +385,31 @@ function normalizeVisitorIp(value) {
   return trimField(value, 80).replace(/[<>"'`]/g, "") || "unknown";
 }
 
-function recordVisitorPageView({ visitorId, pagePath, referrer, ipAddress, now }) {
+function normalizeVisitorUserLabel(user) {
+  const username = normalizeUsername(user?.user_metadata?.username);
+  const email = trimField(user?.email, 120);
+
+  return username || email || "";
+}
+
+async function getOptionalVisitorUserLabel(req) {
+  if (!getAuthToken(req)) {
+    return "";
+  }
+
+  try {
+    const user = await getAuthenticatedUser(req);
+    return normalizeVisitorUserLabel(user);
+  } catch {
+    return "";
+  }
+}
+
+function recordVisitorPageView({ visitorId, userLabel, pagePath, referrer, ipAddress, now }) {
   recentVisitorViews.unshift({
     id: createSecretToken(8),
     visitorLabel: hashToken(visitorId).slice(0, 10),
+    userLabel: trimField(userLabel, 120),
     pagePath,
     referrer: normalizeVisitorReferrer(referrer),
     ipAddress: normalizeVisitorIp(ipAddress),
@@ -880,7 +901,7 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/api/visitors/heartbeat", (req, res) => {
+app.post("/api/visitors/heartbeat", async (req, res) => {
   const visitorId = normalizeVisitorId(req.body?.visitorId);
 
   if (!visitorId) {
@@ -890,14 +911,17 @@ app.post("/api/visitors/heartbeat", (req, res) => {
   const now = Date.now();
   const existing = visitorSessions.get(visitorId);
   const pagePath = normalizeVisitorPath(req.body?.pagePath);
+  const userLabel = await getOptionalVisitorUserLabel(req);
   const shouldLogPageView =
     !existing ||
     existing.pagePath !== pagePath ||
+    (userLabel && existing.userLabel !== userLabel) ||
     now - (existing.lastLoggedAt || 0) > visitorPageViewCooldownMs;
 
   if (shouldLogPageView) {
     recordVisitorPageView({
       visitorId,
+      userLabel,
       pagePath,
       referrer: req.body?.referrer,
       ipAddress: getClientIp(req),
@@ -909,6 +933,7 @@ app.post("/api/visitors/heartbeat", (req, res) => {
     firstSeenAt: existing?.firstSeenAt || now,
     lastSeenAt: now,
     lastLoggedAt: shouldLogPageView ? now : existing?.lastLoggedAt || now,
+    userLabel: userLabel || existing?.userLabel || "",
     pagePath,
   });
 

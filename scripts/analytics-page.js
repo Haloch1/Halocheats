@@ -111,7 +111,9 @@ function renderRecentViews(views) {
             <span>${escapeHtml(view.referrer || "Direct")}</span>
           </div>
           <small>
-            IP ${escapeHtml(view.ipAddress || "unknown")} - ${escapeHtml(
+            ${escapeHtml(view.userLabel ? `User ${view.userLabel}` : "Guest")} - IP ${escapeHtml(
+        view.ipAddress || "unknown"
+      )} - ${escapeHtml(
         view.visitorLabel || "anonymous"
       )} - ${formatTimestamp(view.viewedAt)}
           </small>
