@@ -28,6 +28,8 @@ const liveDeskCooldownMs = 45_000;
 const liveDeskCooldownByIp = new Map();
 const staffAccessTtlMs = 1000 * 60 * 60 * 8;
 const deleteApprovalTtlMs = 1000 * 60 * 15;
+const visitorHeartbeatTtlMs = 75_000;
+const visitorSessions = new Map();
 
 function isConfiguredValue(value) {
   return Boolean(value && !/(replace_me|your_supabase|your-project|your_)/i.test(value));
@@ -333,6 +335,36 @@ function trimField(value, maxLength = 500) {
   return String(value || "")
     .trim()
     .slice(0, maxLength);
+}
+
+function normalizeVisitorId(value) {
+  const visitorId = trimField(value, 80);
+
+  if (!/^[a-zA-Z0-9_-]{16,80}$/.test(visitorId)) {
+    return "";
+  }
+
+  return visitorId;
+}
+
+function normalizeVisitorPath(value) {
+  const pagePath = trimField(value, 160) || "/";
+
+  if (!pagePath.startsWith("/")) {
+    return "/";
+  }
+
+  return pagePath.replace(/[<>"'`]/g, "").slice(0, 160);
+}
+
+function pruneVisitorSessions() {
+  const activeAfter = Date.now() - visitorHeartbeatTtlMs;
+
+  for (const [visitorId, session] of visitorSessions.entries()) {
+    if (session.lastSeenAt < activeAfter) {
+      visitorSessions.delete(visitorId);
+    }
+  }
 }
 
 function normalizeUsername(value) {
@@ -803,6 +835,26 @@ app.use(express.json());
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.post("/api/visitors/heartbeat", (req, res) => {
+  const visitorId = normalizeVisitorId(req.body?.visitorId);
+
+  if (!visitorId) {
+    return res.status(400).json({ error: "Visitor session is invalid." });
+  }
+
+  const now = Date.now();
+  const existing = visitorSessions.get(visitorId);
+
+  visitorSessions.set(visitorId, {
+    firstSeenAt: existing?.firstSeenAt || now,
+    lastSeenAt: now,
+    pagePath: normalizeVisitorPath(req.body?.pagePath),
+  });
+
+  pruneVisitorSessions();
+  return res.json({ ok: true });
 });
 
 app.post("/api/owner/sign-in", async (req, res) => {
@@ -1559,6 +1611,34 @@ app.delete("/api/admin/access-requests/:requestId", async (req, res) => {
   }
 });
 
+app.get("/api/admin/visitors", async (req, res) => {
+  try {
+    await getAuthenticatedUser(req);
+    ensureOwnerAccess(req);
+    pruneVisitorSessions();
+
+    const pages = Array.from(visitorSessions.values()).reduce((summary, session) => {
+      summary[session.pagePath] = (summary[session.pagePath] || 0) + 1;
+      return summary;
+    }, {});
+
+    const pageBreakdown = Object.entries(pages)
+      .map(([pagePath, count]) => ({ pagePath, count }))
+      .sort((left, right) => right.count - left.count || left.pagePath.localeCompare(right.pagePath));
+
+    return res.json({
+      activeVisitors: visitorSessions.size,
+      activeWindowSeconds: Math.round(visitorHeartbeatTtlMs / 1000),
+      pages: pageBreakdown,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to load visitor stats.",
+    });
+  }
+});
+
 app.get("/api/admin/users", async (req, res) => {
   try {
     await getAuthenticatedUser(req);
@@ -2082,6 +2162,7 @@ const pageRoutes = new Map([
   ["/desk", "desk/index.html"],
   ["/desk-admin", "desk-admin/index.html"],
   ["/requests", "requests/index.html"],
+  ["/analytics", "analytics/index.html"],
   ["/users", "users/index.html"],
   ["/checkout/success", "checkout/success/index.html"],
   ["/checkout/cancel", "checkout/cancel/index.html"],

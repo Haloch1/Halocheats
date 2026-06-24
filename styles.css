@@ -1387,6 +1387,66 @@ a {
   margin: 0 auto 90px;
 }
 
+.analytics-shell {
+  width: min(calc(100% - 32px), 1180px);
+  margin: 0 auto 90px;
+  display: grid;
+  grid-template-columns: minmax(260px, 0.75fr) 1.25fr;
+  gap: 24px;
+}
+
+.analytics-hero-card {
+  min-height: 260px;
+  padding: 32px;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    radial-gradient(circle at 20% 20%, rgba(255, 48, 48, 0.28), transparent 34%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+  box-shadow: 0 24px 80px rgba(255, 25, 25, 0.13);
+}
+
+.analytics-hero-card strong {
+  display: block;
+  margin: 18px 0 10px;
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: clamp(4rem, 12vw, 8rem);
+  line-height: 0.9;
+  letter-spacing: -0.08em;
+}
+
+.analytics-hero-card span,
+.analytics-breakdown small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.analytics-page-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 18px;
+  align-items: center;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.analytics-page-row span {
+  color: #f7eeee;
+  overflow-wrap: anywhere;
+}
+
+.analytics-page-row strong {
+  min-width: 44px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 48, 48, 0.18);
+  color: #fff;
+  text-align: center;
+}
+
 .desk-reply-form {
   display: grid;
   gap: 14px;
@@ -2967,6 +3027,10 @@ a {
   .member-grid {
     grid-template-columns: 1fr;
   }
+
+  .analytics-shell {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 760px) {
@@ -3086,7 +3150,8 @@ a {
   .auth-card,
   .desk-inbox-panel,
   .desk-thread-panel,
-  .admin-access-card {
+  .admin-access-card,
+  .analytics-hero-card {
     padding: 20px;
   }
 

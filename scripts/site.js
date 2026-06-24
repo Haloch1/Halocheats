@@ -40,3 +40,57 @@ export function renderMessage(target, message, tone = "info") {
 export function currencyLabel(value) {
   return typeof value === "number" ? `$${value.toFixed(2)}` : value;
 }
+
+const VISITOR_ID_STORAGE = "halo-anonymous-visitor-id";
+const VISITOR_HEARTBEAT_MS = 30_000;
+let fallbackVisitorId = "";
+
+function createVisitorId() {
+  if (window.crypto?.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 18)}`;
+}
+
+function getVisitorId() {
+  try {
+    const existingId = window.localStorage.getItem(VISITOR_ID_STORAGE);
+
+    if (existingId) {
+      return existingId;
+    }
+
+    const visitorId = createVisitorId();
+    window.localStorage.setItem(VISITOR_ID_STORAGE, visitorId);
+    return visitorId;
+  } catch {
+    fallbackVisitorId ||= createVisitorId();
+    return fallbackVisitorId;
+  }
+}
+
+function sendVisitorHeartbeat() {
+  if (document.visibilityState === "hidden") {
+    return;
+  }
+
+  window
+    .fetch("/api/visitors/heartbeat", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        visitorId: getVisitorId(),
+        pagePath: `${window.location.pathname}${window.location.search}`,
+      }),
+      keepalive: true,
+    })
+    .catch(() => {});
+}
+
+sendVisitorHeartbeat();
+window.setInterval(sendVisitorHeartbeat, VISITOR_HEARTBEAT_MS);
+document.addEventListener("visibilitychange", sendVisitorHeartbeat);
