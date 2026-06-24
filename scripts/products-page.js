@@ -418,14 +418,20 @@ function renderFeatureGroups(product) {
 
   return featureGroups
     .map(
-      (group) => `
-        <article class="variant-feature-card">
+      (group) => {
+        const items = group.items || [];
+
+        return `
+        <article class="variant-feature-card${items.length ? "" : " variant-feature-card-compact"}">
           <strong>${escapeHtml(group.title)}</strong>
-          <ul>
-            ${(group.items || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
-          </ul>
+          ${
+            items.length
+              ? `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+              : ""
+          }
         </article>
-      `
+      `;
+      }
     )
     .join("");
 }
