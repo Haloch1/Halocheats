@@ -1447,6 +1447,39 @@ a {
   text-align: center;
 }
 
+.analytics-log-panel {
+  grid-column: 1 / -1;
+}
+
+.analytics-view-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 18px;
+  align-items: center;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background:
+    linear-gradient(135deg, rgba(255, 48, 48, 0.08), rgba(255, 255, 255, 0.025)),
+    rgba(255, 255, 255, 0.03);
+}
+
+.analytics-view-row div {
+  display: grid;
+  gap: 6px;
+}
+
+.analytics-view-row strong {
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+
+.analytics-view-row span,
+.analytics-view-row small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .desk-reply-form {
   display: grid;
   gap: 14px;
@@ -3029,6 +3062,10 @@ a {
   }
 
   .analytics-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-view-row {
     grid-template-columns: 1fr;
   }
 }
