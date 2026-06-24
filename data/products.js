@@ -21,7 +21,7 @@ function keyVariant(productSlug, slug, name, amount, options = {}) {
 function testingVariant(productSlug, slug, name) {
   return keyVariant(productSlug, slug, name, 0, {
     stockLabel: "0 In Stock",
-    priceDisplay: "Testing",
+    priceDisplay: "Unavailable",
     stripeEnvKey: `DISABLED_${stripeEnvKey(productSlug, slug)}`,
   });
 }
@@ -40,7 +40,7 @@ const r6Meta = {
   vendor: "Rainbow Six Siege",
   game: "Rainbow Six Siege",
   category: "Rainbow Six Siege",
-  badge: "Testing",
+  badge: "Unavailable",
   featured: false,
   available: false,
 };

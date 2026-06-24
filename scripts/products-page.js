@@ -213,7 +213,7 @@ function renderProductCard(product, index) {
       <button class="button button-primary pay-button" data-product-slug="${escapeHtml(product.slug)}" ${
         product.available ? "" : "disabled"
       }>
-        ${product.available ? "Buy Now" : "Testing"}
+        ${product.available ? "Buy Now" : "Unavailable"}
       </button>
     </div>
   `;
@@ -375,7 +375,7 @@ function selectVariant(variantSlug) {
   modal.querySelector("[data-variant-price]").textContent = activeVariant?.priceDisplay || "";
   checkoutButton.disabled = !(activeVariant?.checkoutReady || activeVariant?.checkoutBlocked);
   checkoutButton.textContent =
-    activeVariant?.checkoutReady || activeVariant?.checkoutBlocked ? "Buy Now" : "Testing";
+    activeVariant?.checkoutReady || activeVariant?.checkoutBlocked ? "Buy Now" : "Unavailable";
 }
 
 function renderProductGroups(products) {
@@ -488,7 +488,7 @@ async function checkoutSelectedVariant(button) {
       return;
     }
 
-    renderMessage(notice, "This variant is still in testing.", "warn");
+    renderMessage(notice, "This variant is unavailable.", "warn");
     return;
   }
 
