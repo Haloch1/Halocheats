@@ -1815,7 +1815,7 @@ a {
 
 .catalog-panel {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 14px;
   margin-bottom: 18px;
   padding: 16px;
@@ -1825,6 +1825,9 @@ a {
     rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: var(--shadow);
+  max-width: 680px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .catalog-stat {
