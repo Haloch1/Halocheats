@@ -24,7 +24,6 @@ const categoryStrip = document.querySelector("[data-category-strip]");
 const productSearch = document.querySelector("[data-product-search]");
 const gamesStat = document.querySelector("[data-catalog-games]");
 const productsStat = document.querySelector("[data-catalog-products]");
-const lowestStat = document.querySelector("[data-catalog-lowest]");
 let catalogProducts = [];
 let activeProduct = null;
 let activeVariant = null;
@@ -699,18 +698,12 @@ function renderCatalogView() {
 
 function updateStats(products) {
   const categories = new Set(products.map((product) => product.category || product.game));
-  const lowest = products.reduce((best, product) => Math.min(best, getStartingPrice(product)), Infinity);
-
   if (gamesStat) {
     gamesStat.textContent = categories.size;
   }
 
   if (productsStat) {
     productsStat.textContent = products.length;
-  }
-
-  if (lowestStat) {
-    lowestStat.textContent = Number.isFinite(lowest) ? `$${lowest.toFixed(2)}` : "$0";
   }
 }
 
