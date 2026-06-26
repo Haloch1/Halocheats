@@ -3630,6 +3630,31 @@ a {
     align-items: flex-start;
     flex-direction: column;
   }
+
+  .status-board,
+  .status-list-split {
+    grid-template-columns: 1fr;
+  }
+
+  .status-group-wide {
+    grid-column: auto;
+  }
+
+  .status-item {
+    align-items: center;
+    flex-direction: row;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .status-item:last-child {
+    border-bottom: none;
+  }
+
+  .status-group {
+    padding: 16px;
+    border-radius: 16px;
+  }
 }
 
 @media (max-width: 430px) {
