@@ -3202,7 +3202,9 @@ app.post("/api/reviews", async (req, res) => {
       .eq("order_id", orderId)
       .maybeSingle();
 
-    /* Allow re-submitting even approved reviews (overwrites the old one) */
+    if (existingReview.data && existingReview.data.status === "approved") {
+      return res.status(409).json({ error: "You have already reviewed this purchase." });
+    }
 
     const product = products.find((p) =>
       p.variants.some((v) => v.inventorySlug === orderCheck.data.product_slug)

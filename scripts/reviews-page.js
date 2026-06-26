@@ -192,11 +192,7 @@ async function loadPurchases() {
         let actionHtml;
 
         if (p.reviewStatus === "approved") {
-          actionHtml = `
-            <div>
-              <span class="member-chip member-chip-resolved">Reviewed</span>
-              <button class="button button-small button-outline" data-write-review data-order-id="${esc(p.orderId)}" data-product-name="${esc(p.productName + (p.variantName ? " - " + p.variantName : ""))}">Edit Review</button>
-            </div>`;
+          actionHtml = '<span class="member-chip member-chip-resolved">Reviewed</span>';
         } else if (p.reviewStatus === "rejected") {
           actionHtml = `
             <div>
