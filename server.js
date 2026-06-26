@@ -1107,39 +1107,41 @@ app.get("/api/status", async (_req, res) => {
     const html = await resp.text();
 
     // Parse categories and products from the HTML
+    // Structure: <h2>Category</h2> followed by <div class="status-cards">
+    //   containing <a class="status-card"><h3>Name</h3><div class="status" data-label="Undetected">...</div></a>
     const categories = [];
-    // Match each h2 header followed by product links
-    const catRegex = /<h2[^>]*>(.*?)<\/h2>\s*<div[^>]*>([\s\S]*?)(?=<h2|<\/section|<footer)/gi;
-    // Fallback: simpler approach parsing the text content
-    const lines = html.split("\n");
     let currentCat = null;
 
-    for (const line of lines) {
-      // Match h2 category headers
-      const h2Match = line.match(/<h2[^>]*>(.*?)<\/h2>/i);
-      if (h2Match) {
-        currentCat = { name: h2Match[1].trim(), products: [] };
-        categories.push(currentCat);
-        continue;
-      }
+    // Match h2 category headers
+    const h2Regex = /<h2[^>]*>(.*?)<\/h2>/gi;
+    // Match status cards: h3 for name, data-label for status
+    const cardRegex = /<a[^>]*class="status-card"[^>]*>[\s\S]*?<h3[^>]*>(.*?)<\/h3>[\s\S]*?data-label="([^"]*)"[\s\S]*?<\/a>/gi;
 
-      if (!currentCat) continue;
+    // Split HTML by h2 to get category sections
+    const sections = html.split(/<h2[^>]*>/i);
+    // First section is everything before the first h2, skip it
+    const h2Names = [...html.matchAll(h2Regex)].map(m => m[1].trim());
 
-      // Match product entries - they appear as links with product name and status
-      // Pattern: product name followed by status text like "Undetected", "Updating", "Detected", "Listed"
-      const productMatches = line.matchAll(/>([^<]+?)\s*(Undetected|Updating|Detected|Listed|Offline|Online|Maintenance)<\//gi);
-      for (const m of productMatches) {
-        const name = m[1].replace(/\s+/g, " ").trim();
-        if (name && name.length > 1 && !name.startsWith("<")) {
-          currentCat.products.push({
+    for (let i = 0; i < h2Names.length; i++) {
+      const sectionHtml = sections[i + 1] || "";
+      const cat = { name: h2Names[i], products: [] };
+
+      const cards = [...sectionHtml.matchAll(/<h3[^>]*>(.*?)<\/h3>[\s\S]*?data-label="([^"]*)"/gi)];
+      for (const card of cards) {
+        const name = card[1].trim();
+        const status = card[2].trim();
+        if (name && status) {
+          cat.products.push({
             name,
-            status: m[2].charAt(0).toUpperCase() + m[2].slice(1).toLowerCase()
+            status: status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()
           });
         }
       }
+
+      categories.push(cat);
     }
 
-    // Remove empty categories
+    // Remove empty categories (like DMA Bundle which has no status label)
     const result = categories.filter(c => c.products.length > 0);
     statusCache = { data: result, fetchedAt: now };
     res.json(result);
