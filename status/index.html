@@ -86,39 +86,43 @@
         return "member-chip-listed";
       }
 
-      try {
-        const res = await fetch("/api/status");
-        if (!res.ok) throw new Error("Failed to fetch");
-        const categories = await res.json();
+      async function loadStatus() {
+        try {
+          const res = await fetch("/api/status");
+          if (!res.ok) throw new Error("Failed to fetch");
+          const categories = await res.json();
 
-        if (!categories.length) {
-          board.innerHTML = `<p style="text-align:center;color:var(--muted);padding:40px;">No status data available right now.</p>`;
-          return;
+          if (!categories.length) {
+            board.innerHTML = `<p style="text-align:center;color:var(--muted);padding:40px;">No status data available right now.</p>`;
+            return;
+          }
+
+          board.innerHTML = categories.map(cat => {
+            const isWide = cat.products.length > 4;
+            return `
+              <article class="status-group${isWide ? " status-group-wide" : ""}">
+                <div class="member-panel-heading">
+                  <p class="eyebrow">${cat.name}</p>
+                </div>
+                <div class="member-list${isWide ? " status-list-split" : ""}">
+                  ${cat.products.map(p => `
+                    <div class="member-item status-item">
+                      <strong>${p.name}</strong>
+                      <span class="member-chip ${chipClass(p.status)}">${p.status}</span>
+                    </div>
+                  `).join("")}
+                </div>
+              </article>
+            `;
+          }).join("");
+
+          initReveal();
+        } catch (err) {
+          board.innerHTML = `<p style="text-align:center;color:var(--accent);padding:40px;">Could not load status. Try again later.</p>`;
         }
-
-        board.innerHTML = categories.map(cat => {
-          const isWide = cat.products.length > 4;
-          return `
-            <article class="status-group${isWide ? " status-group-wide" : ""}">
-              <div class="member-panel-heading">
-                <p class="eyebrow">${cat.name}</p>
-              </div>
-              <div class="member-list${isWide ? " status-list-split" : ""}">
-                ${cat.products.map(p => `
-                  <div class="member-item status-item">
-                    <strong>${p.name}</strong>
-                    <span class="member-chip ${chipClass(p.status)}">${p.status}</span>
-                  </div>
-                `).join("")}
-              </div>
-            </article>
-          `;
-        }).join("");
-
-        initReveal();
-      } catch (err) {
-        board.innerHTML = `<p style="text-align:center;color:var(--accent);padding:40px;">Could not load status. Try again later.</p>`;
       }
+
+      loadStatus();
     </script>
   </body>
 </html>
