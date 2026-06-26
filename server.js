@@ -3015,6 +3015,145 @@ app.get("/api/admin/keys", async (req, res) => {
   }
 });
 
+/* ── Admin: revenue stats ── */
+app.get("/api/admin/revenue", async (req, res) => {
+  try {
+    ensureOwnerAccess(req);
+  } catch (e) {
+    return res.status(e.status || 401).json({ error: e.message });
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("orders")
+      .select("product_slug, status, created_at")
+      .in("status", ["fulfilled", "paid"])
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+
+    let today = 0, week = 0, month = 0, allTime = 0;
+    const byProduct = {};
+
+    for (const order of data || []) {
+      const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
+      const priceCents = catalogItem?.variant?.amount || 0;
+      const created = new Date(order.created_at);
+
+      allTime += priceCents;
+      if (created >= monthAgo) month += priceCents;
+      if (created >= weekAgo) week += priceCents;
+      if (created >= todayStart) today += priceCents;
+
+      const name = catalogItem?.name || order.product_slug;
+      byProduct[name] = (byProduct[name] || 0) + priceCents;
+    }
+
+    const topProducts = Object.entries(byProduct)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([name, cents]) => ({ name, revenue: `$${(cents / 100).toFixed(2)}`, orders: data.filter(o => (getCatalogItemByInventorySlug(o.product_slug)?.name || o.product_slug) === name).length }));
+
+    res.json({
+      today: `$${(today / 100).toFixed(2)}`,
+      week: `$${(week / 100).toFixed(2)}`,
+      month: `$${(month / 100).toFixed(2)}`,
+      allTime: `$${(allTime / 100).toFixed(2)}`,
+      totalOrders: (data || []).length,
+      topProducts,
+    });
+  } catch (error) {
+    console.error("[Admin] Revenue error:", error);
+    res.status(500).json({ error: "Unable to load revenue." });
+  }
+});
+
+/* ── Admin: export orders CSV ── */
+app.get("/api/admin/orders/export/csv", async (req, res) => {
+  try {
+    ensureOwnerAccess(req);
+  } catch (e) {
+    return res.status(e.status || 401).json({ error: e.message });
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("orders")
+      .select("id, product_slug, user_id, status, created_at, fulfilled_at, delivered_key_value, stripe_session_id, stripe_payment_intent")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    const rows = [["Order ID", "Product", "Status", "Created", "Fulfilled", "Key Delivered", "Stripe Session", "Payment Intent"]];
+    for (const o of data || []) {
+      const catalogItem = getCatalogItemByInventorySlug(o.product_slug);
+      rows.push([
+        o.id,
+        catalogItem?.name || o.product_slug,
+        o.status,
+        o.created_at || "",
+        o.fulfilled_at || "",
+        o.delivered_key_value ? "Yes" : "No",
+        o.stripe_session_id || "",
+        o.stripe_payment_intent || "",
+      ]);
+    }
+
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="orders-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csv);
+  } catch (error) {
+    res.status(500).json({ error: "Unable to export orders." });
+  }
+});
+
+/* ── Admin: bulk import keys ── */
+app.post("/api/admin/keys/import", express.json({ limit: "2mb" }), async (req, res) => {
+  try {
+    ensureOwnerAccess(req);
+  } catch (e) {
+    return res.status(e.status || 401).json({ error: e.message });
+  }
+
+  try {
+    const { keys } = req.body;
+    if (!Array.isArray(keys) || !keys.length) {
+      return res.status(400).json({ error: "No keys provided." });
+    }
+
+    // Validate each key has product_slug and key_value
+    const rows = [];
+    for (const k of keys) {
+      if (!k.product_slug || !k.key_value) {
+        return res.status(400).json({ error: "Each key must have product_slug and key_value." });
+      }
+      rows.push({
+        product_slug: k.product_slug.trim(),
+        key_value: k.key_value.trim(),
+        status: "unused",
+      });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("license_keys")
+      .insert(rows)
+      .select("id");
+
+    if (error) throw error;
+
+    res.json({ ok: true, imported: (data || []).length });
+  } catch (error) {
+    console.error("[Admin] Bulk import error:", error);
+    res.status(500).json({ error: error.message || "Import failed." });
+  }
+});
+
 app.get("/api/account", async (req, res) => {
   try {
     const member = await getAuthenticatedUser(req);

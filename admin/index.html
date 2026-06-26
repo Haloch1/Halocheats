@@ -413,6 +413,119 @@
         background: rgba(255, 255, 255, 0.1);
       }
 
+      /* ── Revenue cards ── */
+      .revenue-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 14px;
+        margin-bottom: 28px;
+      }
+
+      .revenue-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 20px;
+        transition: border-color 0.2s;
+      }
+
+      .revenue-card:hover {
+        border-color: rgba(255, 255, 255, 0.12);
+      }
+
+      .revenue-card .rev-label {
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+        margin-bottom: 8px;
+        font-weight: 500;
+      }
+
+      .revenue-card .rev-value {
+        font-family: "Oxanium", sans-serif;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #6fdc8c;
+      }
+
+      /* ── Top products table ── */
+      .top-products-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+      }
+
+      .top-products-table th {
+        text-align: left;
+        padding: 12px 16px;
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+        font-weight: 600;
+      }
+
+      .top-products-table td {
+        padding: 10px 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.035);
+        color: #ddd;
+      }
+
+      .top-products-table tr:last-child td {
+        border-bottom: none;
+      }
+
+      /* ── Bulk import ── */
+      .import-zone {
+        border: 2px dashed rgba(255, 255, 255, 0.12);
+        border-radius: 14px;
+        padding: 32px;
+        text-align: center;
+        color: var(--muted);
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+        margin-top: 20px;
+      }
+
+      .import-zone:hover {
+        border-color: rgba(255, 255, 255, 0.25);
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .import-zone input[type="file"] {
+        display: none;
+      }
+
+      .import-result {
+        margin-top: 14px;
+        font-size: 0.85rem;
+        padding: 12px 16px;
+        border-radius: 10px;
+        display: none;
+      }
+
+      .import-result.success {
+        display: block;
+        background: rgba(0, 200, 81, 0.1);
+        color: #6fdc8c;
+        border: 1px solid rgba(0, 200, 81, 0.2);
+      }
+
+      .import-result.error {
+        display: block;
+        background: rgba(255, 80, 80, 0.1);
+        color: #ff6b6b;
+        border: 1px solid rgba(255, 80, 80, 0.2);
+      }
+
+      @media (max-width: 768px) {
+        .revenue-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+
       /* ── Login Gate ── */
       .admin-login {
         max-width: 380px;
@@ -826,6 +939,14 @@
               <h2>Dashboard Overview</h2>
               <p>Quick snapshot of your store.</p>
             </div>
+            <div class="panel-section-title">Revenue</div>
+            <div class="revenue-grid" id="revenueStats">
+              <div class="revenue-card"><div class="rev-label">Today</div><div class="rev-value" id="revToday">-</div></div>
+              <div class="revenue-card"><div class="rev-label">7 Days</div><div class="rev-value" id="revWeek">-</div></div>
+              <div class="revenue-card"><div class="rev-label">30 Days</div><div class="rev-value" id="revMonth">-</div></div>
+              <div class="revenue-card"><div class="rev-label">All Time</div><div class="rev-value" id="revAllTime">-</div></div>
+            </div>
+
             <div class="stat-grid" id="overviewStats">
               <div class="stat-card"><div class="stat-label">Total Orders</div><div class="stat-value" id="statOrders">-</div></div>
               <div class="stat-card"><div class="stat-label">Fulfilled</div><div class="stat-value" id="statFulfilled">-</div></div>
@@ -834,6 +955,15 @@
               <div class="stat-card"><div class="stat-label">Registered Users</div><div class="stat-value" id="statUsers">-</div></div>
               <div class="stat-card"><div class="stat-label">Live Visitors</div><div class="stat-value" id="statVisitors">-</div></div>
             </div>
+
+            <div class="panel-section-title">Top Products</div>
+            <div class="admin-table-wrap" style="margin-bottom:28px;">
+              <table class="top-products-table" id="topProductsTable">
+                <thead><tr><th>Product</th><th>Revenue</th><th>Orders</th></tr></thead>
+                <tbody id="topProductsBody"><tr><td colspan="3" class="empty-state">Loading...</td></tr></tbody>
+              </table>
+            </div>
+
             <div class="panel-section-title">Recent Orders</div>
             <div class="admin-table-wrap">
               <table class="admin-table" id="overviewOrdersTable">
@@ -858,6 +988,7 @@
               </select>
               <input type="text" id="orderSearchInput" placeholder="Search by order ID..." />
               <button id="orderSearchBtn">Look Up</button>
+              <button id="exportCsvBtn" style="background:rgba(255,255,255,0.06); color:#ddd; border:1px solid rgba(255,255,255,0.1);">Export CSV</button>
               <span class="refresh-note" id="ordersRefreshNote"></span>
             </div>
             <div class="admin-table-wrap">
@@ -883,6 +1014,12 @@
               </select>
               <span class="refresh-note" id="keysRefreshNote"></span>
             </div>
+            <div class="import-zone" id="importZone">
+              <p style="margin:0 0 8px; font-size:0.95rem; color:#ddd;">Bulk Import Keys</p>
+              <p style="margin:0; font-size:0.78rem;">Drop a CSV here or click to upload. Format: <code>product_slug,key_value</code> (one per line, header optional)</p>
+              <input type="file" id="importFileInput" accept=".csv,.txt" />
+            </div>
+            <div class="import-result" id="importResult"></div>
             <div class="admin-table-wrap">
               <table class="admin-table">
                 <thead><tr><th>Key</th><th>Product</th><th>Status</th><th>Order</th><th>Assigned</th></tr></thead>
