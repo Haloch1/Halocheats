@@ -1203,6 +1203,7 @@ async function fetchSylixStatus() {
     statusCache = { data: categories, fetchedAt: Date.now() };
     console.log(`[Status sync] Fetched ${categories.length} categories from sylix.cc`);
   } catch (err) {
+    statusCache.lastError = err.message;
     console.error("[Status sync] Error:", err.message);
   }
 }
@@ -1211,9 +1212,16 @@ async function fetchSylixStatus() {
 fetchSylixStatus();
 setInterval(fetchSylixStatus, 5 * 60 * 1000);
 
-app.get("/api/status", (_req, res) => {
+app.get("/api/status", async (_req, res) => {
+  // If background sync hasn't populated cache yet, try on-demand
+  if (!statusCache.data) {
+    await fetchSylixStatus();
+  }
   if (statusCache.data) return res.json(statusCache.data);
-  res.status(503).json({ error: "Status data not yet available, try again shortly." });
+  res.status(503).json({
+    error: "Status data not yet available.",
+    debug: statusCache.lastError || "unknown"
+  });
 });
 
 /* Force-refresh status cache (admin only) */
