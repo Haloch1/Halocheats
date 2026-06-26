@@ -2638,8 +2638,9 @@ app.get("/api/checkout/complete", async (req, res) => {
     if (order.user_id !== member.id) return res.status(403).json({ error: "Unauthorized." });
 
     // If still pending/paid, fulfill now
+    let syncResult = null;
     if (order.status === "pending" || order.status === "paid") {
-      await syncPaidOrder(stripeSession);
+      syncResult = await syncPaidOrder(stripeSession);
     }
 
     // Fetch the fulfilled order + key
@@ -2654,7 +2655,9 @@ app.get("/api/checkout/complete", async (req, res) => {
     ]);
 
     const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
-    const keys = keyResult.data || [];
+    // Use DB keys if available, fall back to syncResult (needed for sandbox mode)
+    const dbKeys = (keyResult.data || []).map((k) => k.key_value);
+    const keys = dbKeys.length > 0 ? dbKeys : (syncResult?.keyValue ? [syncResult.keyValue] : []);
 
     res.json({
       orderId: order.id,
