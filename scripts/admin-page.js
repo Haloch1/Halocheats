@@ -177,7 +177,7 @@ async function loadOverview() {
           <td>${esc(o.productName)}</td>
           <td>${chip(o.status)}</td>
           <td>${fmtDate(o.createdAt)}</td>
-          <td><button class="btn-view" onclick="viewOrder('${esc(o.id)}')">View</button></td>
+          <td><button class="btn-view" data-view-order="${esc(o.id)}">View</button></td>
         </tr>
       `
         )
@@ -215,7 +215,7 @@ async function loadOrders() {
         <td>${chip(o.status)}</td>
         <td>${o.hasKey ? "Yes" : "-"}</td>
         <td>${fmtDate(o.createdAt)}</td>
-        <td><button class="btn-view" onclick="viewOrder('${esc(o.id)}')">View</button></td>
+        <td><button class="btn-view" data-view-order="${esc(o.id)}">View</button></td>
       </tr>
     `
       )
@@ -290,7 +290,7 @@ window.viewOrder = async function (orderId) {
       ${keysHtml}
       ${o.stripeSessionId ? `<div class="detail-row"><span class="label">Stripe Session</span><span class="value"><code>${shortId(o.stripeSessionId)}</code></span></div>` : ""}
       ${o.stripePaymentIntent ? `<div class="detail-row"><span class="label">Payment Intent</span><span class="value"><code>${shortId(o.stripePaymentIntent)}</code></span></div>` : ""}
-      <button class="modal-close" onclick="closeModal()">Close</button>
+      <button class="modal-close" data-close-modal>Close</button>
     `;
     orderModal.classList.add("is-open");
   } catch (err) {
@@ -460,7 +460,7 @@ function renderSupportList() {
   tbody.innerHTML = supportThreads
     .map(
       (t) => `
-    <tr style="cursor:pointer;" onclick="viewThread('${esc(t.id)}')">
+    <tr style="cursor:pointer;" data-view-thread="${esc(t.id)}">
       <td><strong>${esc(t.subject)}</strong></td>
       <td>${esc(t.contactName || "-")} ${t.contactMethod ? `(${esc(t.contactMethod)})` : ""}</td>
       <td>${chip(t.status)}</td>
@@ -495,7 +495,7 @@ window.viewThread = function (threadId) {
 
   view.innerHTML = `
     <div class="thread-header">
-      <button class="btn-view" onclick="renderSupportList()" style="margin-bottom:16px;">Back to Tickets</button>
+      <button class="btn-view" data-back-to-tickets style="margin-bottom:16px;">Back to Tickets</button>
       <h3>${esc(thread.subject)}</h3>
       <div style="display:flex; gap:12px; align-items:center; margin-bottom:4px;">
         ${chip(thread.status)}
@@ -513,7 +513,7 @@ window.viewThread = function (threadId) {
           <option value="resolved">Set Resolved</option>
           <option value="closed">Set Closed</option>
         </select>
-        <button onclick="sendReply('${esc(thread.id)}')">Send Reply</button>
+        <button data-send-reply="${esc(thread.id)}">Send Reply</button>
       </div>
     </div>
   `;
@@ -584,7 +584,7 @@ async function loadStatus() {
           <div class="status-row">
             <span class="status-cat">${esc(cat.name)}</span>
             <span class="status-name">${esc(prod.name)}</span>
-            <select onchange="updateStatus('${esc(prod.name)}', this.value, '${esc(cat.name)}')">
+            <select data-update-status data-product="${esc(prod.name)}" data-category="${esc(cat.name)}">
               ${options}
             </select>
           </div>
@@ -609,6 +609,30 @@ window.updateStatus = async function (productName, status, category) {
     alert("Failed to update: " + err.message);
   }
 };
+
+// ── Delegated event listeners (CSP-safe, no inline handlers) ──
+
+document.addEventListener("click", (e) => {
+  const viewBtn = e.target.closest("[data-view-order]");
+  if (viewBtn) { viewOrder(viewBtn.dataset.viewOrder); return; }
+
+  const closeBtn = e.target.closest("[data-close-modal]");
+  if (closeBtn) { closeModal(); return; }
+
+  const threadRow = e.target.closest("[data-view-thread]");
+  if (threadRow) { viewThread(threadRow.dataset.viewThread); return; }
+
+  const backBtn = e.target.closest("[data-back-to-tickets]");
+  if (backBtn) { renderSupportList(); return; }
+
+  const replyBtn = e.target.closest("[data-send-reply]");
+  if (replyBtn) { sendReply(replyBtn.dataset.sendReply); return; }
+});
+
+document.addEventListener("change", (e) => {
+  const sel = e.target.closest("[data-update-status]");
+  if (sel) { updateStatus(sel.dataset.product, sel.value, sel.dataset.category); }
+});
 
 // ── Boot ──
 checkAuth();
