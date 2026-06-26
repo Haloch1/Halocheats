@@ -2244,12 +2244,15 @@ app.post("/api/admin/live-desk/reply", async (req, res) => {
 
 app.post("/api/admin/live-desk/:threadId/request-delete-key", async (req, res) => {
   try {
-    const staffAccess = await getApprovedStaffAccess(req);
+    let staffAccess;
+    let authorized = false;
+    try { ensureOwnerAccess(req); authorized = true; } catch {}
+    if (!authorized) { staffAccess = await getApprovedStaffAccess(req); }
     const threadId = trimField(req.params?.threadId, 80);
 
     checkRateLimit(
       deleteKeyRateLimitByKey,
-      `delete-key:${staffAccess.id}:${threadId}`,
+      `delete-key:${staffAccess?.id || "owner"}:${threadId}`,
       60_000,
       "Too many delete key requests for this ticket."
     );
@@ -2282,8 +2285,8 @@ app.post("/api/admin/live-desk/:threadId/request-delete-key", async (req, res) =
       .from("admin_delete_approvals")
       .insert({
         thread_id: threadId,
-        staff_request_id: staffAccess.id,
-        staff_discord_username: staffAccess.discordUsername,
+        staff_request_id: staffAccess?.id || null,
+        staff_discord_username: staffAccess?.discordUsername || "owner",
         token_hash: hashToken(deleteKey),
         status: "pending",
         expires_at: expiresAt,
@@ -2301,7 +2304,7 @@ app.post("/api/admin/live-desk/:threadId/request-delete-key", async (req, res) =
       "request_ticket_delete_key",
       "support_thread",
       threadId,
-      staffAccess,
+      staffAccess || { id: "owner", discordUsername: "owner" },
       {
         deleteApprovalId: approvalInsert.data.id,
         expiresAt,
@@ -2311,7 +2314,7 @@ app.post("/api/admin/live-desk/:threadId/request-delete-key", async (req, res) =
     await sendSecurityDiscordAlert("Ticket delete key requested", [
       {
         name: "Staff",
-        value: staffAccess.discordUsername || "unknown",
+        value: staffAccess?.discordUsername || "owner",
         inline: true,
       },
       {
@@ -2347,7 +2350,10 @@ app.post("/api/admin/live-desk/:threadId/request-delete-key", async (req, res) =
 
 app.post("/api/admin/live-desk/:threadId/confirm-delete", async (req, res) => {
   try {
-    const staffAccess = await getApprovedStaffAccess(req);
+    let staffAccess;
+    let authorized = false;
+    try { ensureOwnerAccess(req); authorized = true; } catch {}
+    if (!authorized) { staffAccess = await getApprovedStaffAccess(req); }
     const threadId = trimField(req.params?.threadId, 80);
     const deleteKey = trimField(req.body?.deleteKey, 80).replace(/\s+/g, "").toUpperCase();
 
@@ -2377,7 +2383,6 @@ app.post("/api/admin/live-desk/:threadId/confirm-delete", async (req, res) => {
       .from("admin_delete_approvals")
       .select("id, expires_at, status")
       .eq("thread_id", threadId)
-      .eq("staff_request_id", staffAccess.id)
       .eq("token_hash", hashToken(deleteKey))
       .eq("status", "pending")
       .order("created_at", { ascending: false })
@@ -2435,7 +2440,7 @@ app.post("/api/admin/live-desk/:threadId/confirm-delete", async (req, res) => {
       throw approvalUpdate.error;
     }
 
-    await insertAdminAuditLog(req, "delete_ticket", "support_thread", threadId, staffAccess, {
+    await insertAdminAuditLog(req, "delete_ticket", "support_thread", threadId, staffAccess || { id: "owner", discordUsername: "owner" }, {
       threadId,
       deleteApprovalId: approvalLookup.data.id,
     });
@@ -2898,6 +2903,11 @@ app.get("/api/checkout/complete", authLimiter, async (req, res) => {
 });
 
 app.post("/api/create-checkout-session", async (req, res) => {
+  /* ── Purchases disabled: button still visible but checkout silently fails ── */
+  if (process.env.PURCHASES_DISABLED === "true") {
+    return res.status(503).json({ error: "Purchases are temporarily unavailable. Please try again later." });
+  }
+
   if (!stripe) {
     return res.status(500).json({
       error:
