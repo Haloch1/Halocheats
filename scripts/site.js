@@ -95,3 +95,50 @@ function sendVisitorHeartbeat() {
 sendVisitorHeartbeat();
 window.setInterval(sendVisitorHeartbeat, VISITOR_HEARTBEAT_MS);
 document.addEventListener("visibilitychange", sendVisitorHeartbeat);
+
+/* ── Nav auto-scroll on mobile ── */
+function initNavAutoScroll() {
+  const nav = document.querySelector(".nav");
+  if (!nav || window.innerWidth > 760) return;
+
+  let scrollPos = 0;
+  let direction = 1;
+  let paused = false;
+  let pauseTimeout = null;
+
+  function step() {
+    if (!paused && nav.scrollWidth > nav.clientWidth) {
+      const maxScroll = nav.scrollWidth - nav.clientWidth;
+      scrollPos += 0.5 * direction;
+
+      if (scrollPos >= maxScroll) {
+        scrollPos = maxScroll;
+        direction = -1;
+      } else if (scrollPos <= 0) {
+        scrollPos = 0;
+        direction = 1;
+      }
+
+      nav.scrollLeft = scrollPos;
+    }
+    requestAnimationFrame(step);
+  }
+
+  // Pause on touch
+  nav.addEventListener("touchstart", () => {
+    paused = true;
+    clearTimeout(pauseTimeout);
+  }, { passive: true });
+
+  nav.addEventListener("touchend", () => {
+    pauseTimeout = setTimeout(() => {
+      scrollPos = nav.scrollLeft;
+      paused = false;
+    }, 3000);
+  }, { passive: true });
+
+  // Start after a short delay
+  setTimeout(() => requestAnimationFrame(step), 1500);
+}
+
+initNavAutoScroll();

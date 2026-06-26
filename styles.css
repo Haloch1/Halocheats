@@ -1730,8 +1730,19 @@ a {
   }
 
   .status-item {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .status-item:last-child {
+    border-bottom: none;
+  }
+
+  .status-group {
+    padding: 16px;
+    border-radius: 16px;
   }
 
   .signal-band {
