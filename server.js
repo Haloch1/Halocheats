@@ -889,12 +889,8 @@ if (isConfiguredValue(discordBotToken)) {
         new SlashCommandBuilder()
           .setName("addkey")
           .setDescription("Add a key to inventory (owner only)")
-          .addStringOption(o => o.setName("product").setDescription("Product name (e.g. Ignite Apex)").setRequired(true))
-          .addStringOption(o => o.setName("duration").setDescription("Key duration").setRequired(true).addChoices(
-            { name: "1 Day", value: "day" },
-            { name: "1 Week", value: "week" },
-            { name: "1 Month", value: "month" },
-          ))
+          .addStringOption(o => o.setName("product").setDescription("Product name").setRequired(true).setAutocomplete(true))
+          .addStringOption(o => o.setName("duration").setDescription("Key duration").setRequired(true).setAutocomplete(true))
           .addStringOption(o => o.setName("key").setDescription("License key value").setRequired(true)),
         new SlashCommandBuilder()
           .setName("keys")
@@ -997,6 +993,44 @@ if (isConfiguredValue(discordBotToken)) {
   });
 
   discordBot.on("interactionCreate", async (interaction) => {
+    // ── Autocomplete for /addkey ──
+    if (interaction.isAutocomplete && interaction.isAutocomplete() && interaction.commandName === "addkey") {
+      const focused = interaction.options.getFocused(true);
+
+      if (focused.name === "product") {
+        const query = focused.value.toLowerCase();
+        const matches = products
+          .filter(p => p.available !== false)
+          .filter(p => !query || p.name.toLowerCase().includes(query) || p.slug.toLowerCase().includes(query))
+          .slice(0, 25)
+          .map(p => ({ name: p.name, value: p.slug }));
+        return interaction.respond(matches);
+      }
+
+      if (focused.name === "duration") {
+        const productSlug = interaction.options.getString("product") || "";
+        const matchedProduct = products.find(p => p.slug === productSlug || p.name.toLowerCase() === productSlug.toLowerCase());
+
+        if (matchedProduct?.variants?.length) {
+          const query = focused.value.toLowerCase();
+          const matches = matchedProduct.variants
+            .filter(v => !query || v.name.toLowerCase().includes(query) || v.slug.toLowerCase().includes(query))
+            .slice(0, 25)
+            .map(v => ({ name: v.name, value: v.slug }));
+          return interaction.respond(matches);
+        }
+
+        // Fallback if product not selected yet
+        return interaction.respond([
+          { name: "1 Day", value: "day" },
+          { name: "1 Week", value: "week" },
+          { name: "1 Month", value: "month" },
+        ]);
+      }
+
+      return interaction.respond([]);
+    }
+
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === "key") {
@@ -1163,27 +1197,32 @@ if (isConfiguredValue(discordBotToken)) {
       }
       await interaction.deferReply({ ephemeral: true });
       try {
-        const productName = interaction.options.getString("product").toLowerCase();
+        const productInput = interaction.options.getString("product");
         const duration = interaction.options.getString("duration");
         const keyValue = interaction.options.getString("key");
 
-        // Find product by name (fuzzy match)
+        // Match by slug (from autocomplete) or by name (manual input)
         const matchedProduct = products.find(
-          (p) => p.name.toLowerCase() === productName || p.slug.toLowerCase() === productName || p.name.toLowerCase().includes(productName)
+          (p) => p.slug === productInput || p.name.toLowerCase() === productInput.toLowerCase() || p.name.toLowerCase().includes(productInput.toLowerCase())
         );
 
         if (!matchedProduct) {
-          const available = products.map(p => p.name).join(", ");
           return interaction.editReply({
-            embeds: [{ description: `Product not found. Available: ${available}`, color: 0xff4444 }],
+            embeds: [{ description: "Product not found. Start typing to search.", color: 0xff4444 }],
           });
         }
 
         // Find variant matching the duration
         const matchedVariant = matchedProduct.variants?.find(v => v.slug === duration);
-        const inventorySlug = matchedVariant
-          ? (matchedVariant.inventorySlug || `${matchedProduct.slug}-${duration}`)
-          : `${matchedProduct.slug}-${duration}`;
+
+        if (!matchedVariant) {
+          const available = (matchedProduct.variants || []).map(v => v.name).join(", ");
+          return interaction.editReply({
+            embeds: [{ description: `Invalid duration for ${matchedProduct.name}. Available: ${available}`, color: 0xff4444 }],
+          });
+        }
+
+        const inventorySlug = matchedVariant.inventorySlug || `${matchedProduct.slug}-${duration}`;
 
         const { data, error } = await supabaseAdmin
           .from("license_keys")
@@ -1193,7 +1232,7 @@ if (isConfiguredValue(discordBotToken)) {
 
         if (error) throw error;
 
-        const durationLabel = duration === "day" ? "1 Day" : duration === "week" ? "1 Week" : "1 Month";
+        const durationLabel = matchedVariant.name;
         return interaction.editReply({
           embeds: [{
             title: "Key Added",
