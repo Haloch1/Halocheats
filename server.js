@@ -2342,6 +2342,7 @@ app.post("/api/admin/live-desk/:threadId/request-delete-key", async (req, res) =
       message: "Delete key requested. Ask the owner for the one-time key from Discord.",
     });
   } catch (error) {
+    console.error("request-delete-key error:", error);
     return res.status(error.status || 500).json({
       error: "Unable to request a delete key.",
     });
