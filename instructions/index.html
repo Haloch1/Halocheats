@@ -16,6 +16,353 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="../styles.css" />
+    <style>
+      .docs-layout {
+        display: flex;
+        width: min(calc(100% - 32px), var(--max-width));
+        margin: 0 auto;
+        padding-top: 80px;
+        min-height: 100vh;
+        gap: 0;
+      }
+
+      /* ── Sidebar ── */
+      .docs-sidebar {
+        width: 280px;
+        min-width: 280px;
+        border-right: 1px solid var(--line);
+        padding: 24px 16px 60px 0;
+        overflow-y: auto;
+        max-height: calc(100vh - 80px);
+        position: sticky;
+        top: 80px;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255,255,255,0.1) transparent;
+      }
+
+      .docs-sidebar::-webkit-scrollbar { width: 4px; }
+      .docs-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+      .sidebar-search {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid var(--line);
+        margin-bottom: 20px;
+      }
+
+      .sidebar-search svg { opacity: 0.4; flex-shrink: 0; }
+
+      .sidebar-search input {
+        background: none;
+        border: none;
+        outline: none;
+        color: var(--text);
+        font-family: "Chakra Petch", sans-serif;
+        font-size: 0.88rem;
+        width: 100%;
+      }
+
+      .sidebar-search input::placeholder { color: rgba(255,255,255,0.3); }
+
+      .sidebar-category {
+        margin-bottom: 6px;
+      }
+
+      .sidebar-category-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        cursor: pointer;
+        user-select: none;
+        border-radius: 8px;
+        transition: background 0.15s;
+      }
+
+      .sidebar-category-header:hover {
+        background: rgba(255,255,255,0.04);
+      }
+
+      .sidebar-category-header .arrow {
+        font-size: 0.6rem;
+        opacity: 0.4;
+        transition: transform 0.2s;
+        flex-shrink: 0;
+      }
+
+      .sidebar-category.collapsed .arrow {
+        transform: rotate(-90deg);
+      }
+
+      .sidebar-category-header .cat-label {
+        font-family: "Oxanium", sans-serif;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .sidebar-category-body {
+        overflow: hidden;
+        transition: max-height 0.25s ease;
+      }
+
+      .sidebar-category.collapsed .sidebar-category-body {
+        max-height: 0 !important;
+      }
+
+      .sidebar-product {
+        margin-left: 8px;
+      }
+
+      .sidebar-product-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        cursor: pointer;
+        user-select: none;
+        border-radius: 6px;
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: #d4c8c8;
+        transition: background 0.15s, color 0.15s;
+      }
+
+      .sidebar-product-header:hover {
+        background: rgba(255,255,255,0.04);
+        color: #fff;
+      }
+
+      .sidebar-product-header .p-arrow {
+        font-size: 0.55rem;
+        opacity: 0.35;
+        transition: transform 0.2s;
+        flex-shrink: 0;
+      }
+
+      .sidebar-product.collapsed .p-arrow {
+        transform: rotate(-90deg);
+      }
+
+      .sidebar-product-body {
+        overflow: hidden;
+        transition: max-height 0.25s ease;
+      }
+
+      .sidebar-product.collapsed .sidebar-product-body {
+        max-height: 0 !important;
+      }
+
+      .sidebar-topic {
+        display: block;
+        padding: 5px 10px 5px 28px;
+        font-size: 0.84rem;
+        color: #9a8e8e;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .sidebar-topic:hover {
+        background: rgba(255,255,255,0.04);
+        color: #d4c8c8;
+      }
+
+      .sidebar-topic.active {
+        background: rgba(255, 42, 42, 0.1);
+        color: var(--accent-soft);
+        border-left: 2px solid var(--accent);
+        padding-left: 26px;
+      }
+
+      /* ── Main content ── */
+      .docs-content {
+        flex: 1;
+        padding: 24px 0 80px 48px;
+        min-width: 0;
+      }
+
+      .docs-content-title {
+        font-family: "Oxanium", sans-serif;
+        font-size: 2rem;
+        font-weight: 700;
+        margin: 0 0 16px;
+        color: var(--text);
+      }
+
+      .docs-content-body {
+        color: var(--muted);
+        line-height: 1.8;
+        font-size: 0.95rem;
+      }
+
+      .docs-content-body p {
+        margin: 0 0 16px;
+      }
+
+      .docs-content-body h3 {
+        color: var(--text);
+        font-family: "Oxanium", sans-serif;
+        font-size: 1.15rem;
+        margin: 28px 0 10px;
+      }
+
+      .docs-content-body ol,
+      .docs-content-body ul {
+        padding-left: 22px;
+        margin: 0 0 16px;
+      }
+
+      .docs-content-body li {
+        margin-bottom: 8px;
+      }
+
+      .docs-content-body code {
+        background: rgba(255,255,255,0.06);
+        padding: 2px 7px;
+        border-radius: 5px;
+        font-size: 0.88rem;
+        color: var(--accent-soft);
+      }
+
+      .docs-content-body .info-box {
+        padding: 14px 18px;
+        border-radius: 10px;
+        background: rgba(255, 42, 42, 0.06);
+        border: 1px solid rgba(255, 42, 42, 0.15);
+        margin: 16px 0;
+        font-size: 0.9rem;
+        color: #d4c8c8;
+      }
+
+      .docs-content-body .warn-box {
+        padding: 14px 18px;
+        border-radius: 10px;
+        background: rgba(255, 180, 40, 0.06);
+        border: 1px solid rgba(255, 180, 40, 0.15);
+        margin: 16px 0;
+        font-size: 0.9rem;
+        color: #d4c8c8;
+      }
+
+      .docs-discord {
+        margin-top: 24px;
+        color: #9a8e8e;
+        font-size: 0.9rem;
+      }
+
+      .docs-discord a {
+        color: var(--accent-soft);
+        text-decoration: underline;
+      }
+
+      .docs-next {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 32px;
+        padding: 18px 22px;
+        border-radius: 14px;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid var(--line);
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+      }
+
+      .docs-next:hover {
+        border-color: rgba(255, 48, 48, 0.3);
+        background: rgba(255,255,255,0.05);
+      }
+
+      .docs-next-label {
+        font-size: 0.78rem;
+        color: #9a8e8e;
+        margin-bottom: 4px;
+      }
+
+      .docs-next-title {
+        font-weight: 600;
+        color: var(--text);
+        font-size: 0.95rem;
+      }
+
+      .docs-next-arrow {
+        color: var(--accent-soft);
+        font-size: 1.2rem;
+      }
+
+      /* ── Mobile sidebar ── */
+      .docs-mobile-toggle {
+        display: none;
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 100;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        font-size: 1.3rem;
+        cursor: pointer;
+        box-shadow: 0 4px 20px rgba(255, 42, 42, 0.35);
+        align-items: center;
+        justify-content: center;
+      }
+
+      @media (max-width: 860px) {
+        .docs-layout { padding-top: 70px; }
+
+        .docs-sidebar {
+          position: fixed;
+          top: 0;
+          left: -300px;
+          width: 280px;
+          min-width: 280px;
+          height: 100vh;
+          max-height: 100vh;
+          background: #0a0a0c;
+          z-index: 200;
+          padding: 24px 16px;
+          border-right: 1px solid var(--line);
+          transition: left 0.25s ease;
+        }
+
+        .docs-sidebar.open {
+          left: 0;
+        }
+
+        .docs-overlay {
+          display: none;
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.6);
+          z-index: 199;
+        }
+
+        .docs-sidebar.open ~ .docs-overlay {
+          display: block;
+        }
+
+        .docs-content {
+          padding-left: 0;
+        }
+
+        .docs-mobile-toggle {
+          display: flex;
+        }
+      }
+    </style>
   </head>
   <body>
     <div class="page-shell page-shell-inner">
@@ -39,174 +386,1236 @@
             <a href="/desk/">Desk Help</a>
           </nav>
 
-          <a class="nav-cta" href="/account/">Account</a>
+          <a class="nav-cta" data-account-link href="/account/">Account</a>
         </div>
       </header>
 
-      <main class="instructions-shell">
-        <section class="section-heading reveal" data-delay="20">
-          <p class="eyebrow">Instructions</p>
-          <h2>Setup notes for each product.</h2>
-          <p>
-            Use the section linked from your product page. If anything does not match your
-            device, stop and open a desk ticket before continuing.
-          </p>
-        </section>
+      <div class="docs-layout">
+        <aside class="docs-sidebar" id="docsSidebar">
+          <div class="sidebar-search">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" placeholder="Search..." id="docsSearch" />
+          </div>
+          <nav id="sidebarNav"></nav>
+        </aside>
+        <div class="docs-overlay" id="docsOverlay"></div>
+        <main class="docs-content">
+          <h1 class="docs-content-title" id="contentTitle">Instructions</h1>
+          <div class="docs-content-body" id="contentBody">
+            <p>Select a product from the sidebar to view setup instructions.</p>
+          </div>
+          <div id="contentNext"></div>
+        </main>
+      </div>
 
-        <section class="instructions-index reveal" data-delay="50" aria-label="Instruction sections">
-          <a href="#crusader-r6">Crusader R6</a>
-          <a href="#vega-r6-external">Vega R6 External</a>
-          <a href="#r6-frost">R6 Frost</a>
-          <a href="#r6-ancient">R6 Ancient</a>
-          <a href="#r6-recoil-private">R6 Recoil Private</a>
-          <a href="#exodus-r6">Exodus R6</a>
-          <a href="#invision-chams">Invision Chams</a>
-          <a href="#fortnite-full">Fortnite Full</a>
-          <a href="#fortnite-ancient">Fortnite Ancient</a>
-          <a href="#xim-spoofer">Xim Spoofer</a>
-          <a href="#linked-nfa">Linked NFA</a>
-          <a href="#stacked-pc-account">Stacked PC Account</a>
-        </section>
-
-        <section class="instructions-grid">
-          <article class="instructions-card reveal" id="crusader-r6" data-delay="40">
-            <span>Rainbow Six Siege</span>
-            <h3>Crusader R6</h3>
-            <p>Prepare Windows, close overlays you do not need, and keep your key ready before opening support.</p>
-            <ul>
-              <li>Confirm your Windows version matches the product requirements.</li>
-              <li>Open the member desk if setup asks for version-specific routing.</li>
-              <li>Keep config changes small until you confirm the build is stable.</li>
-            </ul>
-          </article>
-
-          <article class="instructions-card reveal" id="vega-r6-external" data-delay="70">
-            <span>Rainbow Six Siege</span>
-            <h3>Vega R6 External</h3>
-            <p>Use this section for external setup checks, capture behavior, and streamproof notes.</p>
-            <ul>
-              <li>Check the capture app you plan to use before asking for streamproof help.</li>
-              <li>Run only the tools required by support during first setup.</li>
-              <li>Save a clean config once the external menu is working correctly.</li>
-            </ul>
-          </article>
-
-          <article class="instructions-card reveal" id="r6-frost" data-delay="100">
-            <span>Rainbow Six Siege</span>
-            <h3>R6 Frost</h3>
-            <p>Frost is built around clean information and control, so start with default visual settings.</p>
-            <ul>
-              <li>Verify Windows 10 or Windows 11 build support before setup.</li>
-              <li>Start with basic ESP and aim smoothing before enabling extra features.</li>
-              <li>Open a ticket if your build differs from the listed requirements.</li>
-            </ul>
-          </article>
-
-          <article class="instructions-card reveal" id="r6-ancient" data-delay="130">
-            <span>Rainbow Six Siege</span>
-            <h3>R6 Ancient</h3>
-            <p>Ancient has deeper configuration options, so confirm BIOS and Windows settings first.</p>
-            <ul>
-              <li>Check virtualization, UEFI, and Secure Boot requirements carefully.</li>
-              <li>Create a simple starter config before changing advanced ability settings.</li>
-              <li>Use support if you are unsure about Intel or AMD-specific requirements.</li>
-            </ul>
-          </article>
-
-          <article class="instructions-card reveal" id="r6-recoil-private" data-delay="160">
-            <span>Rainbow Six Siege</span>
-            <h3>R6 Recoil Private</h3>
-            <p>This product is intended for a lighter setup with recoil and visibility tools.</p>
-            <ul>
-              <li>Confirm your Windows version and motherboard mode before setup.</li>
-              <li>Keep the first config simple so support can troubleshoot quickly.</li>
-              <li>Ask the desk before changing streamproof or capture settings.</li>
-            </ul>
-          </article>
-
-          <article class="instructions-card reveal" id="exodus-r6" data-delay="190">
-            <span>Rainbow Six Siege</span>
-            <h3>Exodus R6</h3>
-            <p>Exodus can require more careful setup because of HWID-related support.</p>
-            <ul>
-              <li>Do not start setup until you understand the HWID requirements.</li>
-              <li>Open a support ticket if you have used other tools on the same device.</li>
-              <li>Restart only when support or the product notes tell you to do so.</li>
-            </ul>
-          </article>
-
-          <article class="instructions-card reveal" id="invision-chams" data-delay="220">
-            <span>Rainbow Six Siege</span>
-            <h3>Invision Chams</h3>
-            <p>Invision is visual-only, so focus on GPU support and display compatibility.</p>
-            <ul>
-              <li>Confirm you are using supported NVIDIA hardware.</li>
-              <li>Check whether your Windows build is supported before requesting setup.</li>
-              <li>Use the desk if virtual USB or physical USB requirements are unclear.</li>
-            </ul>
-          </article>
-
-          <article class="instructions-card reveal" id="fortnite-full" data-delay="250">
-            <span>Fortnite</span>
-            <h3>Fortnite Full</h3>
-            <p>Fortnite Full includes multiple systems, so check display mode and game build first.</p>
-            <ul>
-              <li>Prepare your member account and keep your key ready for support.</li>
-              <li>Confirm whether you are using fullscreen, windowed, or borderless mode.</li>
-              <li>Start with basic aim and visual settings before adjusting loot options.</li>
-            </ul>
-          </article>
-
-          <article class="instructions-card reveal" id="fortnite-ancient" data-delay="280">
-            <span>Fortnite</span>
-            <h3>Fortnite Ancient</h3>
-            <p>Ancient is the more configurable Fortnite option with aim, visual, and radar-style features.</p>
-            <ul>
-              <li>Record your Windows version and CPU type before opening a ticket.</li>
-              <li>Use a starter profile before sharing or importing configs.</li>
-              <li>Ask support before enabling advanced trigger or radar options.</li>
-            </ul>
-          </article>
-
-          <article class="instructions-card reveal" id="xim-spoofer" data-delay="310">
-            <span>Spoofer</span>
-            <h3>Xim Spoofer</h3>
-            <p>Spoofer setup depends on device state, motherboard mode, and Windows configuration.</p>
-            <ul>
-              <li>Do not run setup until your support ticket confirms the correct route.</li>
-              <li>Check UEFI mode and admin permissions before starting.</li>
-              <li>Follow restart instructions exactly to avoid confusing the support flow.</li>
-            </ul>
-          </article>
-
-          <article class="instructions-card reveal" id="linked-nfa" data-delay="340">
-            <span>Accounts</span>
-            <h3>Linked NFA</h3>
-            <p>Account products are handled manually so support can verify delivery details.</p>
-            <ul>
-              <li>Open a ticket with your order email and preferred contact method.</li>
-              <li>Review account notes before changing any available information.</li>
-              <li>Do not reshare account access after delivery.</li>
-            </ul>
-          </article>
-
-          <article class="instructions-card reveal" id="stacked-pc-account" data-delay="370">
-            <span>Accounts</span>
-            <h3>Stacked PC Account</h3>
-            <p>Stacked accounts include extra inventory notes and should be reviewed after handoff.</p>
-            <ul>
-              <li>Confirm the account notes match what support delivered.</li>
-              <li>Ask questions in the same ticket before making major account changes.</li>
-              <li>Keep screenshots of handoff details for your own records.</li>
-            </ul>
-          </article>
-        </section>
-      </main>
+      <button class="docs-mobile-toggle" id="mobileToggle" aria-label="Open navigation">&#9776;</button>
     </div>
 
     <script type="module">
       import { initReveal } from "../scripts/site.js";
       initReveal();
+
+      /* ── Instruction Data ── */
+      const categories = [
+        {
+          name: "Rainbow Six Siege",
+          products: [
+            {
+              name: "Crusader R6",
+              slug: "crusader-r6",
+              topics: [
+                {
+                  title: "Introduction",
+                  content: `
+                    <p>Crusader R6 is a balanced Rainbow Six Siege setup built for fast reads, aim tuning, and cleaner match awareness. Thank you for purchasing from Halo Cheats.</p>
+                    <p>If you have any questions, head over to <a href="https://discord.gg/halocheats">discord.gg/halocheats</a></p>
+                    <div class="info-box">Make sure you have your license key ready before starting the setup process.</div>
+                  `
+                },
+                {
+                  title: "Disabling Windows Defender",
+                  content: `
+                    <p>Windows Defender may interfere with the loader. You need to temporarily disable real-time protection before running the software.</p>
+                    <h3>Steps</h3>
+                    <ol>
+                      <li>Open <strong>Windows Security</strong> from the Start menu</li>
+                      <li>Click <strong>Virus & threat protection</strong></li>
+                      <li>Click <strong>Manage settings</strong> under Virus & threat protection settings</li>
+                      <li>Toggle <strong>Real-time protection</strong> to Off</li>
+                      <li>If prompted by UAC, click Yes</li>
+                    </ol>
+                    <div class="warn-box">Remember to re-enable Windows Defender after your session. Do not leave it disabled permanently.</div>
+                  `
+                },
+                {
+                  title: "Download & Install Visual Runtimes",
+                  content: `
+                    <p>Crusader requires Visual C++ Redistributable packages to function correctly.</p>
+                    <h3>Steps</h3>
+                    <ol>
+                      <li>Download the latest <strong>Visual C++ Redistributable</strong> from Microsoft's official website</li>
+                      <li>Install both the <strong>x64</strong> and <strong>x86</strong> versions</li>
+                      <li>Restart your PC after installation</li>
+                    </ol>
+                    <div class="info-box">If you already have these installed, you can skip this step. The installer will tell you if they are already present.</div>
+                  `
+                },
+                {
+                  title: "Downloading DirectX",
+                  content: `
+                    <p>DirectX is required for proper rendering. Most Windows installations have it, but you may need to update.</p>
+                    <h3>Steps</h3>
+                    <ol>
+                      <li>Download the <strong>DirectX End-User Runtime Web Installer</strong> from Microsoft</li>
+                      <li>Run the installer and follow the prompts</li>
+                      <li>Restart your PC if prompted</li>
+                    </ol>
+                  `
+                },
+                {
+                  title: "How to inject",
+                  content: `
+                    <p>Follow these steps carefully to inject Crusader into Rainbow Six Siege.</p>
+                    <h3>Steps</h3>
+                    <ol>
+                      <li>Make sure Windows Defender is disabled</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key when prompted</li>
+                      <li>Wait for the loader to verify your key</li>
+                      <li>Launch Rainbow Six Siege</li>
+                      <li>Once in the main menu, press the inject button in the loader</li>
+                      <li>Wait for the confirmation message</li>
+                    </ol>
+                    <div class="warn-box">Do not alt-tab during the injection process. Wait for it to complete fully.</div>
+                  `
+                },
+                {
+                  title: "How to open and close the menu",
+                  content: `
+                    <p>Once injected, you can toggle the in-game menu using keyboard shortcuts.</p>
+                    <h3>Default Controls</h3>
+                    <ul>
+                      <li><code>INSERT</code> - Toggle the menu open/closed</li>
+                      <li><code>END</code> - Panic key (closes everything)</li>
+                    </ul>
+                    <p>Navigate the menu with your mouse. Settings save automatically.</p>
+                  `
+                },
+                {
+                  title: "Common Errors",
+                  content: `
+                    <h3>Loader fails to start</h3>
+                    <p>Make sure Windows Defender and any antivirus are disabled. Run as Administrator.</p>
+                    <h3>Key not recognized</h3>
+                    <p>Double-check you are copying the full key with no extra spaces. If the issue persists, open a support ticket.</p>
+                    <h3>Injection timeout</h3>
+                    <p>Close the game and loader, restart both, and try again. Make sure no overlays (Discord, GeForce) are running.</p>
+                    <h3>Game crash after injection</h3>
+                    <p>Verify your Windows version matches the requirements (Windows 10 / 11). Update if needed.</p>
+                    <div class="info-box">If none of these fix your issue, open a ticket on the Desk or in Discord.</div>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Vega R6 External",
+              slug: "vega-r6-external",
+              topics: [
+                {
+                  title: "Preparation",
+                  content: `
+                    <p>Before setting up Vega R6 External, verify your system meets these requirements.</p>
+                    <h3>System Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or Windows 11 (21H2 - 25H2)</li>
+                      <li>UEFI-based motherboard</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Pre-Setup Checklist</h3>
+                    <ol>
+                      <li>Disable Windows Defender real-time protection</li>
+                      <li>Close all unnecessary overlays and capture apps</li>
+                      <li>Make sure your BIOS is set to UEFI mode (not Legacy/CSM)</li>
+                      <li>Have your license key ready</li>
+                    </ol>
+                  `
+                },
+                {
+                  title: "First Time Setup",
+                  content: `
+                    <p>Follow these steps for your initial Vega setup.</p>
+                    <ol>
+                      <li>Download the Vega loader from your purchase confirmation</li>
+                      <li>Extract to a folder on your desktop</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Rainbow Six Siege</li>
+                      <li>The external overlay will attach automatically once the game is running</li>
+                    </ol>
+                    <div class="info-box">Vega is an external cheat. It runs in a separate window overlay, not injected into the game process.</div>
+                  `
+                },
+                {
+                  title: "Streamproof Configuration",
+                  content: `
+                    <p>Vega supports streamproof modes for GeForce Experience, OBS, Medal, and other capture software.</p>
+                    <h3>Setup</h3>
+                    <ol>
+                      <li>Open the Vega menu</li>
+                      <li>Go to <strong>Misc</strong> settings</li>
+                      <li>Enable <strong>Streamproof</strong></li>
+                      <li>Select your capture software from the dropdown</li>
+                    </ol>
+                    <div class="warn-box">Recording and capture behavior depends on your GPU and capture app. Test in a private match before streaming.</div>
+                  `
+                },
+                {
+                  title: "Common Errors",
+                  content: `
+                    <h3>Overlay not appearing</h3>
+                    <p>Make sure Rainbow Six Siege is running in <strong>Borderless</strong> or <strong>Windowed</strong> mode. Exclusive fullscreen can block overlays.</p>
+                    <h3>HWID mismatch</h3>
+                    <p>Your key is tied to your hardware. If you changed hardware, open a support ticket for a reset.</p>
+                    <h3>FPS drop</h3>
+                    <p>Reduce ESP draw distance or disable radar features. Lock your FPS in the Misc settings.</p>
+                    <div class="info-box">For persistent issues, open a ticket with your Windows version and GPU info.</div>
+                  `
+                }
+              ]
+            },
+            {
+              name: "R6 Frost",
+              slug: "r6-frost",
+              topics: [
+                {
+                  title: "Prelaunch",
+                  content: `
+                    <p>Before launching Frost, confirm your system compatibility.</p>
+                    <h3>Supported Windows Versions</h3>
+                    <ul>
+                      <li>Windows 10: 20H2 to 22H2</li>
+                      <li>Windows 11: 21H2 to 25H2</li>
+                    </ul>
+                    <h3>Checklist</h3>
+                    <ol>
+                      <li>Verify your Windows version by running <code>winver</code></li>
+                      <li>Disable Windows Defender real-time protection</li>
+                      <li>Close Discord overlay and any game overlays</li>
+                      <li>Make sure the game is fully closed before starting</li>
+                    </ol>
+                  `
+                },
+                {
+                  title: "Loader",
+                  content: `
+                    <p>Follow these steps to use the Frost loader.</p>
+                    <ol>
+                      <li>Run the Frost loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key when prompted</li>
+                      <li>Wait for the loader to authenticate</li>
+                      <li>Launch Rainbow Six Siege</li>
+                      <li>Once in the main menu, click <strong>Load</strong> in the Frost loader</li>
+                      <li>You should see a success message</li>
+                    </ol>
+                    <p>The default menu key is <code>INSERT</code>. Start with default visual settings before customizing.</p>
+                    <div class="info-box">Frost is built around clean information display. Start with basic ESP and aim smoothing before enabling extra features.</div>
+                  `
+                },
+                {
+                  title: "Errors",
+                  content: `
+                    <h3>Failed to load driver</h3>
+                    <p>Your Windows version may be unsupported. Run <code>winver</code> and check against the supported list.</p>
+                    <h3>Black screen after loading</h3>
+                    <p>Alt-tab out and back in. If it persists, restart the game and loader.</p>
+                    <h3>Menu not appearing</h3>
+                    <p>Press <code>INSERT</code>. If nothing happens, check that the loader confirmed successful injection.</p>
+                    <div class="info-box">Open a ticket if your issue is not listed here. Include your Windows build number.</div>
+                  `
+                }
+              ]
+            },
+            {
+              name: "R6 Ancient",
+              slug: "r6-ancient",
+              topics: [
+                {
+                  title: "Preparation",
+                  content: `
+                    <p>Ancient requires specific BIOS and system settings. Check all of these before attempting setup.</p>
+                    <h3>System Requirements</h3>
+                    <ul>
+                      <li>Intel or AMD CPU</li>
+                      <li>Windows 10 or 11 (1909 - 25H2)</li>
+                      <li>16GB RAM or more</li>
+                    </ul>
+                    <h3>BIOS Settings</h3>
+                    <ul>
+                      <li><strong>AMD CPU:</strong> Enable SVM in BIOS, Disable Hyper-V in Windows</li>
+                      <li><strong>Intel CPU:</strong> Enable VT-X in BIOS, Enable Hyper-V in Windows</li>
+                      <li><strong>Intel CPU:</strong> Firmware must be in UEFI mode, disk must be GPT format</li>
+                      <li>Secure Boot must be <strong>disabled</strong></li>
+                    </ul>
+                    <div class="warn-box">Getting the BIOS settings wrong is the most common cause of Ancient failing to load. Double-check every setting.</div>
+                  `
+                },
+                {
+                  title: "Run the software",
+                  content: `
+                    <p>Once your BIOS is configured correctly:</p>
+                    <ol>
+                      <li>Disable Windows Defender real-time protection</li>
+                      <li>Run the Ancient loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Wait for the loader to prepare the environment</li>
+                      <li>Launch Rainbow Six Siege</li>
+                      <li>Press the load button once you are in the main menu</li>
+                    </ol>
+                    <p>Menu toggle: <code>INSERT</code></p>
+                    <div class="info-box">Create a simple starter config before changing advanced ability settings. Save your config regularly.</div>
+                  `
+                },
+                {
+                  title: "Config Management",
+                  content: `
+                    <p>Ancient supports saving, loading, deleting, and sharing configuration profiles.</p>
+                    <h3>How to manage configs</h3>
+                    <ul>
+                      <li><strong>Save:</strong> Open menu > Config tab > Enter a name > Save</li>
+                      <li><strong>Load:</strong> Select a saved config from the list and click Load</li>
+                      <li><strong>Share:</strong> Export your config as a string to share with others</li>
+                      <li><strong>Delete:</strong> Select a config and click Delete</li>
+                    </ul>
+                  `
+                },
+                {
+                  title: "Common Errors",
+                  content: `
+                    <h3>Virtualization error</h3>
+                    <p>SVM (AMD) or VT-X (Intel) is not enabled in BIOS. Restart, enter BIOS, and enable it.</p>
+                    <h3>Hyper-V conflict</h3>
+                    <p>AMD users must disable Hyper-V. Intel users must enable it. Run <code>bcdedit /set hypervisorlaunchtype off</code> (AMD) or <code>auto</code> (Intel) in an admin command prompt, then restart.</p>
+                    <h3>Secure Boot error</h3>
+                    <p>Disable Secure Boot in BIOS. This is usually under Boot or Security settings.</p>
+                    <h3>Not enough RAM</h3>
+                    <p>Ancient requires at least 16GB of RAM. Check your system specs.</p>
+                    <div class="info-box">Use support if you are unsure about Intel or AMD-specific requirements.</div>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Recoil Private",
+              slug: "r6-recoil-private",
+              topics: [
+                {
+                  title: "Introduction",
+                  content: `
+                    <p>Recoil Private is a lighter R6 build centered on recoil control, basic aim help, and clean ESP visibility.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or Windows 11 (21H2 - 25H2)</li>
+                      <li>UEFI-based motherboard</li>
+                    </ul>
+                    <div class="info-box">This is a simpler option for users who want core tools without a huge feature stack.</div>
+                  `
+                },
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <ol>
+                      <li>Disable Windows Defender real-time protection</li>
+                      <li>Run the Recoil Private loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Rainbow Six Siege</li>
+                      <li>Once in-game, press the load button</li>
+                      <li>Toggle menu with <code>INSERT</code></li>
+                    </ol>
+                    <p>Start with default recoil and ESP settings. Adjust smoothing and FOV gradually.</p>
+                  `
+                },
+                {
+                  title: "Common Errors",
+                  content: `
+                    <h3>Loader not starting</h3>
+                    <p>Run as Administrator. Check that your BIOS is in UEFI mode.</p>
+                    <h3>Streamproof issues</h3>
+                    <p>Ask the desk before changing streamproof or capture settings. Different capture apps need different configurations.</p>
+                    <div class="info-box">Keep your first config simple so support can troubleshoot quickly if something goes wrong.</div>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Exodus R6",
+              slug: "exodus-r6",
+              topics: [
+                {
+                  title: "Introduction",
+                  content: `
+                    <p>Exodus R6 provides aim assistance, visual support, and HWID-related setup coverage for Rainbow Six Siege.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or Windows 11 (21H2 - 25H2)</li>
+                      <li>UEFI-based motherboard</li>
+                    </ul>
+                    <div class="warn-box">Do not start setup until you understand the HWID requirements. Open a support ticket if you have used other tools on the same device.</div>
+                  `
+                },
+                {
+                  title: "HWID Requirements",
+                  content: `
+                    <p>Exodus includes HWID spoofer support. Before setup:</p>
+                    <ul>
+                      <li>Check if you need to spoof before using the cheat</li>
+                      <li>If you have been banned before, mention it in your support ticket</li>
+                      <li>Do not run Exodus alongside other HWID tools</li>
+                    </ul>
+                    <div class="info-box">Open a support ticket if you are unsure about HWID or setup requirements. The team will guide you through the correct process.</div>
+                  `
+                },
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <ol>
+                      <li>Disable Windows Defender real-time protection</li>
+                      <li>Run the Exodus loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Follow the loader's on-screen steps</li>
+                      <li>Launch Rainbow Six Siege when prompted</li>
+                      <li>Toggle menu with <code>INSERT</code></li>
+                    </ol>
+                    <p>Restart only when support or the product notes tell you to do so.</p>
+                  `
+                },
+                {
+                  title: "Common Errors",
+                  content: `
+                    <h3>HWID conflict</h3>
+                    <p>If you used another cheat or spoofer recently, residual traces can cause issues. Open a ticket with details.</p>
+                    <h3>Loader stuck on loading</h3>
+                    <p>Close the loader, restart your PC, disable antivirus, and try again.</p>
+                    <div class="info-box">For persistent errors, open a ticket on the Desk with your system info.</div>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Invision Chams",
+              slug: "invision-chams",
+              topics: [
+                {
+                  title: "GPU Requirements",
+                  content: `
+                    <p>Invision Chams is visual-only and requires specific hardware.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li><strong>NVIDIA GPUs only</strong> (AMD is not supported)</li>
+                      <li>Requires a physical USB device or properly configured virtual USB</li>
+                      <li>Windows 11: 23H2, 24H2, or 25H2</li>
+                      <li>Windows 10: 22H2 (limited, build dependent)</li>
+                      <li>Not supported: Windows 10 21H1 / 21H2</li>
+                    </ul>
+                    <div class="warn-box">Confirm you are using supported NVIDIA hardware before purchasing. AMD GPUs will not work.</div>
+                  `
+                },
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <ol>
+                      <li>Verify your NVIDIA GPU and Windows version</li>
+                      <li>Set up your USB device (physical or virtual as instructed)</li>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the Invision loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Rainbow Six Siege</li>
+                      <li>The chams will activate automatically in-game</li>
+                    </ol>
+                    <div class="info-box">Use the desk if virtual USB or physical USB requirements are unclear.</div>
+                  `
+                },
+                {
+                  title: "Common Errors",
+                  content: `
+                    <h3>USB not detected</h3>
+                    <p>Make sure your USB device is properly connected and recognized by Windows. Check Device Manager.</p>
+                    <h3>No visual changes in-game</h3>
+                    <p>Verify your Windows build is supported. Run <code>winver</code> to check.</p>
+                    <h3>Crash on launch</h3>
+                    <p>Update your NVIDIA drivers to the latest version. Restart your PC after updating.</p>
+                    <div class="info-box">Open a ticket if your Windows build or GPU model is not listed as supported.</div>
+                  `
+                }
+              ]
+            }
+          ]
+        },
+        {
+          name: "Fortnite",
+          products: [
+            {
+              name: "Fortnite Full",
+              slug: "fortnite-full",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Fortnite Full includes aim tuning, visual awareness, and loot information.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Administrator access</li>
+                      <li>Stable internet connection</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender real-time protection</li>
+                      <li>Close Fortnite if it is running</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Fortnite</li>
+                      <li>Once in the lobby, press the inject button</li>
+                      <li>Toggle menu with <code>INSERT</code></li>
+                    </ol>
+                    <div class="info-box">Confirm whether you are using fullscreen, windowed, or borderless mode. Some features behave differently depending on display mode.</div>
+                    <p>Start with basic aim and visual settings before adjusting loot options.</p>
+                  `
+                },
+                {
+                  title: "Common Errors",
+                  content: `
+                    <h3>Anti-cheat error</h3>
+                    <p>Make sure the loader is started <strong>before</strong> launching Fortnite. Restart both if needed.</p>
+                    <h3>Menu not visible</h3>
+                    <p>Try switching between fullscreen and borderless mode. Press <code>INSERT</code> to toggle.</p>
+                    <div class="info-box">Use a support ticket if you need help with display mode behavior.</div>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Fortnite Ancient",
+              slug: "fortnite-ancient",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Fortnite Ancient is the more configurable Fortnite option with aim, visual, and radar-style features.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Intel or AMD CPU</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Fortnite</li>
+                      <li>Load once you reach the lobby</li>
+                    </ol>
+                    <p>Use a starter profile before sharing or importing configs. Ask support before enabling advanced trigger or radar options.</p>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Disconnect External",
+              slug: "disconnect-fortnite-external",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>External Fortnite option with aim control, ESP, radar, item visuals, and streamproof-focused support.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Intel or AMD CPU</li>
+                      <li>Windows 10 or 11</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Fortnite</li>
+                      <li>The external overlay will appear once the game is running</li>
+                    </ol>
+                    <div class="info-box">This is an external cheat with streamproof mode. Enable it in settings if you plan to stream or record.</div>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Ignite Aimbot",
+              slug: "fortnite-ignite-aimbot",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Fortnite aim-focused package with customizable targeting, player visuals, world ESP, and trigger tools.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Fortnite</li>
+                      <li>Load and toggle menu with <code>INSERT</code></li>
+                    </ol>
+                    <p>Save and load config profiles from the Config tab.</p>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Fortnite Exodus",
+              slug: "fortnite-exodus",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Budget Fortnite option with aim assistance, loot visuals, player ESP, fight mode, and weapon-specific settings.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Fortnite</li>
+                      <li>Load and configure weapon-specific settings in the menu</li>
+                    </ol>
+                  `
+                }
+              ]
+            }
+          ]
+        },
+        {
+          name: "Rust",
+          products: [
+            {
+              name: "Ancient - Rust",
+              slug: "rust-ancient",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Rust setup with silent aim support, player and world ESP, radar, and configurable entity visuals.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Intel or AMD CPU</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Rust</li>
+                      <li>Load once you are in the server browser or in-game</li>
+                      <li>Toggle menu with <code>INSERT</code></li>
+                    </ol>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Exodus - Rust External",
+              slug: "rust-exodus",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>External Rust product with aim tools, player ESP, world filters, radar, movement tools, and config support.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Rust</li>
+                      <li>The external overlay will attach once the game is running</li>
+                    </ol>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Ignite - Rust External",
+              slug: "rust-ignite",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Higher-feature Rust external option with silent aim, player and item ESP, combat utilities, and config handling.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Rust</li>
+                      <li>Load and configure from the menu</li>
+                    </ol>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Krush - Rust External",
+              slug: "rust-krush",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Rust external with normal and silent aim modes, detailed ESP filters, out-of-FOV arrows, and exploit toggles.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Rust and load once in-game</li>
+                    </ol>
+                  `
+                }
+              ]
+            },
+            {
+              name: "MEK - Rust External",
+              slug: "rust-mek",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Rust external package with silent and memory aim, streamproof visuals, combat utilities, and config management.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Rust</li>
+                      <li>The streamproof overlay will appear once loaded</li>
+                    </ol>
+                    <div class="info-box">Enable streamproof mode in Misc settings if you plan to record or stream.</div>
+                  `
+                }
+              ]
+            }
+          ]
+        },
+        {
+          name: "Apex Legends",
+          products: [
+            {
+              name: "Ancient - Apex",
+              slug: "apex-ancient",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Apex Legends option with dual-bind aim tools, trigger support, player/loot ESP, movement helpers, and map radar.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Apex Legends</li>
+                      <li>Load and toggle menu with <code>INSERT</code></li>
+                    </ol>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Ignite - Apex",
+              slug: "apex-ignite",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Apex Legends product with precision aim assist, magnetic triggerbot, player/world ESP, and movement tools.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Apex Legends</li>
+                      <li>Load and configure from the in-game menu</li>
+                    </ol>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Exodus - Apex",
+              slug: "apex-exodus",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Apex external with weapon-specific aim settings, player and loot visuals, smart loot, and movement utilities.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch Apex Legends</li>
+                      <li>Configure weapon-specific settings in the menu</li>
+                    </ol>
+                  `
+                }
+              ]
+            }
+          ]
+        },
+        {
+          name: "EFT",
+          products: [
+            {
+              name: "Coffee Chams - EFT",
+              slug: "eft-coffee-chams",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Escape From Tarkov chams-focused option with visual clarity tools, recoil/stamina tweaks, and loot visibility.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Close the BSG Launcher and EFT if running</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch EFT through the BSG Launcher</li>
+                      <li>Load once you are in the main menu</li>
+                    </ol>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Coffee Lite - EFT",
+              slug: "eft-coffee-lite",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>EFT suite with silent aim, loot filtering, world ESP, player ESP, and exploit-style tools.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch EFT</li>
+                      <li>Load and configure loot filters in the menu</li>
+                    </ol>
+                    <div class="info-box">Set up your loot filter early. Use the Top Loot List or Custom Loot options to focus on valuable items.</div>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Ancient - EFT External",
+              slug: "eft-ancient",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>External EFT package with aim tools, player and scav visuals, loot presets, exfil info, radar, and config support.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the loader as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Launch EFT</li>
+                      <li>The external overlay will attach once the game is running</li>
+                    </ol>
+                    <p>Use loot presets to quickly filter by category. Configure the radar from the Misc tab.</p>
+                  `
+                }
+              ]
+            }
+          ]
+        },
+        {
+          name: "Spoofers",
+          products: [
+            {
+              name: "Xim Spoofer",
+              slug: "xim-spoofer",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Hardware reset support for users who need a clean device-identity setup path across supported games.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>UEFI motherboard preferred</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Important</h3>
+                    <div class="warn-box">Do not run setup until your support ticket confirms the correct route. Spoofer setup depends on device state, motherboard mode, and Windows configuration.</div>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Open a support ticket first to confirm your setup path</li>
+                      <li>Check UEFI mode and admin permissions</li>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the spoofer tool as <strong>Administrator</strong></li>
+                      <li>Follow the on-screen instructions exactly</li>
+                      <li>Restart when prompted</li>
+                    </ol>
+                    <p>Follow restart instructions exactly to avoid confusing the support flow.</p>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Exodus Temp Spoofer",
+              slug: "spoofer-exodus-temp",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Temporary HWID masking product with cleaner support and coverage for EAC, BE, FiveM, and Ricochet.</p>
+                    <h3>Requirements</h3>
+                    <ul>
+                      <li>Windows 10 or 11</li>
+                      <li>Administrator access</li>
+                    </ul>
+                    <h3>Supported Anti-Cheats</h3>
+                    <ul>
+                      <li>EAC (Easy Anti-Cheat)</li>
+                      <li>BattlEye</li>
+                      <li>FiveM</li>
+                      <li>Ricochet</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the spoofer as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Click Spoof and wait for confirmation</li>
+                      <li>Restart your PC</li>
+                      <li>Launch your game</li>
+                    </ol>
+                    <div class="info-box">Use support before running if you are unsure whether temporary spoofing is enough for your situation.</div>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Verse - Perm Spoofer",
+              slug: "spoofer-verse-perm",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Permanent spoofing option for supported games and motherboard brands.</p>
+                    <h3>Supported Motherboards</h3>
+                    <ul>
+                      <li>ASUS, Gigabyte, MSI, ASRock, HP</li>
+                      <li>Open a ticket for Lenovo, Acer, or Dell</li>
+                    </ul>
+                    <h3>Supported Games</h3>
+                    <ul>
+                      <li>League of Legends, Fortnite, Apex Legends, Rust</li>
+                    </ul>
+                    <h3>Setup Steps</h3>
+                    <ol>
+                      <li>Open a support ticket first to confirm compatibility</li>
+                      <li>Disable Windows Defender</li>
+                      <li>Run the spoofer as <strong>Administrator</strong></li>
+                      <li>Enter your license key</li>
+                      <li>Follow the guided setup</li>
+                      <li>Restart when prompted</li>
+                    </ol>
+                    <div class="warn-box">TPM bypass is not included. Open a support ticket first if your motherboard brand is not listed.</div>
+                  `
+                }
+              ]
+            }
+          ]
+        },
+        {
+          name: "Accounts",
+          products: [
+            {
+              name: "Linked NFA",
+              slug: "linked-nfa",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Not full-access ranked-ready account option. Account products are delivered through support after review.</p>
+                    <h3>How It Works</h3>
+                    <ol>
+                      <li>Purchase the account through the store</li>
+                      <li>Open a support ticket with your order email</li>
+                      <li>Support will verify your purchase and prepare the handoff</li>
+                      <li>You will receive account login details via the ticket</li>
+                      <li>Change any available security details immediately after receiving access</li>
+                    </ol>
+                    <div class="warn-box">Do not reshare account access after delivery. Review account notes before changing any information.</div>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Stacked PC Account",
+              slug: "stacked-pc-account",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>Stacked linked Rainbow Six Siege PC account with ranked-ready inventory and account notes.</p>
+                    <h3>How It Works</h3>
+                    <ol>
+                      <li>Purchase the account through the store</li>
+                      <li>Open a support ticket with your order confirmation</li>
+                      <li>Support will review and prepare your account</li>
+                      <li>Account details will be delivered via the ticket</li>
+                      <li>Confirm the account notes match what support delivered</li>
+                    </ol>
+                    <div class="info-box">Keep screenshots of handoff details for your own records. Ask questions in the same ticket before making major account changes.</div>
+                  `
+                }
+              ]
+            }
+          ]
+        }
+      ];
+
+      /* ── Build flat topic list for navigation ── */
+      const allTopics = [];
+      categories.forEach(cat => {
+        cat.products.forEach(prod => {
+          prod.topics.forEach(topic => {
+            allTopics.push({ category: cat.name, product: prod.name, slug: prod.slug, ...topic });
+          });
+        });
+      });
+
+      /* ── Render Sidebar ── */
+      const sidebarNav = document.getElementById("sidebarNav");
+
+      function buildSidebar(filter = "") {
+        sidebarNav.innerHTML = "";
+        const lf = filter.toLowerCase();
+
+        categories.forEach(cat => {
+          const filteredProducts = cat.products.filter(prod => {
+            if (!lf) return true;
+            if (prod.name.toLowerCase().includes(lf)) return true;
+            if (cat.name.toLowerCase().includes(lf)) return true;
+            return prod.topics.some(t => t.title.toLowerCase().includes(lf));
+          });
+
+          if (!filteredProducts.length) return;
+
+          const catDiv = document.createElement("div");
+          catDiv.className = "sidebar-category";
+
+          const catHeader = document.createElement("div");
+          catHeader.className = "sidebar-category-header";
+          catHeader.innerHTML = `<span class="arrow">&#9660;</span><span class="cat-label">${cat.name}</span>`;
+          catHeader.addEventListener("click", () => catDiv.classList.toggle("collapsed"));
+          catDiv.appendChild(catHeader);
+
+          const catBody = document.createElement("div");
+          catBody.className = "sidebar-category-body";
+
+          filteredProducts.forEach(prod => {
+            const prodDiv = document.createElement("div");
+            prodDiv.className = "sidebar-product";
+
+            if (prod.topics.length > 1) {
+              const prodHeader = document.createElement("div");
+              prodHeader.className = "sidebar-product-header";
+              prodHeader.innerHTML = `<span class="p-arrow">&#9660;</span>${prod.name}`;
+              prodHeader.addEventListener("click", () => prodDiv.classList.toggle("collapsed"));
+              prodDiv.appendChild(prodHeader);
+
+              const prodBody = document.createElement("div");
+              prodBody.className = "sidebar-product-body";
+
+              prod.topics.forEach(topic => {
+                const link = document.createElement("div");
+                link.className = "sidebar-topic";
+                link.textContent = topic.title;
+                link.dataset.slug = prod.slug;
+                link.dataset.topic = topic.title;
+                link.addEventListener("click", () => showTopic(prod.slug, topic.title));
+                prodBody.appendChild(link);
+              });
+
+              prodDiv.appendChild(prodBody);
+            } else {
+              const link = document.createElement("div");
+              link.className = "sidebar-product-header";
+              link.style.cursor = "pointer";
+              link.innerHTML = prod.name;
+              link.addEventListener("click", () => showTopic(prod.slug, prod.topics[0].title));
+              prodDiv.appendChild(link);
+            }
+
+            catBody.appendChild(prodDiv);
+          });
+
+          catDiv.appendChild(catBody);
+          sidebarNav.appendChild(catDiv);
+        });
+      }
+
+      buildSidebar();
+
+      /* ── Search ── */
+      const searchInput = document.getElementById("docsSearch");
+      searchInput.addEventListener("input", () => buildSidebar(searchInput.value));
+
+      /* ── Show Topic ── */
+      const contentTitle = document.getElementById("contentTitle");
+      const contentBody = document.getElementById("contentBody");
+      const contentNext = document.getElementById("contentNext");
+
+      function showTopic(slug, topicTitle) {
+        const idx = allTopics.findIndex(t => t.slug === slug && t.title === topicTitle);
+        if (idx === -1) return;
+
+        const topic = allTopics[idx];
+        contentTitle.textContent = topic.title;
+        contentBody.innerHTML = topic.content + `
+          <div class="docs-discord">
+            If you have any questions, head over to <a href="https://discord.gg/halocheats" target="_blank">discord.gg/halocheats</a>
+          </div>
+        `;
+
+        // Next button
+        if (idx < allTopics.length - 1) {
+          const next = allTopics[idx + 1];
+          contentNext.innerHTML = `
+            <div class="docs-next" onclick="window.__showTopic('${next.slug}', '${next.title.replace(/'/g, "\\'")}')">
+              <div>
+                <div class="docs-next-label">Next</div>
+                <div class="docs-next-title">${next.title}</div>
+              </div>
+              <div class="docs-next-arrow">&#10095;</div>
+            </div>
+          `;
+        } else {
+          contentNext.innerHTML = "";
+        }
+
+        // Update active state in sidebar
+        document.querySelectorAll(".sidebar-topic").forEach(el => el.classList.remove("active"));
+        const activeLink = document.querySelector(`.sidebar-topic[data-slug="${slug}"][data-topic="${topicTitle}"]`);
+        if (activeLink) {
+          activeLink.classList.add("active");
+          activeLink.scrollIntoView({ block: "nearest" });
+        }
+
+        // Update URL hash
+        history.replaceState(null, "", `#${slug}/${encodeURIComponent(topicTitle)}`);
+
+        // Close mobile sidebar
+        document.getElementById("docsSidebar").classList.remove("open");
+
+        // Scroll to top of content
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      window.__showTopic = showTopic;
+
+      /* ── Handle hash on load ── */
+      function loadFromHash() {
+        const hash = location.hash.slice(1);
+        if (!hash) {
+          // Show first topic by default
+          if (allTopics.length) showTopic(allTopics[0].slug, allTopics[0].title);
+          return;
+        }
+
+        const parts = hash.split("/");
+        const slug = parts[0];
+        const topicTitle = parts[1] ? decodeURIComponent(parts[1]) : null;
+
+        if (topicTitle) {
+          const found = allTopics.find(t => t.slug === slug && t.title === topicTitle);
+          if (found) { showTopic(slug, topicTitle); return; }
+        }
+
+        // Fall back to first topic of that product
+        const first = allTopics.find(t => t.slug === slug);
+        if (first) showTopic(first.slug, first.title);
+        else if (allTopics.length) showTopic(allTopics[0].slug, allTopics[0].title);
+      }
+
+      loadFromHash();
+      window.addEventListener("hashchange", loadFromHash);
+
+      /* ── Mobile toggle ── */
+      document.getElementById("mobileToggle").addEventListener("click", () => {
+        document.getElementById("docsSidebar").classList.toggle("open");
+      });
+
+      document.getElementById("docsOverlay").addEventListener("click", () => {
+        document.getElementById("docsSidebar").classList.remove("open");
+      });
     </script>
   </body>
 </html>
