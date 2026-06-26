@@ -63,6 +63,59 @@ if (!initialSession) {
   }
 }
 
+/* ── Discord link popup ── */
+const discordPopup = document.getElementById("discordPopup");
+const discordPopupClose = document.getElementById("discordPopupClose");
+const discordPopupDismiss = document.getElementById("discordPopupDismiss");
+const discordPopupTitle = document.getElementById("discordPopupTitle");
+const discordPopupText = document.getElementById("discordPopupText");
+const discordPopupAction = document.getElementById("discordPopupAction");
+
+async function maybeShowDiscordPopup() {
+  if (!discordPopup) return;
+  if (localStorage.getItem("hc_discord_popup_dismissed")) return;
+
+  if (!initialSession) {
+    discordPopupTitle.textContent = "Sign In to Link Discord";
+    discordPopupText.textContent =
+      "Create an account or sign in to link your Discord and receive keys via DM.";
+    discordPopupAction.textContent = "Sign In";
+    discordPopupAction.href = "/account/";
+  } else {
+    try {
+      const res = await fetch("/api/auth/discord/status", {
+        headers: { Authorization: `Bearer ${initialSession.access_token}` },
+      });
+      const data = await res.json();
+      if (data.linked) return;
+    } catch {
+      return;
+    }
+    discordPopupTitle.textContent = "Link Your Discord";
+    discordPopupText.textContent =
+      "Get your license keys delivered straight to your DMs after purchase.";
+    discordPopupAction.textContent = "Link Discord";
+    discordPopupAction.href = "/api/auth/discord";
+  }
+
+  setTimeout(() => {
+    discordPopup.hidden = false;
+  }, 1500);
+}
+
+discordPopupClose?.addEventListener("click", () => {
+  discordPopup.hidden = true;
+});
+discordPopupDismiss?.addEventListener("click", () => {
+  localStorage.setItem("hc_discord_popup_dismissed", "1");
+  discordPopup.hidden = true;
+});
+discordPopup?.addEventListener("click", (e) => {
+  if (e.target === discordPopup) discordPopup.hidden = true;
+});
+
+maybeShowDiscordPopup();
+
 liveDeskForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
