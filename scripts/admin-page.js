@@ -147,13 +147,35 @@ function loadPanel(name) {
 
 async function loadOverview() {
   try {
-    const [orders, keys, users, visitors] = await Promise.all([
+    const [orders, keys, users, visitors, revenue] = await Promise.all([
       apiFetch("/api/admin/orders?limit=10"),
       apiFetch("/api/admin/keys"),
       apiFetch("/api/admin/users"),
       apiFetch("/api/admin/visitors"),
+      apiFetch("/api/admin/revenue"),
     ]);
 
+    // Revenue
+    document.getElementById("revToday").textContent = revenue.today;
+    document.getElementById("revWeek").textContent = revenue.week;
+    document.getElementById("revMonth").textContent = revenue.month;
+    document.getElementById("revAllTime").textContent = revenue.allTime;
+
+    // Top products
+    const tpBody = document.getElementById("topProductsBody");
+    if (!revenue.topProducts.length) {
+      tpBody.innerHTML = '<tr><td colspan="3" class="empty-state">No sales data yet.</td></tr>';
+    } else {
+      tpBody.innerHTML = revenue.topProducts.map(p => `
+        <tr>
+          <td>${esc(p.name)}</td>
+          <td style="color:#6fdc8c; font-weight:600;">${esc(p.revenue)}</td>
+          <td>${p.orders}</td>
+        </tr>
+      `).join("");
+    }
+
+    // Stats
     document.getElementById("statOrders").textContent = orders.orders.length;
     document.getElementById("statFulfilled").textContent = orders.orders.filter(
       (o) => o.status === "fulfilled"
@@ -633,6 +655,86 @@ document.addEventListener("change", (e) => {
   const sel = e.target.closest("[data-update-status]");
   if (sel) { updateStatus(sel.dataset.product, sel.value, sel.dataset.category); }
 });
+
+// ── Export CSV ──
+
+document.getElementById("exportCsvBtn").addEventListener("click", () => {
+  window.open("/api/admin/orders/export/csv", "_blank");
+});
+
+// ── Bulk Import Keys ──
+
+const importZone = document.getElementById("importZone");
+const importFileInput = document.getElementById("importFileInput");
+const importResult = document.getElementById("importResult");
+
+importZone.addEventListener("click", () => importFileInput.click());
+
+importZone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  importZone.style.borderColor = "rgba(255,255,255,0.4)";
+});
+
+importZone.addEventListener("dragleave", () => {
+  importZone.style.borderColor = "";
+});
+
+importZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  importZone.style.borderColor = "";
+  const file = e.dataTransfer.files[0];
+  if (file) processImportFile(file);
+});
+
+importFileInput.addEventListener("change", () => {
+  if (importFileInput.files[0]) processImportFile(importFileInput.files[0]);
+});
+
+async function processImportFile(file) {
+  importResult.className = "import-result";
+  importResult.style.display = "none";
+
+  const text = await file.text();
+  const lines = text.trim().split(/\r?\n/).filter(Boolean);
+
+  // Detect and skip header row
+  let startIdx = 0;
+  if (lines[0] && /product_slug|product|slug/i.test(lines[0])) {
+    startIdx = 1;
+  }
+
+  const keys = [];
+  for (let i = startIdx; i < lines.length; i++) {
+    const parts = lines[i].split(",").map((s) => s.trim().replace(/^"|"$/g, ""));
+    if (parts.length >= 2 && parts[0] && parts[1]) {
+      keys.push({ product_slug: parts[0], key_value: parts[1] });
+    }
+  }
+
+  if (!keys.length) {
+    importResult.className = "import-result error";
+    importResult.textContent = "No valid keys found. Format: product_slug,key_value";
+    importResult.style.display = "block";
+    return;
+  }
+
+  try {
+    const res = await apiPost("/api/admin/keys/import", { keys });
+    if (res.ok) {
+      importResult.className = "import-result success";
+      importResult.textContent = `Imported ${res.imported} key${res.imported === 1 ? "" : "s"} successfully.`;
+      importResult.style.display = "block";
+      importFileInput.value = "";
+      loadKeys();
+    } else {
+      throw new Error(res.error || "Import failed");
+    }
+  } catch (err) {
+    importResult.className = "import-result error";
+    importResult.textContent = err.message;
+    importResult.style.display = "block";
+  }
+}
 
 // ── Boot ──
 checkAuth();
