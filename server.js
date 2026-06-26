@@ -3491,15 +3491,15 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     } else {
       /* ── Sign-in mode: find or create Supabase user by discord_id ── */
       const { data: userList } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+      const syntheticEmail = `discord_${discordUser.id}@halocheats.cc`;
       let existingUser = userList?.users?.find(
-        (u) => u.user_metadata?.discord_id === discordUser.id
+        (u) => u.user_metadata?.discord_id === discordUser.id || u.email === syntheticEmail
       );
 
       const tempPassword = crypto.randomBytes(32).toString("hex");
 
       if (!existingUser) {
         // Create new user with synthetic email
-        const syntheticEmail = `discord_${discordUser.id}@halocheats.cc`;
         const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
           email: syntheticEmail,
           password: tempPassword,
