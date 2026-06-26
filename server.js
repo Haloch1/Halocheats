@@ -25,6 +25,7 @@ const discordLiveDeskMention = process.env.DISCORD_LIVE_DESK_MENTION || "";
 const discordSignupWebhookUrl = process.env.DISCORD_SIGNUP_WEBHOOK_URL || "";
 const discordSecurityWebhookUrl =
   process.env.DISCORD_SECURITY_WEBHOOK_URL || discordSignupWebhookUrl;
+const discordOrderWebhookUrl = process.env.DISCORD_ORDER_WEBHOOK_URL || "";
 const adminAccessKey = process.env.ADMIN_ACCESS_KEY || "";
 const ownerRequestsKey = process.env.OWNER_REQUESTS_KEY || "";
 const liveDeskCooldownMs = 45_000;
@@ -993,7 +994,7 @@ async function syncPaidOrder(session) {
       throw error;
     }
 
-    return;
+    return { keyValue: alreadyAssignedKey.key_value };
   }
 
   const { data: availableKeys, error: availableKeyError } = await supabaseAdmin
@@ -1040,7 +1041,7 @@ async function syncPaidOrder(session) {
     .eq("id", availableKey.id)
     .eq("status", "unused")
     .is("assigned_user_id", null)
-    .select("id")
+    .select("id, key_value")
     .maybeSingle();
 
   if (keyAssignError) {
@@ -1078,6 +1079,24 @@ async function syncPaidOrder(session) {
     throw orderUpdateError;
   }
 
+  /* ── Discord order log ── */
+  if (isConfiguredValue(discordOrderWebhookUrl)) {
+    const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
+    sendDiscordWebhook(discordOrderWebhookUrl, {
+      embeds: [{
+        title: "Order Fulfilled",
+        color: 0x00c851,
+        fields: [
+          { name: "Product", value: catalogItem?.name || order.product_slug, inline: true },
+          { name: "Status", value: "Fulfilled", inline: true },
+          { name: "Order ID", value: order.id, inline: false },
+          { name: "User ID", value: order.user_id || "Unknown", inline: false },
+          { name: "Time", value: assignedAt, inline: false },
+        ],
+      }],
+    }).catch((err) => console.error("[Discord order log]", err.message));
+  }
+
   /* ── Sandbox mode: reset key back to unused so it can be reused for testing ── */
   if (process.env.SANDBOX_MODE === "true") {
     console.log(`[Sandbox] Resetting key ${updatedKey.id} back to unused for reuse`);
@@ -1091,6 +1110,8 @@ async function syncPaidOrder(session) {
       })
       .eq("id", updatedKey.id);
   }
+
+  return { keyValue: updatedKey.key_value };
 }
 
 app.post(
