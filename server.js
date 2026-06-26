@@ -4161,6 +4161,11 @@ async function checkRestockAlerts() {
 setInterval(checkRestockAlerts, 2 * 60 * 1000);
 setTimeout(checkRestockAlerts, 10_000); // first check 10s after boot
 
+/* ── 404 catch-all ── */
+app.use((_req, res) => {
+  res.status(404).sendFile(path.join(distDir, "404.html"));
+});
+
 app.listen(port, () => {
   console.log(`API server listening on http://localhost:${port}`);
 });
