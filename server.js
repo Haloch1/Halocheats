@@ -889,7 +889,12 @@ if (isConfiguredValue(discordBotToken)) {
         new SlashCommandBuilder()
           .setName("addkey")
           .setDescription("Add a key to inventory (owner only)")
-          .addStringOption(o => o.setName("product").setDescription("Product slug (e.g. ignite-apex-day)").setRequired(true))
+          .addStringOption(o => o.setName("product").setDescription("Product name (e.g. Ignite Apex)").setRequired(true))
+          .addStringOption(o => o.setName("duration").setDescription("Key duration").setRequired(true).addChoices(
+            { name: "1 Day", value: "day" },
+            { name: "1 Week", value: "week" },
+            { name: "1 Month", value: "month" },
+          ))
           .addStringOption(o => o.setName("key").setDescription("License key value").setRequired(true)),
         new SlashCommandBuilder()
           .setName("lookup")
@@ -1151,24 +1156,44 @@ if (isConfiguredValue(discordBotToken)) {
       }
       await interaction.deferReply({ ephemeral: true });
       try {
-        const productSlug = interaction.options.getString("product");
+        const productName = interaction.options.getString("product").toLowerCase();
+        const duration = interaction.options.getString("duration");
         const keyValue = interaction.options.getString("key");
+
+        // Find product by name (fuzzy match)
+        const matchedProduct = products.find(
+          (p) => p.name.toLowerCase() === productName || p.slug.toLowerCase() === productName || p.name.toLowerCase().includes(productName)
+        );
+
+        if (!matchedProduct) {
+          const available = products.map(p => p.name).join(", ");
+          return interaction.editReply({
+            embeds: [{ description: `Product not found. Available: ${available}`, color: 0xff4444 }],
+          });
+        }
+
+        // Find variant matching the duration
+        const matchedVariant = matchedProduct.variants?.find(v => v.slug === duration);
+        const inventorySlug = matchedVariant
+          ? (matchedVariant.inventorySlug || `${matchedProduct.slug}-${duration}`)
+          : `${matchedProduct.slug}-${duration}`;
 
         const { data, error } = await supabaseAdmin
           .from("license_keys")
-          .insert({ product_slug: productSlug, key_value: keyValue, status: "unused" })
+          .insert({ product_slug: inventorySlug, key_value: keyValue, status: "unused" })
           .select("id")
           .single();
 
         if (error) throw error;
 
-        const catalogItem = getCatalogItemByInventorySlug(productSlug);
+        const durationLabel = duration === "day" ? "1 Day" : duration === "week" ? "1 Week" : "1 Month";
         return interaction.editReply({
           embeds: [{
             title: "Key Added",
             color: 0x00c851,
             fields: [
-              { name: "Product", value: catalogItem?.name || productSlug, inline: true },
+              { name: "Product", value: matchedProduct.name, inline: true },
+              { name: "Duration", value: durationLabel, inline: true },
               { name: "Key", value: `\`${keyValue}\``, inline: false },
             ],
             footer: { text: "Halo Cheats" },
