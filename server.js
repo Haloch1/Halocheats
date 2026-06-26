@@ -869,7 +869,7 @@ if (isConfiguredValue(discordBotToken)) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        description: "Official Halo Cheats bot. License key delivery, account linking, product alerts, and review moderation. Visit halocheats.cc",
+        description: "Halo Cheats bot\n\nCommands:\n/key - View your active license keys\n/status - Check product stock\n\nhalocheats.cc",
       }),
     }).catch((err) => console.error("[Discord] Bio update failed:", err.message));
 
@@ -886,6 +886,8 @@ if (isConfiguredValue(discordBotToken)) {
       ].map((c) => c.toJSON());
 
       if (discordGuildId) {
+        // Clear global commands to avoid duplicates, then set guild commands
+        await rest.put(Routes.applicationCommands(discordClientId), { body: [] });
         await rest.put(Routes.applicationGuildCommands(discordClientId, discordGuildId), { body: commands });
       } else {
         await rest.put(Routes.applicationCommands(discordClientId), { body: commands });
