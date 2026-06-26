@@ -8,7 +8,7 @@ import Stripe from "stripe";
 import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
-import { Client, GatewayIntentBits } from "discord.js";
+import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from "discord.js";
 import { products } from "./data/products.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -35,6 +35,9 @@ const discordBotToken = process.env.DISCORD_BOT_TOKEN || "";
 const discordClientId = process.env.DISCORD_CLIENT_ID || "";
 const discordClientSecret = process.env.DISCORD_CLIENT_SECRET || "";
 const discordGuildId = process.env.DISCORD_GUILD_ID || "";
+const discordCustomerRoleId = process.env.DISCORD_CUSTOMER_ROLE_ID || "";
+const discordRestockChannelId = process.env.DISCORD_RESTOCK_CHANNEL_ID || "";
+const discordReviewChannelId = process.env.DISCORD_REVIEW_CHANNEL_ID || "";
 const liveDeskCooldownMs = 45_000;
 const liveDeskCooldownByIp = new Map();
 const staffAccessTtlMs = 1000 * 60 * 60 * 8;
@@ -837,11 +840,51 @@ let discordBot = null;
 
 if (isConfiguredValue(discordBotToken)) {
   discordBot = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+    ],
   });
 
-  discordBot.once("ready", () => {
+  discordBot.once("ready", async () => {
     console.log(`[Discord] Bot logged in as ${discordBot.user.tag}`);
+
+    // Register slash commands
+    try {
+      const rest = new REST({ version: "10" }).setToken(discordBotToken);
+      const commands = [
+        new SlashCommandBuilder()
+          .setName("key")
+          .setDescription("View your active license keys from Halo Cheats"),
+        new SlashCommandBuilder()
+          .setName("status")
+          .setDescription("Check product availability and stock"),
+      ].map((c) => c.toJSON());
+
+      if (discordGuildId) {
+        await rest.put(Routes.applicationGuildCommands(discordClientId, discordGuildId), { body: commands });
+      } else {
+        await rest.put(Routes.applicationCommands(discordClientId), { body: commands });
+      }
+      console.log("[Discord] Slash commands registered");
+    } catch (err) {
+      console.error("[Discord] Slash command registration failed:", err.message);
+    }
+  });
+
+  discordBot.on("guildMemberAdd", (member) => {
+    if (discordGuildId && member.guild.id === discordGuildId) {
+      member.send(
+        `**Welcome to Halo Cheats!**\n\n` +
+        `Create an account and link your Discord to get started:\n` +
+        `${baseUrl}/account/\n\n` +
+        `Once linked, you'll receive license keys directly via DM after every purchase.\n\n` +
+        `Browse products: ${baseUrl}/products/\n` +
+        `Need help? ${baseUrl}/desk/`
+      ).catch(() => { /* DMs may be disabled */ });
+    }
   });
 
   discordBot.on("guildMemberRemove", (member) => {
@@ -850,6 +893,130 @@ if (isConfiguredValue(discordBotToken)) {
       rejoinDiscordMember(member.user.id).catch((err) =>
         console.error("[Discord] Rejoin error:", err.message)
       );
+    }
+  });
+
+  /* ── Discord review channel moderation ── */
+  discordBot.on("messageCreate", async (message) => {
+    if (message.author.bot) return;
+    if (!discordReviewChannelId || message.channel.id !== discordReviewChannelId) return;
+
+    const reviewText = message.content.trim();
+    if (reviewText.length < 5) {
+      try {
+        await message.delete();
+        await message.author.send("Your review was too short. Please write at least 10 characters.").catch(() => {});
+      } catch {}
+      return;
+    }
+
+    try {
+      const moderation = await moderateReviewWithAI(reviewText, "General", 5);
+
+      if (!moderation.approved) {
+        await message.delete();
+        await message.author.send(
+          `**Halo Cheats - Review Not Approved**\n\n` +
+          `Your review was removed: ${moderation.reason || "Did not meet guidelines."}\n\n` +
+          `Feel free to try again with a genuine review.`
+        ).catch(() => {});
+        return;
+      }
+
+      // Delete the original message and repost as a rich embed
+      await message.delete();
+      const channel = await discordBot.channels.fetch(discordReviewChannelId);
+      if (channel) {
+        await channel.send({
+          embeds: [{
+            author: {
+              name: message.author.displayName || message.author.username,
+              icon_url: message.author.displayAvatarURL({ size: 64 }),
+            },
+            description: reviewText,
+            color: 0xff2a2a,
+            footer: { text: "Verified Review - Halo Cheats" },
+            timestamp: new Date().toISOString(),
+          }],
+        });
+      }
+    } catch (err) {
+      console.error("[Discord review moderation]", err.message);
+    }
+  });
+
+  discordBot.on("interactionCreate", async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
+
+    if (interaction.commandName === "key") {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        // Find user by discord_id
+        const { data: userList } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+        const siteUser = (userList?.users || []).find(
+          (u) => u.user_metadata?.discord_id === interaction.user.id
+        );
+
+        if (!siteUser) {
+          return interaction.editReply("You haven't linked your Discord account yet. Link it at " + baseUrl + "/account/");
+        }
+
+        const { data: keys } = await supabaseAdmin
+          .from("license_keys")
+          .select("key_value, product_slug, assigned_at")
+          .eq("assigned_user_id", siteUser.id)
+          .eq("status", "assigned")
+          .order("assigned_at", { ascending: false })
+          .limit(10);
+
+        if (!keys || !keys.length) {
+          return interaction.editReply("No active keys found. Browse products at " + baseUrl + "/products/");
+        }
+
+        const lines = keys.map((k) => {
+          const catalogItem = getCatalogItemByInventorySlug(k.product_slug);
+          const label = catalogItem?.name || k.product_slug;
+          return `**${label}**\n\`${k.key_value}\``;
+        });
+
+        return interaction.editReply("**Your Active Keys:**\n\n" + lines.join("\n\n"));
+      } catch (err) {
+        console.error("[Slash /key]", err.message);
+        return interaction.editReply("Something went wrong. Try again later.");
+      }
+    }
+
+    if (interaction.commandName === "status") {
+      await interaction.deferReply();
+      try {
+        const counts = await getUnusedLicenseKeyCounts();
+        const lines = [];
+
+        for (const product of products) {
+          if (!product.available) continue;
+          const variantLines = [];
+          for (const variant of product.variants || []) {
+            const slug = getVariantInventorySlug(product, variant);
+            const count = counts.get(slug) || 0;
+            const icon = count > 0 ? "🟢" : "🔴";
+            variantLines.push(`  ${icon} ${variant.name}: ${count > 0 ? `${count} in stock` : "Out of stock"}`);
+          }
+          if (variantLines.length) {
+            lines.push(`**${product.name}**\n${variantLines.join("\n")}`);
+          }
+        }
+
+        if (!lines.length) {
+          return interaction.editReply("No products available right now.");
+        }
+
+        // Discord has 2000 char limit, split if needed
+        const msg = "**Product Stock Status:**\n\n" + lines.join("\n\n");
+        return interaction.editReply(msg.slice(0, 2000));
+      } catch (err) {
+        console.error("[Slash /status]", err.message);
+        return interaction.editReply("Something went wrong. Try again later.");
+      }
     }
   });
 
@@ -1237,6 +1404,24 @@ async function syncPaidOrder(session) {
       }
     } catch (err) {
       console.error("[Discord DM delivery]", err.message);
+    }
+  }
+
+  /* ── Discord: assign Customer role ── */
+  if (discordBot && discordGuildId && discordCustomerRoleId && order.user_id) {
+    try {
+      const { data: roleUserData } = await supabaseAdmin.auth.admin.getUserById(order.user_id);
+      const roleDiscordId = roleUserData?.user?.user_metadata?.discord_id;
+      if (roleDiscordId) {
+        const guild = await discordBot.guilds.fetch(discordGuildId);
+        const member = await guild.members.fetch(roleDiscordId).catch(() => null);
+        if (member && !member.roles.cache.has(discordCustomerRoleId)) {
+          await member.roles.add(discordCustomerRoleId);
+          console.log(`[Discord] Assigned Customer role to ${member.user.tag}`);
+        }
+      }
+    } catch (err) {
+      console.error("[Discord role assign]", err.message);
     }
   }
 
@@ -3554,6 +3739,133 @@ pageRoutes.forEach((relativePath, route) => {
     res.sendFile(path.join(distDir, relativePath));
   });
 });
+
+/* ── Key expiry reminders (week & month keys) ── */
+const KEY_DURATIONS = {
+  week: 7 * 24 * 60 * 60 * 1000,
+  month: 30 * 24 * 60 * 60 * 1000,
+};
+const EXPIRY_REMINDER_HOURS = 24; // remind 24 hours before expiry
+const expiryRemindedSet = new Set(); // track order IDs already reminded
+
+async function checkKeyExpiry() {
+  if (!supabaseAdmin || !discordBot) return;
+
+  try {
+    const { data: orders, error } = await supabaseAdmin
+      .from("orders")
+      .select("id, user_id, product_slug, fulfilled_at")
+      .eq("status", "fulfilled")
+      .not("fulfilled_at", "is", null);
+
+    if (error || !orders) return;
+
+    const now = Date.now();
+
+    for (const order of orders) {
+      if (expiryRemindedSet.has(order.id)) continue;
+
+      // Check if this is a week or month key
+      let duration = null;
+      if (order.product_slug.endsWith("-week")) duration = KEY_DURATIONS.week;
+      else if (order.product_slug.endsWith("-month")) duration = KEY_DURATIONS.month;
+      else continue;
+
+      const fulfilledAt = new Date(order.fulfilled_at).getTime();
+      const expiresAt = fulfilledAt + duration;
+      const reminderAt = expiresAt - EXPIRY_REMINDER_HOURS * 60 * 60 * 1000;
+
+      if (now >= reminderAt && now < expiresAt) {
+        expiryRemindedSet.add(order.id);
+
+        const { data: userData } = await supabaseAdmin.auth.admin.getUserById(order.user_id);
+        const discordId = userData?.user?.user_metadata?.discord_id;
+        if (!discordId) continue;
+
+        const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
+        const productLabel = catalogItem?.name || order.product_slug;
+        const hoursLeft = Math.max(1, Math.round((expiresAt - now) / (60 * 60 * 1000)));
+
+        await sendDiscordDM(discordId,
+          `**Halo Cheats - Key Expiring Soon**\n\n` +
+          `Your key for **${productLabel}** expires in about **${hoursLeft} hours**.\n\n` +
+          `Renew at ${baseUrl}/products/`
+        );
+        console.log(`[Expiry] Reminded user ${order.user_id} about ${order.product_slug}`);
+      }
+    }
+  } catch (err) {
+    console.error("[Expiry check]", err.message);
+  }
+}
+
+// Run every 30 minutes
+setInterval(checkKeyExpiry, 30 * 60 * 1000);
+setTimeout(checkKeyExpiry, 15_000); // first check 15s after boot
+
+/* ── Restock alerts ── */
+const lastStockCounts = new Map();
+let restockInitialized = false;
+
+async function checkRestockAlerts() {
+  if (!supabaseAdmin || !discordBot || !discordRestockChannelId) return;
+
+  try {
+    const counts = await getUnusedLicenseKeyCounts();
+
+    if (!restockInitialized) {
+      // First run: just save current counts, don't alert
+      for (const [slug, count] of counts) {
+        lastStockCounts.set(slug, count);
+      }
+      restockInitialized = true;
+      console.log("[Restock] Initialized stock snapshot");
+      return;
+    }
+
+    for (const [slug, count] of counts) {
+      const prev = lastStockCounts.get(slug) || 0;
+
+      if (count > prev && prev === 0) {
+        // Product went from 0 to in-stock: restock alert
+        const catalogItem = getCatalogItemByInventorySlug(slug);
+        const productLabel = catalogItem?.name || slug;
+
+        try {
+          const channel = await discordBot.channels.fetch(discordRestockChannelId);
+          if (channel) {
+            await channel.send({
+              embeds: [{
+                title: "Restock Alert",
+                description: `**${productLabel}** is back in stock! (${count} ${count === 1 ? "key" : "keys"} available)`,
+                color: 0x00c851,
+                timestamp: new Date().toISOString(),
+                footer: { text: "Halo Cheats" },
+              }],
+            });
+          }
+        } catch (sendErr) {
+          console.error("[Restock] Channel send error:", sendErr.message);
+        }
+      }
+
+      lastStockCounts.set(slug, count);
+    }
+
+    // Also check for products that went to 0 (removed from counts map)
+    for (const [slug] of lastStockCounts) {
+      if (!counts.has(slug)) {
+        lastStockCounts.set(slug, 0);
+      }
+    }
+  } catch (err) {
+    console.error("[Restock check]", err.message);
+  }
+}
+
+// Run every 2 minutes
+setInterval(checkRestockAlerts, 2 * 60 * 1000);
+setTimeout(checkRestockAlerts, 10_000); // first check 10s after boot
 
 app.listen(port, () => {
   console.log(`API server listening on http://localhost:${port}`);
