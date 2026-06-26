@@ -205,6 +205,10 @@ a {
   --nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='m12 2 8 4.4v11.2L12 22l-8-4.4V6.4zm0 2.3L6.4 7.4 12 10.5l5.6-3.1zm-6 5v7.1l5 2.8v-7.1zm12 0-5 2.8v7.1l5-2.8z'/%3E%3C/svg%3E");
 }
 
+.nav a[href="/reviews/"] {
+  --nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z'/%3E%3C/svg%3E");
+}
+
 .nav a[href="/status/"] {
   --nav-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='black' d='M4 13h3.2l2.1-6.2 4 10.4 2-4.2H20v2h-3.4l-3.6 7.2L9.5 12.1 8.6 15H4zM4 4h16v2H4z'/%3E%3C/svg%3E");
 }
@@ -1659,7 +1663,9 @@ a {
     gap: 8px;
     padding: 6px;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    scroll-snap-type: x proximity;
   }
 
   .nav::-webkit-scrollbar {
@@ -3903,6 +3909,18 @@ a {
 .button-small {
   padding: 6px 14px;
   font-size: 0.8rem;
+}
+
+.button-outline {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.button-outline:hover {
+  border-color: var(--accent);
+  color: var(--text);
 }
 
 .review-rejection {
