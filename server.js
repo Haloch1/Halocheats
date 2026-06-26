@@ -3463,6 +3463,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     }
 
     const tokenData = await tokenRes.json();
+    console.log("[Discord OAuth] Granted scopes:", tokenData.scope);
 
     // Get Discord user info
     const userRes = await fetch("https://discord.com/api/users/@me", {
@@ -3537,9 +3538,9 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     }
 
     // Auto-join user to the server
-    if (discordGuildId && discordBot) {
+    if (discordGuildId && discordBotToken) {
       try {
-        await fetch(`https://discord.com/api/v10/guilds/${discordGuildId}/members/${discordUser.id}`, {
+        const joinRes = await fetch(`https://discord.com/api/v10/guilds/${discordGuildId}/members/${discordUser.id}`, {
           method: "PUT",
           headers: {
             Authorization: `Bot ${discordBotToken}`,
@@ -3547,8 +3548,14 @@ app.get("/api/auth/discord/callback", async (req, res) => {
           },
           body: JSON.stringify({ access_token: tokenData.access_token }),
         });
+        if (!joinRes.ok) {
+          const errBody = await joinRes.text();
+          console.error(`[Discord] Auto-join failed (${joinRes.status}):`, errBody);
+        } else {
+          console.log(`[Discord] Auto-join success for ${discordUser.username} (${joinRes.status})`);
+        }
       } catch (joinErr) {
-        console.error("[Discord] Auto-join failed:", joinErr.message);
+        console.error("[Discord] Auto-join fetch error:", joinErr.message);
       }
     }
 
