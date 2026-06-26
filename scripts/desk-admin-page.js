@@ -25,6 +25,7 @@ const deleteKeyCloseButton = document.querySelector("[data-delete-key-close]");
 let activeThreads = [];
 let activeThreadId = null;
 let accessPollTimer = null;
+let ownerAuthed = false;
 
 function formatTimestamp(value) {
   return new Intl.DateTimeFormat("en-US", {
@@ -205,7 +206,7 @@ function renderThreads(threads) {
 }
 
 async function loadThreads() {
-  if (!getStaffToken()) {
+  if (!getStaffToken() && !ownerAuthed) {
     renderMessage(messageBox, "Request approval before loading the admin desk.", "info");
     lockAdminDesk();
     return;
@@ -213,7 +214,7 @@ async function loadThreads() {
 
   const response = await fetch("/api/admin/live-desk", {
     credentials: "same-origin",
-    headers: getStaffHeaders(),
+    headers: getStaffToken() ? getStaffHeaders() : {},
   });
   const payload = await response.json();
 
@@ -567,7 +568,27 @@ deleteKeyForm?.addEventListener("submit", async (event) => {
   }
 });
 
-if (getStaffToken()) {
+/* Try owner cookie first — if it works, skip the login form entirely */
+let ownerBootSuccess = false;
+if (!getStaffToken()) {
+  try {
+    const ownerCheck = await fetch("/api/admin/live-desk", { credentials: "same-origin" });
+    if (ownerCheck.ok) {
+      ownerAuthed = true;
+      ownerBootSuccess = true;
+      const ownerPayload = await ownerCheck.json();
+      unlockAdminDesk();
+      renderMessage(messageBox, "Admin desk unlocked via owner session.", "success");
+      renderThreads(ownerPayload.threads || []);
+    }
+  } catch {
+    /* owner cookie not set or expired — fall through */
+  }
+}
+
+if (ownerBootSuccess) {
+  /* already loaded above */
+} else if (getStaffToken()) {
   try {
     await loadThreads();
   } catch (error) {
@@ -591,7 +612,7 @@ if (getStaffToken()) {
 }
 
 window.setInterval(() => {
-  if (!getStaffToken() || shouldPauseRefresh()) {
+  if ((!getStaffToken() && !ownerAuthed) || shouldPauseRefresh()) {
     return;
   }
 
