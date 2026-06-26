@@ -13,6 +13,7 @@ import { products } from "./data/products.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
+app.set("trust proxy", 1);
 const port = Number(process.env.PORT || 4242);
 const distDir = path.join(__dirname, "dist");
 const baseUrl = process.env.BASE_URL || "http://localhost:3000";
@@ -485,7 +486,7 @@ function ensureOwnerAccess(req) {
   const cookies = parseCookies(req);
   const ownerSession = cookies[ownerCookieName];
 
-  if (ownerSession !== hashToken(ownerRequestsKey)) {
+  if (!ownerSession || !timingSafeCompare(ownerSession, hashToken(ownerRequestsKey))) {
     throw Object.assign(new Error("Owner access denied."), {
       status: 401,
     });
@@ -852,7 +853,7 @@ async function sendSignupDiscordAlert(user) {
   });
 
   if (response && response.ok === false) {
-    throw new Error(`Signup Discord webhook failed with status ${response.status}.`);
+    console.error(`[Discord webhook] Signup alert failed with status ${response.status}.`);
   }
 }
 
@@ -870,7 +871,7 @@ async function sendSecurityDiscordAlert(title, fields = []) {
   });
 
   if (response && response.ok === false) {
-    throw new Error(`Security Discord webhook failed with status ${response.status}.`);
+    console.error(`[Discord webhook] Security alert failed with status ${response.status}.`);
   }
 }
 
@@ -1139,7 +1140,8 @@ app.post(
 
       return res.json({ received: true });
     } catch (error) {
-      return res.status(400).send(`Webhook Error: ${error.message}`);
+      console.error("[Stripe webhook]", error.message);
+      return res.status(400).send("Webhook signature verification failed.");
     }
   }
 );
@@ -1151,7 +1153,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "https:"],
@@ -1247,7 +1249,7 @@ app.post("/api/status/update", async (req, res) => {
 
     res.json({ ok: true, product, status });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Unable to update product status." });
   }
 });
 
@@ -1306,7 +1308,7 @@ app.post("/api/owner/sign-in", async (req, res) => {
       return res.status(500).json({ error: "Owner panel is not configured yet." });
     }
 
-    if (ownerKey !== ownerRequestsKey) {
+    if (!ownerKey || !timingSafeCompare(ownerKey, ownerRequestsKey)) {
       return res.status(401).json({ error: "Owner access denied." });
     }
 
@@ -1536,7 +1538,7 @@ app.get("/api/products", async (_req, res) => {
     res.json({ products: catalog });
   } catch (error) {
     res.status(500).json({
-      error: error instanceof Error ? error.message : "Unable to load products.",
+      error: "Unable to load products.",
     });
   }
 });
@@ -1621,14 +1623,18 @@ app.post("/api/live-desk", async (req, res) => {
       .eq("id", threadInsert.data.id);
 
     if (isConfiguredValue(discordWebhookUrl)) {
-      const discordResponse = await sendLiveDeskDiscordAlert(
-        threadInsert.data,
-        messageInsert.data,
-        member
-      );
+      try {
+        const discordResponse = await sendLiveDeskDiscordAlert(
+          threadInsert.data,
+          messageInsert.data,
+          member
+        );
 
-      if (discordResponse && discordResponse.ok === false) {
-        throw new Error(`Discord webhook failed with status ${discordResponse.status}.`);
+        if (discordResponse && discordResponse.ok === false) {
+          console.error(`[Discord webhook] Live desk alert failed with status ${discordResponse.status}.`);
+        }
+      } catch (discordError) {
+        console.error("[Discord webhook] Live desk alert error:", discordError.message);
       }
     }
 
@@ -1641,8 +1647,7 @@ app.post("/api/live-desk", async (req, res) => {
     });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error:
-        error instanceof Error ? error.message : "Unable to send the live desk request.",
+      error: "Unable to send the live desk request.",
     });
   }
 });
@@ -1663,7 +1668,7 @@ app.get("/api/live-desk/mine", async (req, res) => {
     return res.json({ threads });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to load desk threads.",
+      error: "Unable to load desk threads.",
     });
   }
 });
@@ -1753,7 +1758,7 @@ app.post("/api/live-desk/reply", async (req, res) => {
     });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to send your desk reply.",
+      error: "Unable to send your desk reply.",
     });
   }
 });
@@ -1841,7 +1846,7 @@ app.post("/api/admin/access-request", async (req, res) => {
     });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to create access request.",
+      error: "Unable to create access request.",
     });
   }
 });
@@ -1878,7 +1883,7 @@ app.get("/api/admin/access-request/:requestId", async (req, res) => {
     return res.json({ request: normalizeAccessRequest(requestResult.data) });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to load access request.",
+      error: "Unable to load access request.",
     });
   }
 });
@@ -1921,8 +1926,7 @@ app.get("/api/admin/access-requests", async (req, res) => {
     });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error:
-        error instanceof Error ? error.message : "Unable to load access requests.",
+      error: "Unable to load access requests.",
     });
   }
 });
@@ -1964,7 +1968,7 @@ app.post("/api/admin/access-requests/:requestId/approve", async (req, res) => {
     return res.json({ request: normalizeAccessRequest(updateResult.data) });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to approve request.",
+      error: "Unable to approve request.",
     });
   }
 });
@@ -2002,7 +2006,7 @@ app.post("/api/admin/access-requests/:requestId/deny", async (req, res) => {
     return res.json({ request: normalizeAccessRequest(updateResult.data) });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to deny request.",
+      error: "Unable to deny request.",
     });
   }
 });
@@ -2059,7 +2063,7 @@ app.delete("/api/admin/access-requests/:requestId", async (req, res) => {
     return res.json({ ok: true });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to delete access request.",
+      error: "Unable to delete access request.",
     });
   }
 });
@@ -2088,7 +2092,7 @@ app.get("/api/admin/visitors", async (req, res) => {
     });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to load panel.",
+      error: "Unable to load panel.",
     });
   }
 });
@@ -2122,7 +2126,7 @@ app.get("/api/admin/users", async (req, res) => {
     return res.json({ users });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to load users.",
+      error: "Unable to load users.",
     });
   }
 });
@@ -2149,7 +2153,7 @@ app.get("/api/admin/live-desk", async (req, res) => {
     return res.json({ threads });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to load admin desk threads.",
+      error: "Unable to load admin desk threads.",
     });
   }
 });
@@ -2233,7 +2237,7 @@ app.post("/api/admin/live-desk/reply", async (req, res) => {
     });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to send the admin reply.",
+      error: "Unable to send the admin reply.",
     });
   }
 });
@@ -2336,7 +2340,7 @@ app.post("/api/admin/live-desk/:threadId/request-delete-key", async (req, res) =
     });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to request a delete key.",
+      error: "Unable to request a delete key.",
     });
   }
 });
@@ -2439,7 +2443,7 @@ app.post("/api/admin/live-desk/:threadId/confirm-delete", async (req, res) => {
     return res.json({ ok: true });
   } catch (error) {
     return res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to delete the ticket.",
+      error: "Unable to delete the ticket.",
     });
   }
 });
@@ -2508,7 +2512,7 @@ app.get("/api/admin/orders/:orderId", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({
-      error: error instanceof Error ? error.message : "Unable to look up order.",
+      error: "Unable to look up order.",
     });
   }
 });
@@ -2556,7 +2560,7 @@ app.get("/api/admin/orders", async (req, res) => {
     res.json({ orders });
   } catch (error) {
     res.status(500).json({
-      error: error instanceof Error ? error.message : "Unable to list orders.",
+      error: "Unable to list orders.",
     });
   }
 });
@@ -2610,7 +2614,7 @@ app.get("/api/admin/keys", async (req, res) => {
     res.json({ keys, summary });
   } catch (error) {
     res.status(500).json({
-      error: error instanceof Error ? error.message : "Unable to list keys.",
+      error: "Unable to list keys.",
     });
   }
 });
@@ -2728,8 +2732,7 @@ app.get("/api/account", async (req, res) => {
     });
   } catch (error) {
     res.status(error.status || 500).json({
-      error:
-        error instanceof Error ? error.message : "",
+      error: "Unable to load account.",
     });
   }
 });
@@ -2827,14 +2830,13 @@ app.post("/api/reseller/buy", async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      error:
-        error instanceof Error ? error.message : "Unable to complete reseller API order.",
+      error: "Unable to complete reseller API order.",
     });
   }
 });
 
 /* ── Verify checkout and deliver key on success page ── */
-app.get("/api/checkout/complete", async (req, res) => {
+app.get("/api/checkout/complete", authLimiter, async (req, res) => {
   try {
     const member = await getAuthenticatedUser(req);
     const sessionId = req.query.session_id;
@@ -2890,7 +2892,7 @@ app.get("/api/checkout/complete", async (req, res) => {
     });
   } catch (error) {
     res.status(error.status || 500).json({
-      error: error instanceof Error ? error.message : "Unable to verify checkout.",
+      error: "Unable to verify checkout.",
     });
   }
 });
@@ -2996,8 +2998,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
     return res.json({ url: session.url });
   } catch (error) {
     return res.status(500).json({
-      error:
-        error instanceof Error ? error.message : "Unable to create checkout session.",
+      error: "Unable to create checkout session.",
     });
   }
 });
