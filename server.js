@@ -973,6 +973,11 @@ if (isConfiguredValue(discordBotToken)) {
 
     // Respond to @mentions in any channel (except review) OR any message in questions channel
     if (isMention || isQuestionsChannel) {
+      // In the questions channel, skip messages from admins/owner (announcements)
+      if (isQuestionsChannel && BOT_ADMINS.includes(message.author.id)) return;
+      // Skip if user has admin/mod permissions in the questions channel
+      if (isQuestionsChannel && message.member && message.member.permissions.has("ManageMessages")) return;
+
       try {
         // Strip the mention from the message to get the actual question
         const cleanMessage = (isQuestionsChannel
@@ -980,10 +985,7 @@ if (isConfiguredValue(discordBotToken)) {
           : message.content.replace(new RegExp(`<@!?${discordBot.user.id}>`, "g"), "")
         ).trim();
 
-        if (!cleanMessage) {
-          await message.reply("Hey! Ask me anything about Halo Cheats products, setup, or support.");
-          return;
-        }
+        if (!cleanMessage || cleanMessage.length < 5) return; // Ignore empty or too-short messages
 
         await message.channel.sendTyping();
 
