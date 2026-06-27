@@ -942,7 +942,7 @@ async function loadTranscripts() {
       }).join("");
 
       return `
-        <div class="transcript-card" onclick="this.classList.toggle('is-open')">
+        <div class="transcript-card">
           <div class="transcript-header">
             <span class="transcript-topic">${esc(t.topic)}</span>
             <span class="transcript-meta">
@@ -958,6 +958,11 @@ async function loadTranscripts() {
           <div class="transcript-messages">${msgs || '<em>No messages</em>'}</div>
         </div>`;
     }).join("");
+
+    container.addEventListener("click", (e) => {
+      const card = e.target.closest(".transcript-card");
+      if (card) card.classList.toggle("is-open");
+    });
   } catch (err) {
     console.error("Transcripts load error:", err);
     container.innerHTML = '<div class="empty-state">Failed to load transcripts.</div>';
