@@ -2296,6 +2296,7 @@ app.get("/sitemap.xml", (_req, res) => {
     { loc: "/account/", priority: "0.5", changefreq: "monthly" },
     { loc: "/terms/", priority: "0.3", changefreq: "yearly" },
     { loc: "/instructions/", priority: "0.4", changefreq: "monthly" },
+    { loc: "/privacy/", priority: "0.3", changefreq: "yearly" },
   ];
   const urls = pages
     .map(
