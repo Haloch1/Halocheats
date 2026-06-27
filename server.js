@@ -1162,6 +1162,127 @@ if (isConfiguredValue(discordBotToken)) {
       return interaction.respond([]);
     }
 
+    /* ── Handle button clicks ── */
+    if (interaction.isButton && interaction.isButton() && interaction.customId === "open_ticket") {
+      const modal = new ModalBuilder()
+        .setCustomId("ticket_modal")
+        .setTitle("Open a Support Ticket");
+
+      const topicInput = new TextInputBuilder()
+        .setCustomId("ticket_topic")
+        .setLabel("Topic")
+        .setPlaceholder("e.g. Key not working, Purchase issue, Question")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(100);
+
+      const detailsInput = new TextInputBuilder()
+        .setCustomId("ticket_details")
+        .setLabel("Details")
+        .setPlaceholder("Describe your issue or question...")
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(1000);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(topicInput),
+        new ActionRowBuilder().addComponents(detailsInput),
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    /* ── Handle modal submits ── */
+    if (interaction.isModalSubmit && interaction.isModalSubmit() && interaction.customId === "ticket_modal") {
+      await interaction.deferReply({ ephemeral: true });
+
+      const topic = interaction.fields.getTextInputValue("ticket_topic");
+      const details = interaction.fields.getTextInputValue("ticket_details");
+      const discordId = interaction.user.id;
+      const discordTag = interaction.user.tag || interaction.user.username;
+
+      try {
+        let userId = null;
+        if (supabaseAdmin) {
+          const { data: users } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+          const linked = users?.users?.find(u => u.user_metadata?.discord_id === discordId);
+          if (linked) userId = linked.id;
+        }
+
+        const threadInsert = await supabaseAdmin
+          .from("support_threads")
+          .insert({
+            user_id: userId,
+            contact_name: discordTag,
+            contact_method: `discord:${discordId}`,
+            subject: topic,
+            status: "open",
+            last_message_at: new Date().toISOString(),
+          })
+          .select("id, subject, status, created_at, contact_name")
+          .single();
+
+        if (threadInsert.error) throw threadInsert.error;
+
+        await supabaseAdmin.from("support_messages").insert({
+          thread_id: threadInsert.data.id,
+          sender_type: "user",
+          body: details,
+        });
+
+        if (isConfiguredValue(discordWebhookUrl)) {
+          try {
+            await fetch(discordWebhookUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                embeds: [{
+                  title: `New Discord Ticket: ${topic}`,
+                  description: details.substring(0, 200) + (details.length > 200 ? "..." : ""),
+                  color: 0x7c3aed,
+                  fields: [
+                    { name: "From", value: discordTag, inline: true },
+                    { name: "Ticket ID", value: threadInsert.data.id, inline: true },
+                  ],
+                  timestamp: new Date().toISOString(),
+                  footer: { text: "Discord Ticket" },
+                }],
+              }),
+            });
+          } catch {}
+        }
+
+        try {
+          const aiReply = await generateAILiveDeskReply(threadInsert.data, details, userId ? { userId } : {});
+          if (aiReply) {
+            await supabaseAdmin.from("support_messages").insert({
+              thread_id: threadInsert.data.id,
+              sender_type: "bot",
+              sender_name: "AI Support",
+              body: aiReply,
+            });
+            await supabaseAdmin.from("support_threads").update({
+              last_message_at: new Date().toISOString(),
+            }).eq("id", threadInsert.data.id);
+          }
+        } catch {}
+
+        return interaction.editReply({
+          embeds: [{
+            title: "Ticket Created",
+            description: `Your ticket **${topic}** has been submitted. Our team will respond soon.\n\nYou can track it at ${baseUrl}/desk/`,
+            color: 0x22c55e,
+            footer: { text: `Ticket ID: ${threadInsert.data.id}` },
+          }],
+        });
+      } catch (err) {
+        console.error("[Discord ticket]", err.message);
+        return interaction.editReply({
+          embeds: [{ description: "Failed to create ticket. Try again or use the website desk.", color: 0xff4444 }],
+        });
+      }
+    }
+
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === "key") {
@@ -1683,8 +1804,8 @@ if (isConfiguredValue(discordBotToken)) {
       }
     }
 
-    /* ── /ticket — open a support ticket via modal ── */
-    if (interaction.commandName === "ticket" || (interaction.isButton && interaction.isButton() && interaction.customId === "open_ticket")) {
+    /* ── /ticket — show the ticket modal ── */
+    if (interaction.commandName === "ticket") {
       const modal = new ModalBuilder()
         .setCustomId("ticket_modal")
         .setTitle("Open a Support Ticket");
@@ -1711,100 +1832,6 @@ if (isConfiguredValue(discordBotToken)) {
       );
 
       return interaction.showModal(modal);
-    }
-
-    /* ── Ticket modal submit ── */
-    if (interaction.isModalSubmit && interaction.isModalSubmit() && interaction.customId === "ticket_modal") {
-      await interaction.deferReply({ ephemeral: true });
-
-      const topic = interaction.fields.getTextInputValue("ticket_topic");
-      const details = interaction.fields.getTextInputValue("ticket_details");
-      const discordId = interaction.user.id;
-      const discordTag = interaction.user.tag || interaction.user.username;
-
-      try {
-        // Find linked site account
-        let userId = null;
-        if (supabaseAdmin) {
-          const { data: users } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-          const linked = users?.users?.find(u => u.user_metadata?.discord_id === discordId);
-          if (linked) userId = linked.id;
-        }
-
-        const threadInsert = await supabaseAdmin
-          .from("support_threads")
-          .insert({
-            user_id: userId,
-            contact_name: discordTag,
-            contact_method: `discord:${discordId}`,
-            subject: topic,
-            status: "open",
-            last_message_at: new Date().toISOString(),
-          })
-          .select("id, subject, status, created_at, contact_name")
-          .single();
-
-        if (threadInsert.error) throw threadInsert.error;
-
-        await supabaseAdmin.from("support_messages").insert({
-          thread_id: threadInsert.data.id,
-          sender_type: "user",
-          body: details,
-        });
-
-        // Send Discord webhook alert for the new ticket
-        if (isConfiguredValue(discordWebhookUrl)) {
-          try {
-            await fetch(discordWebhookUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                embeds: [{
-                  title: `New Discord Ticket: ${topic}`,
-                  description: details.substring(0, 200) + (details.length > 200 ? "..." : ""),
-                  color: 0x7c3aed,
-                  fields: [
-                    { name: "From", value: discordTag, inline: true },
-                    { name: "Ticket ID", value: threadInsert.data.id, inline: true },
-                  ],
-                  timestamp: new Date().toISOString(),
-                  footer: { text: "Discord Ticket" },
-                }],
-              }),
-            });
-          } catch {}
-        }
-
-        // Try AI auto-reply
-        try {
-          const aiReply = await generateAILiveDeskReply(threadInsert.data, details, userId ? { userId } : {});
-          if (aiReply) {
-            await supabaseAdmin.from("support_messages").insert({
-              thread_id: threadInsert.data.id,
-              sender_type: "bot",
-              sender_name: "AI Support",
-              body: aiReply,
-            });
-            await supabaseAdmin.from("support_threads").update({
-              last_message_at: new Date().toISOString(),
-            }).eq("id", threadInsert.data.id);
-          }
-        } catch {}
-
-        return interaction.editReply({
-          embeds: [{
-            title: "Ticket Created",
-            description: `Your ticket **${topic}** has been submitted. Our team will respond soon.\n\nYou can track it at ${baseUrl}/desk/`,
-            color: 0x22c55e,
-            footer: { text: `Ticket ID: ${threadInsert.data.id}` },
-          }],
-        });
-      } catch (err) {
-        console.error("[Discord ticket]", err.message);
-        return interaction.editReply({
-          embeds: [{ description: "Failed to create ticket. Try again or use the website desk.", color: 0xff4444 }],
-        });
-      }
     }
 
     /* ── /ticket-panel — post a ticket panel embed (owner only) ── */
