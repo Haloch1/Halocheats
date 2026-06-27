@@ -116,7 +116,7 @@ const productCatalog = [
     ...r6Meta,
     slug: "crusader-r6",
     name: "Crusader R6",
-    priceDisplay: `From ${money(adjustAmount(499, r6Multiplier))}`,
+    priceDisplay: `From ${money(adjustAmount(799, r6Multiplier))}`,
     summary:
       "A balanced R6 setup built for fast reads, aim tuning, and cleaner match awareness.",
     features: ["Trigger support", "Player info overlay", "Config profiles"],
@@ -150,16 +150,16 @@ const productCatalog = [
     ],
     requirements: ["CPU: Intel / AMD", "OS: Windows 10 / 11"],
     variants: [
-      keyVariant("crusader-r6", "day", "1 Day Key", adjustAmount(499, r6Multiplier), { stockLabel: "2 Keys Available" }),
-      adjustedUnavailableVariant("crusader-r6", "week", "1 Week Key", 1999, r6Multiplier),
-      adjustedUnavailableVariant("crusader-r6", "month", "1 Month Key", 3999, r6Multiplier),
+      keyVariant("crusader-r6", "day", "1 Day Key", adjustAmount(799, r6Multiplier), { stockLabel: "2 Keys Available" }),
+      adjustedUnavailableVariant("crusader-r6", "week", "1 Week Key", 2299, r6Multiplier),
+      adjustedUnavailableVariant("crusader-r6", "month", "1 Month Key", 4299, r6Multiplier),
     ],
   },
   {
     ...r6Meta,
     slug: "vega-r6-external",
     name: "Vega R6 External",
-    priceDisplay: `From ${money(adjustAmount(499, r6Multiplier))}`,
+    priceDisplay: `From ${money(adjustAmount(799, r6Multiplier))}`,
     summary:
       "External R6 access focused on smooth aim control, readable visuals, and capture-friendly use.",
     features: ["External build", "Aimbot suite", "Streamproof support"],
@@ -198,17 +198,17 @@ const productCatalog = [
     ],
     requirements: ["Windows 10", "Windows 11 21H2 - 25H2", "UEFI based motherboard"],
     variants: [
-      adjustedBlockedVariant("vega-r6-external", "day", "1 Day Key", 499, 1, r6Multiplier),
-      adjustedUnavailableVariant("vega-r6-external", "three-day", "3 Day Key", 999, r6Multiplier),
-      adjustedUnavailableVariant("vega-r6-external", "week", "1 Week Key", 2499, r6Multiplier),
-      adjustedUnavailableVariant("vega-r6-external", "month", "1 Month Key", 4999, r6Multiplier),
+      adjustedBlockedVariant("vega-r6-external", "day", "1 Day Key", 799, 1, r6Multiplier),
+      adjustedUnavailableVariant("vega-r6-external", "three-day", "3 Day Key", 1299, r6Multiplier),
+      adjustedUnavailableVariant("vega-r6-external", "week", "1 Week Key", 2799, r6Multiplier),
+      adjustedUnavailableVariant("vega-r6-external", "month", "1 Month Key", 5299, r6Multiplier),
     ],
   },
   {
     ...r6Meta,
     slug: "r6-frost",
     name: "R6 Frost",
-    priceDisplay: `From ${money(adjustAmount(999, r6Multiplier))}`,
+    priceDisplay: `From ${money(adjustAmount(1299, r6Multiplier))}`,
     summary:
       "High-control R6 option with clean enemy reads, world information, and smooth performance tuning.",
     features: ["Optimized ESP", "Aim control", "Streamable setup"],
@@ -229,16 +229,16 @@ const productCatalog = [
     ],
     requirements: ["Windows 10: 20H2 to 22H2", "Windows 11: 21H2 to 25H2"],
     variants: [
-      adjustedUnavailableVariant("r6-frost", "day", "1 Day Key", 999, r6Multiplier),
-      adjustedUnavailableVariant("r6-frost", "week", "1 Week Key", 2999, r6Multiplier),
-      adjustedUnavailableVariant("r6-frost", "month", "1 Month Key", 5500, r6Multiplier),
+      adjustedUnavailableVariant("r6-frost", "day", "1 Day Key", 1299, r6Multiplier),
+      adjustedUnavailableVariant("r6-frost", "week", "1 Week Key", 3299, r6Multiplier),
+      adjustedUnavailableVariant("r6-frost", "month", "1 Month Key", 5800, r6Multiplier),
     ],
   },
   {
     ...r6Meta,
     slug: "r6-ancient",
     name: "R6 Ancient",
-    priceDisplay: `From ${money(adjustAmount(349, r6Multiplier))}`,
+    priceDisplay: `From ${money(adjustAmount(649, r6Multiplier))}`,
     summary:
       "Config-heavy R6 access with aim options, visual tools, and operator ability controls.",
     features: ["Aim control", "Character abilities", "Full config"],
@@ -277,17 +277,17 @@ const productCatalog = [
       "Secure Boot disabled",
     ],
     variants: [
-      adjustedUnavailableVariant("r6-ancient", "day", "1 Day Key", 349, r6Multiplier),
-      adjustedUnavailableVariant("r6-ancient", "week", "7 Day Key", 1299, r6Multiplier),
-      adjustedUnavailableVariant("r6-ancient", "month", "30 Day Key", 2799, r6Multiplier),
-      adjustedUnavailableVariant("r6-ancient", "lifetime", "Lifetime Key", 29999, r6Multiplier),
+      adjustedUnavailableVariant("r6-ancient", "day", "1 Day Key", 649, r6Multiplier),
+      adjustedUnavailableVariant("r6-ancient", "week", "7 Day Key", 1599, r6Multiplier),
+      adjustedUnavailableVariant("r6-ancient", "month", "30 Day Key", 3099, r6Multiplier),
+      adjustedUnavailableVariant("r6-ancient", "lifetime", "Lifetime Key", 30299, r6Multiplier),
     ],
   },
   {
     ...r6Meta,
     slug: "r6-recoil-private",
     name: "R6 Recoil Private",
-    priceDisplay: `From ${money(adjustAmount(199, r6Multiplier))}`,
+    priceDisplay: `From ${money(adjustAmount(499, r6Multiplier))}`,
     summary:
       "Private R6 build centered on recoil control, basic aim help, and clean ESP visibility.",
     features: ["Private build", "ESP support", "Streamproof support"],
@@ -312,25 +312,25 @@ const productCatalog = [
     ],
     requirements: ["Windows 10", "Windows 11 21H2 - 25H2", "UEFI based motherboard"],
     variants: [
-      adjustedBlockedVariant("r6-recoil-private", "day", "1 Day Key", 199, 1, r6Multiplier),
-      adjustedUnavailableVariant("r6-recoil-private", "week", "7 Day Key", 599, r6Multiplier),
-      adjustedUnavailableVariant("r6-recoil-private", "month", "30 Day Key", 1999, r6Multiplier),
-      adjustedUnavailableVariant("r6-recoil-private", "lifetime", "Lifetime Key", 2999, r6Multiplier),
+      adjustedBlockedVariant("r6-recoil-private", "day", "1 Day Key", 499, 1, r6Multiplier),
+      adjustedUnavailableVariant("r6-recoil-private", "week", "7 Day Key", 899, r6Multiplier),
+      adjustedUnavailableVariant("r6-recoil-private", "month", "30 Day Key", 2299, r6Multiplier),
+      adjustedUnavailableVariant("r6-recoil-private", "lifetime", "Lifetime Key", 3299, r6Multiplier),
     ],
   },
   {
     ...r6Meta,
     slug: "exodus-r6",
     name: "Exodus R6",
-    priceDisplay: `From ${money(adjustAmount(299, r6Multiplier))}`,
+    priceDisplay: `From ${money(adjustAmount(599, r6Multiplier))}`,
     summary:
       "R6 access with aim assistance, visual support, and HWID-related setup coverage.",
     features: ["Aim support", "ESP support", "HWID support"],
     variants: [
-      adjustedBlockedVariant("exodus-r6", "day", "1 Day Key", 299, 1, r6Multiplier),
-      adjustedUnavailableVariant("exodus-r6", "three-day", "3 Day Key", 599, r6Multiplier),
-      adjustedUnavailableVariant("exodus-r6", "week", "7 Day Key", 1299, r6Multiplier),
-      adjustedUnavailableVariant("exodus-r6", "month", "30 Day Key", 1999, r6Multiplier),
+      adjustedBlockedVariant("exodus-r6", "day", "1 Day Key", 599, 1, r6Multiplier),
+      adjustedUnavailableVariant("exodus-r6", "three-day", "3 Day Key", 899, r6Multiplier),
+      adjustedUnavailableVariant("exodus-r6", "week", "7 Day Key", 1599, r6Multiplier),
+      adjustedUnavailableVariant("exodus-r6", "month", "30 Day Key", 2299, r6Multiplier),
     ],
     featureGroups: [
       {
@@ -357,7 +357,7 @@ const productCatalog = [
     ...r6Meta,
     slug: "invision-chams",
     name: "Invision Chams",
-    priceDisplay: `From ${money(adjustAmount(299, r6Multiplier))}`,
+    priceDisplay: `From ${money(adjustAmount(599, r6Multiplier))}`,
     summary:
       "Visual-only R6 enhancement aimed at better clarity, awareness, and faster target recognition.",
     features: ["Visual clarity", "Low impact", "NVIDIA only"],
@@ -380,9 +380,9 @@ const productCatalog = [
       "NVIDIA GPUs only",
     ],
     variants: [
-      adjustedUnavailableVariant("invision-chams", "day", "1 Day Key", 299, r6Multiplier),
-      adjustedUnavailableVariant("invision-chams", "week", "7 Day Key", 1299, r6Multiplier),
-      adjustedUnavailableVariant("invision-chams", "month", "1 Month Key", 2499, r6Multiplier),
+      adjustedUnavailableVariant("invision-chams", "day", "1 Day Key", 599, r6Multiplier),
+      adjustedUnavailableVariant("invision-chams", "week", "7 Day Key", 1599, r6Multiplier),
+      adjustedUnavailableVariant("invision-chams", "month", "1 Month Key", 2799, r6Multiplier),
     ],
   },
   {
