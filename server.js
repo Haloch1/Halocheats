@@ -693,7 +693,7 @@ async function loadSupportThreads(queryBuilder) {
 
   const messagesResult = await supabaseAdmin
     .from("support_messages")
-    .select("id, thread_id, sender_type, body, created_at")
+    .select("id, thread_id, sender_type, sender_name, body, created_at")
     .in("thread_id", threadIds)
     .order("created_at", { ascending: true });
 
@@ -708,6 +708,7 @@ async function loadSupportThreads(queryBuilder) {
     collection.push({
       id: message.id,
       senderType: message.sender_type,
+      senderName: message.sender_name || null,
       body: message.body,
       createdAt: message.created_at,
     });
@@ -2754,7 +2755,7 @@ app.post("/api/live-desk", async (req, res) => {
         sender_type: "user",
         body: details,
       })
-      .select("id, thread_id, sender_type, body, created_at")
+      .select("id, thread_id, sender_type, sender_name, body, created_at")
       .single();
 
     if (messageInsert.error) {
@@ -2894,7 +2895,7 @@ app.post("/api/live-desk/reply", async (req, res) => {
         sender_type: "user",
         body,
       })
-      .select("id, thread_id, sender_type, body, created_at")
+      .select("id, thread_id, sender_type, sender_name, body, created_at")
       .single();
 
     if (messageInsert.error) {
@@ -3389,14 +3390,16 @@ app.post("/api/admin/live-desk/reply", async (req, res) => {
       });
     }
 
+    const senderName = isOwner ? "Human (Owner)" : (staffAccess?.discordUsername || "Support");
     const messageInsert = await supabaseAdmin
       .from("support_messages")
       .insert({
         thread_id: threadId,
         sender_type: "admin",
+        sender_name: senderName,
         body,
       })
-      .select("id, thread_id, sender_type, body, created_at")
+      .select("id, thread_id, sender_type, sender_name, body, created_at")
       .single();
 
     if (messageInsert.error) {
