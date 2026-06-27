@@ -6,17 +6,20 @@
     <link rel="icon" href="/assets/favicon.ico" sizes="16x16 32x32 48x48 64x64" />
     <link rel="icon" type="image/png" href="/assets/hc-logo.png" />
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
-    <title>Status | Halo Cheats</title>
-    <meta name="description" content="Halo Cheats product status board." />
-    <meta property="og:title" content="Status | Halo Cheats" />
-    <meta property="og:description" content="Live status board for all Halo Cheats products." />
+    <title>Privacy Policy | Halo Cheats</title>
+    <meta
+      name="description"
+      content="Halo Cheats privacy policy — what data we collect, how we use it, and your rights."
+    />
+    <meta property="og:title" content="Privacy Policy | Halo Cheats" />
+    <meta property="og:description" content="Halo Cheats privacy policy and data practices." />
     <meta property="og:image" content="https://halocheats.cc/assets/hc-logo.png" />
-    <meta property="og:url" content="https://halocheats.cc/status/" />
+    <meta property="og:url" content="https://halocheats.cc/privacy/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Halo Cheats" />
     <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="Status | Halo Cheats" />
-    <meta name="twitter:description" content="Live status board for all Halo Cheats products." />
+    <meta name="twitter:title" content="Privacy Policy | Halo Cheats" />
+    <meta name="twitter:description" content="Halo Cheats privacy policy and data practices." />
     <meta name="twitter:image" content="https://halocheats.cc/assets/hc-logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -37,7 +40,7 @@
             <img src="../assets/hc-logo.png" alt="Halo Cheats logo" />
             <div>
               <strong>Halo Cheats</strong>
-              <span>Authorized Cheats</span>
+              <span>Privacy</span>
             </div>
           </a>
 
@@ -53,15 +56,64 @@
         </div>
       </header>
 
-      <main class="section">
+      <main class="section terms-shell">
         <div class="section-heading reveal" data-delay="10">
-          <p class="eyebrow">Status</p>
-          <h2>Product Status</h2>
-          <p>Live detection status for all supported products.</p>
+          <p class="eyebrow">Privacy Policy</p>
+          <h2>Your data, explained simply.</h2>
+          <p>
+            Last updated: June 27, 2026. This policy covers what we collect, why, and how you can control it.
+          </p>
         </div>
 
-        <section class="status-board reveal" data-delay="45" id="statusBoard">
-          <div class="status-loading" style="text-align:center;padding:40px;color:var(--muted);">Loading status...</div>
+        <section class="terms-card reveal" data-delay="40">
+          <h3>What we collect</h3>
+          <p>
+            When you create an account or make a purchase, we collect your email address, payment information (processed securely by Stripe or NOWPayments), and order history. We also store support messages you send through the live desk or Discord bot to provide better help. We do not sell or share your personal data with third parties for marketing.
+          </p>
+        </section>
+
+        <section class="terms-grid reveal" data-delay="70">
+          <article>
+            <h3>How we use it</h3>
+            <p>
+              Your email is used for account access and order confirmations. Payment details are handled entirely by our payment processors and never stored on our servers. Support conversations help us improve our AI bot and respond to your questions faster.
+            </p>
+          </article>
+          <article>
+            <h3>Cookies &amp; storage</h3>
+            <p>
+              We use essential cookies and browser storage to keep you signed in and remember your session. We do not use tracking cookies, analytics pixels, or third-party advertising scripts.
+            </p>
+          </article>
+          <article>
+            <h3>Data retention</h3>
+            <p>
+              Account data and order history are kept as long as your account is active. Support messages are retained to improve our service. You can request deletion of your account and associated data by contacting us through the live desk.
+            </p>
+          </article>
+        </section>
+
+        <section class="terms-grid reveal" data-delay="100">
+          <article>
+            <h3>Third-party services</h3>
+            <p>
+              We use Stripe and NOWPayments for payment processing, Supabase for authentication and data storage, and Discord for community support. Each service has its own privacy policy governing how they handle your data.
+            </p>
+          </article>
+          <article>
+            <h3>Your rights</h3>
+            <p>
+              You can access, update, or delete your account information at any time from your account page. To request a full data export or deletion, contact us through the support desk and we'll handle it promptly.
+            </p>
+          </article>
+          <article>
+            <h3>Contact</h3>
+            <p>
+              Questions about this policy? Reach out through the
+              <a href="/desk/">live desk</a> or join our
+              <a href="https://discord.gg/qHnjHFWwBv" target="_blank">Discord</a>.
+            </p>
+          </article>
         </section>
       </main>
 
@@ -88,55 +140,6 @@
     <script type="module">
       import { initReveal } from "../scripts/site.js";
       initReveal();
-
-      const board = document.getElementById("statusBoard");
-
-      function chipClass(status) {
-        const s = status.toLowerCase();
-        if (s === "undetected" || s === "online") return "member-chip-undetected";
-        if (s === "updating" || s === "maintenance") return "member-chip-updating";
-        if (s === "detected" || s === "offline") return "member-chip-detected";
-        if (s === "listed") return "member-chip-listed";
-        return "member-chip-listed";
-      }
-
-      async function loadStatus() {
-        try {
-          const res = await fetch("/api/status");
-          if (!res.ok) throw new Error("Failed to fetch");
-          const categories = await res.json();
-
-          if (!categories.length) {
-            board.innerHTML = `<p style="text-align:center;color:var(--muted);padding:40px;">No status data available right now.</p>`;
-            return;
-          }
-
-          board.innerHTML = categories.map(cat => {
-            const isWide = cat.products.length > 4;
-            return `
-              <article class="status-group${isWide ? " status-group-wide" : ""}">
-                <div class="member-panel-heading">
-                  <p class="eyebrow">${cat.name}</p>
-                </div>
-                <div class="member-list${isWide ? " status-list-split" : ""}">
-                  ${cat.products.map(p => `
-                    <div class="member-item status-item">
-                      <strong>${p.name}</strong>
-                      <span class="member-chip ${chipClass(p.status)}">${p.status}</span>
-                    </div>
-                  `).join("")}
-                </div>
-              </article>
-            `;
-          }).join("");
-
-          initReveal();
-        } catch (err) {
-          board.innerHTML = `<p style="text-align:center;color:var(--accent);padding:40px;">Could not load status. Try again later.</p>`;
-        }
-      }
-
-      loadStatus();
     </script>
   </body>
 </html>
