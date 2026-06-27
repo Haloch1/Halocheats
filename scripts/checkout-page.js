@@ -2,10 +2,18 @@ import { getCurrentSession } from "./supabase-client.js";
 
 const params = new URLSearchParams(window.location.search);
 const sessionId = params.get("session_id");
+const cryptoOrderId = params.get("order_id");
+const paymentMethod = params.get("method");
 const loading = document.getElementById("orderLoading");
 const content = document.getElementById("orderContent");
 
 async function verifyOrder() {
+  /* Crypto payments: IPN may not have fired yet, show processing message */
+  if (paymentMethod === "crypto" && cryptoOrderId) {
+    showCryptoProcessing(cryptoOrderId);
+    return;
+  }
+
   if (!sessionId) {
     showError("No session ID found. If you just completed a payment, check your account page.");
     return;
@@ -100,6 +108,29 @@ function showOrder(data) {
       }
     });
   });
+}
+
+function showCryptoProcessing(orderId) {
+  loading.style.display = "none";
+  content.style.display = "block";
+  content.innerHTML = `
+    <div class="order-result">
+      <p class="eyebrow">Crypto Payment</p>
+      <h2>Payment is being processed</h2>
+      <p class="order-subtitle">Your crypto payment is being confirmed on the blockchain. This can take a few minutes depending on network traffic.</p>
+      <div class="key-display">
+        <div class="key-label">What happens next</div>
+        <div style="color:var(--muted);">Once the payment is confirmed, your license key will appear on your account page and be sent via Discord DM.</div>
+      </div>
+      <div class="order-meta">
+        <span>Order ID: ${escapeHtml(orderId)}</span>
+      </div>
+      <div class="dashboard-actions" style="margin-top:24px;">
+        <a class="button button-primary" href="/account/">View Account</a>
+        <a class="button button-secondary" href="/products/">Back to Products</a>
+      </div>
+    </div>
+  `;
 }
 
 function showError(message) {
