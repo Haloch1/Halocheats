@@ -39,7 +39,7 @@ const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || "";
 const discordGuildId = process.env.DISCORD_GUILD_ID || "";
 const discordCustomerRoleId = process.env.DISCORD_CUSTOMER_ROLE_ID || "";
 const discordRestockChannelId = process.env.DISCORD_RESTOCK_CHANNEL_ID || "";
-const discordReviewChannelId = process.env.DISCORD_REVIEW_CHANNEL_ID || "";
+const discordReviewChannelId = process.env.DISCORD_REVIEW_CHANNEL_ID || "1517988360956809297";
 const discordVerifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || "";
 const discordUnverifiedRoleId = process.env.DISCORD_UNVERIFIED_ROLE_ID || "";
 const liveDeskCooldownMs = 45_000;
@@ -962,29 +962,47 @@ if (isConfiguredValue(discordBotToken)) {
     }
 
     try {
-      const moderation = await moderateReviewWithAI(reviewText, "General", 5);
+      // Use AI to moderate AND rate the review
+      const { approved, reason, rating } = await moderateAndRateReview(reviewText);
 
-      if (!moderation.approved) {
+      if (!approved) {
         await message.delete();
         await message.author.send(
           `**Halo Cheats - Review Not Approved**\n\n` +
-          `Your review was removed: ${moderation.reason || "Did not meet guidelines."}\n\n` +
+          `Your review was removed: ${reason || "Did not meet guidelines."}\n\n` +
           `Feel free to try again with a genuine review.`
         ).catch(() => {});
         return;
       }
 
-      // Delete the original message and repost as a rich embed
+      const stars = "★".repeat(rating) + "☆".repeat(5 - rating);
+      const username = message.author.displayName || message.author.username;
+
+      // Save to database
+      if (supabaseAdmin) {
+        await supabaseAdmin.from("reviews").insert({
+          product_slug: "discord-review",
+          rating,
+          review_text: reviewText,
+          discord_username: username,
+          discord_avatar: message.author.displayAvatarURL({ size: 128 }),
+          ai_approved: true,
+          status: "approved",
+          source: "discord",
+        });
+      }
+
+      // Delete original and repost as rich embed with star rating
       await message.delete();
       const channel = await discordBot.channels.fetch(discordReviewChannelId);
       if (channel) {
         await channel.send({
           embeds: [{
             author: {
-              name: message.author.displayName || message.author.username,
+              name: username,
               icon_url: message.author.displayAvatarURL({ size: 64 }),
             },
-            description: reviewText,
+            description: `${stars}\n\n${reviewText}`,
             color: 0xff2a2a,
             footer: { text: "Verified Review - Halo Cheats" },
             timestamp: new Date().toISOString(),
@@ -4356,19 +4374,78 @@ async function moderateReviewWithAI(reviewText, productName, rating) {
   }
 }
 
+/* ── Reviews: AI moderate + rate (for Discord channel reviews) ── */
+
+async function moderateAndRateReview(reviewText) {
+  if (!groqApiKey) {
+    return { approved: true, reason: null, rating: 5 };
+  }
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${groqApiKey}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        messages: [
+          {
+            role: "system",
+            content: `You are a review moderator for a gaming software store called Halo Cheats. You must do TWO things:
+1. Decide if the review is legitimate (reject trolling, spam, gibberish, hate speech, threats, or clearly fake reviews). Accept genuine opinions even if negative.
+2. Based on the sentiment and tone, assign a star rating from 1-5:
+   - 5 stars: very positive, loves the product
+   - 4 stars: mostly positive, minor complaints
+   - 3 stars: mixed feelings, decent but has issues
+   - 2 stars: mostly negative, significant problems
+   - 1 star: very negative, hates it
+Respond with ONLY valid JSON: {"approved": true, "rating": 3} or {"approved": false, "reason": "brief reason", "rating": 1}`,
+          },
+          {
+            role: "user",
+            content: `Review: "${reviewText}"`,
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 100,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("Groq API error:", response.status);
+      return { approved: true, reason: null, rating: 5 };
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "";
+    const parsed = JSON.parse(content);
+    const rating = Math.max(1, Math.min(5, parseInt(parsed.rating, 10) || 5));
+    return {
+      approved: Boolean(parsed.approved),
+      reason: parsed.reason || null,
+      rating,
+    };
+  } catch (error) {
+    console.error("Groq rate+moderate error:", error);
+    return { approved: true, reason: null, rating: 5 };
+  }
+}
+
 /* ── Reviews: public approved reviews ── */
 app.get("/api/reviews", async (_req, res) => {
   try {
     const result = await supabaseAdmin
       .from("reviews")
-      .select("id, user_id, product_slug, rating, review_text, created_at")
+      .select("id, user_id, product_slug, rating, review_text, created_at, discord_username, discord_avatar, source")
       .eq("status", "approved")
       .order("created_at", { ascending: false })
       .limit(100);
 
     if (result.error) throw result.error;
 
-    // Batch-fetch usernames for all unique user_ids
+    // Batch-fetch usernames for site users (skip Discord-sourced reviews)
     const userIds = [...new Set((result.data || []).map((r) => r.user_id).filter(Boolean))];
     const userMap = {};
     for (const uid of userIds) {
@@ -4383,15 +4460,17 @@ app.get("/api/reviews", async (_req, res) => {
       const product = products.find((p) =>
         p.variants.some((v) => v.inventorySlug === r.product_slug)
       );
-      const username = userMap[r.user_id] || null;
+      const username = r.discord_username || userMap[r.user_id] || null;
       return {
         id: r.id,
         product_slug: r.product_slug,
         rating: r.rating,
         review_text: r.review_text,
         created_at: r.created_at,
-        product_name: product?.name || r.product_slug,
+        product_name: r.source === "discord" ? "Halo Cheats" : (product?.name || r.product_slug),
         username,
+        avatar: r.discord_avatar || null,
+        source: r.source || "site",
       };
     });
 
