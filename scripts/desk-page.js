@@ -47,6 +47,16 @@ function escapeHtml(value) {
   });
 }
 
+function linkify(text) {
+  return text.replace(
+    /(https?:\/\/[^\s<]+|(?:halocheats\.cc|discord\.gg)\/[^\s<]*)/g,
+    (url) => {
+      const href = url.startsWith("http") ? url : `https://${url}`;
+      return `<a href="${href}" target="_blank" rel="noopener">${url}</a>`;
+    }
+  );
+}
+
 function renderThreadMessages(thread) {
   activeThreadId = thread.id;
   threadTitle.textContent = thread.subject;
@@ -60,7 +70,7 @@ function renderThreadMessages(thread) {
       (message) => `
         <article class="desk-message-bubble desk-message-bubble-${message.senderType === "bot" ? "admin" : message.senderType}">
           <span>${message.senderType === "admin" ? "Support" : message.senderType === "bot" ? "AI Support" : "You"}</span>
-          <p>${escapeHtml(message.body)}</p>
+          <p>${message.senderType === "bot" || message.senderType === "admin" ? linkify(escapeHtml(message.body)) : escapeHtml(message.body)}</p>
           <small>${formatTimestamp(message.createdAt)}</small>
         </article>
       `
