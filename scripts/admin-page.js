@@ -516,7 +516,7 @@ window.viewThread = function (threadId) {
       (m) => `
     <div class="thread-msg ${m.senderType === "admin" ? "thread-msg-admin" : "thread-msg-user"}">
       <div class="thread-msg-meta">
-        <span class="thread-msg-sender">${m.senderType === "admin" ? esc(m.senderName || "Support") : m.senderType === "bot" ? "AI Support" : esc(thread.contactName || "Customer")}</span>
+        <span class="thread-msg-sender">${m.senderType === "admin" ? "Support" : m.senderType === "bot" ? "AI Support" : esc(thread.contactName || "Customer")}</span>
         <span class="thread-msg-time">${fmtDate(m.createdAt)}</span>
       </div>
       <div class="thread-msg-body">${esc(m.body)}</div>
