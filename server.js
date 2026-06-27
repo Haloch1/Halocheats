@@ -1202,6 +1202,19 @@ if (isConfiguredValue(discordBotToken)) {
         const guild = interaction.guild;
         if (!guild) throw new Error("Not in a server");
 
+        // Resolve admin members (skip any that aren't in the guild)
+        const adminOverwrites = [];
+        for (const adminId of BOT_ADMINS) {
+          if (adminId === discordBot.user.id) continue; // already added separately
+          try {
+            await guild.members.fetch(adminId);
+            adminOverwrites.push({
+              id: adminId,
+              allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+            });
+          } catch {}
+        }
+
         // Create private channel under the tickets category
         const ticketNum = Date.now().toString(36).slice(-4);
         const channel = await guild.channels.create({
@@ -1212,11 +1225,7 @@ if (isConfiguredValue(discordBotToken)) {
             { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
             { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
             { id: discordBot.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ReadMessageHistory] },
-            // Allow all BOT_ADMINS to see the ticket
-            ...BOT_ADMINS.map(adminId => ({
-              id: adminId,
-              allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
-            })),
+            ...adminOverwrites,
           ],
         });
 
