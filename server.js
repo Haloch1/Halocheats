@@ -1355,31 +1355,68 @@ If answering, keep it to 1-2 sentences. Otherwise respond with EXACTLY "WAIT" an
 
         // Build transcript (oldest first)
         allMessages.reverse();
-        const transcript = allMessages
-          .filter(m => !m.author.bot || m.embeds.length > 0)
-          .map(m => {
-            const time = new Date(m.createdTimestamp).toISOString().replace("T", " ").slice(0, 19);
-            if (m.embeds.length > 0 && m.author.bot) {
-              const e = m.embeds[0];
-              return `[${time}] [TICKET INFO] ${e.title || ""}\n${e.description || ""}`;
-            }
-            return `[${time}] ${m.author.username}: ${m.content}`;
+
+        // Extract ticket info from the first embed
+        let ticketTopic = channel.name;
+        let ticketCreator = "Unknown";
+        let ticketCreatedAt = null;
+        const firstEmbed = allMessages.find(m => m.author.bot && m.embeds.length > 0 && m.embeds[0].title?.startsWith("Ticket:"));
+        if (firstEmbed) {
+          ticketTopic = firstEmbed.embeds[0].title.replace("Ticket: ", "");
+          const creatorField = firstEmbed.embeds[0].fields?.find(f => f.name === "Opened by");
+          if (creatorField) ticketCreator = creatorField.value;
+          ticketCreatedAt = firstEmbed.createdTimestamp;
+        }
+
+        // Format messages nicely
+        const transcriptLines = allMessages
+          .filter(m => {
+            if (m.content?.includes("Closing ticket and saving transcript")) return false;
+            if (m.author.bot && m.embeds.length > 0 && m.embeds[0].title?.startsWith("Ticket:")) return false;
+            return m.content || (m.author.bot && m.embeds.length > 0);
           })
-          .join("\n");
+          .map(m => {
+            const time = `<t:${Math.floor(m.createdTimestamp / 1000)}:t>`;
+            if (m.author.bot && m.embeds.length > 0) {
+              const e = m.embeds[0];
+              const label = e.footer?.text?.includes("AI") ? "🤖 AI Support" : "📋 System";
+              return `${time} ${label}\n> ${(e.description || "").split("\n").join("\n> ")}`;
+            }
+            const isStaff = BOT_ADMINS.includes(m.author.id) || m.member?.permissions?.has?.(PermissionFlagsBits.ManageChannels);
+            const icon = isStaff ? "🛡️" : "👤";
+            return `${time} ${icon} **${m.author.username}**\n${m.content}`;
+          })
+          .join("\n\n");
+
+        const messageCount = allMessages.filter(m => m.content && !m.author.bot).length;
+        const duration = ticketCreatedAt ? Math.floor((Date.now() - ticketCreatedAt) / 60000) : 0;
+        const durationText = duration < 60 ? `${duration}m` : `${Math.floor(duration / 60)}h ${duration % 60}m`;
 
         // Send transcript to the transcript channel
-        const transcriptEmbed = {
-          title: `Transcript: #${channel.name}`,
-          description: transcript.length > 4000 ? transcript.slice(0, 4000) + "\n... (truncated)" : transcript,
-          color: 0x6b7280,
-          timestamp: new Date().toISOString(),
-          footer: { text: `Closed by ${interaction.user.username}` },
-        };
-
         try {
           const transcriptChannel = await discordBot.channels.fetch("1520561826520105040");
           if (transcriptChannel) {
-            await transcriptChannel.send({ embeds: [transcriptEmbed] });
+            await transcriptChannel.send({
+              embeds: [
+                {
+                  title: `📝 Ticket Closed: ${ticketTopic}`,
+                  color: 0x7c3aed,
+                  fields: [
+                    { name: "Opened by", value: ticketCreator, inline: true },
+                    { name: "Closed by", value: `<@${interaction.user.id}>`, inline: true },
+                    { name: "Duration", value: durationText, inline: true },
+                    { name: "Messages", value: `${messageCount}`, inline: true },
+                  ],
+                  timestamp: new Date().toISOString(),
+                  footer: { text: "Halo Cheats Tickets" },
+                },
+                {
+                  title: "Conversation",
+                  description: transcriptLines.length > 4000 ? transcriptLines.slice(0, 4000) + "\n\n*... transcript truncated*" : transcriptLines || "*No messages*",
+                  color: 0x2b2d31,
+                },
+              ],
+            });
           }
         } catch {}
 
