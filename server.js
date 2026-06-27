@@ -961,17 +961,36 @@ if (isConfiguredValue(discordBotToken)) {
     }
 
     try {
-      // Check if this Discord user already left a review (by ID or username)
+      // Check if this Discord user already left a review
       if (supabaseAdmin) {
-        const { data: existing } = await supabaseAdmin
+        const { data: byId } = await supabaseAdmin
           .from("reviews")
           .select("id")
           .eq("source", "discord")
-          .or(`discord_user_id.eq.${message.author.id},discord_username.eq.${message.author.displayName || message.author.username}`)
+          .eq("discord_user_id", message.author.id)
           .limit(1)
           .maybeSingle();
 
-        if (existing) {
+        if (!byId) {
+          const { data: byName } = await supabaseAdmin
+            .from("reviews")
+            .select("id")
+            .eq("source", "discord")
+            .eq("discord_username", message.author.displayName || message.author.username)
+            .limit(1)
+            .maybeSingle();
+
+          if (byName) {
+            // Backfill the discord_user_id on the old record
+            await supabaseAdmin.from("reviews").update({ discord_user_id: message.author.id }).eq("id", byName.id);
+          }
+
+          var alreadyReviewed = !!byName;
+        } else {
+          var alreadyReviewed = true;
+        }
+
+        if (alreadyReviewed) {
           await message.delete();
           await message.author.send("You've already submitted a review. Only one review per user is allowed.").catch(() => {});
           return;
