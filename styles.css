@@ -4236,9 +4236,9 @@ a {
 }
 
 .review-stars {
-  color: #f5a623;
-  font-size: 1.1rem;
-  letter-spacing: 2px;
+  color: #ffd700;
+  font-size: 1.5rem;
+  letter-spacing: 3px;
   flex-shrink: 0;
 }
 
