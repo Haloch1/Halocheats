@@ -4056,12 +4056,12 @@ app.post("/api/create-checkout-session", async (req, res) => {
     });
   }
 
-  const stripePriceId = process.env[selection.variant.stripeEnvKey];
+  /* ── Build the display name for Stripe receipt ── */
+  const checkoutName = `${selection.product.name} - ${selection.variant.name}`;
+  const checkoutAmount = selection.variant.amount; // cents, already includes overrides
 
-  if (!isConfiguredValue(stripePriceId)) {
-    return res.status(500).json({
-      error: `Missing ${selection.variant.stripeEnvKey}. Add your Stripe Price ID in .env.`,
-    });
+  if (!checkoutAmount || checkoutAmount <= 0) {
+    return res.status(400).json({ error: "Invalid price for this variant." });
   }
 
   try {
@@ -4087,7 +4087,14 @@ app.post("/api/create-checkout-session", async (req, res) => {
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
-      line_items: [{ price: stripePriceId, quantity: 1 }],
+      line_items: [{
+        price_data: {
+          currency: "usd",
+          unit_amount: checkoutAmount,
+          product_data: { name: checkoutName },
+        },
+        quantity: 1,
+      }],
       customer_email: member.email || undefined,
       payment_intent_data: {
         receipt_email: member.email || undefined,
