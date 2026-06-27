@@ -44,6 +44,8 @@ const discordVerifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || "";
 const discordUnverifiedRoleId = process.env.DISCORD_UNVERIFIED_ROLE_ID || "";
 const OWNER_ID = "1327675126338293921";
 const BOT_ADMINS = [OWNER_ID, "1191199172448239639"];
+const nowpaymentsApiKey = process.env.NOWPAYMENTS_API_KEY || "";
+const nowpaymentsIpnKey = process.env.NOWPAYMENTS_IPN_KEY || "";
 const discordLowStockChannelId = "1517987031723282607";
 const liveDeskCooldownMs = 45_000;
 const liveDeskCooldownByIp = new Map();
@@ -2109,6 +2111,64 @@ app.post(
     }
   }
 );
+
+/* ── NOWPayments IPN webhook (crypto payments) ── */
+app.post("/api/nowpayments-ipn", express.json(), async (req, res) => {
+  if (!isConfiguredValue(nowpaymentsIpnKey)) {
+    return res.status(500).send("NOWPayments IPN is not configured.");
+  }
+
+  const signature = req.headers["x-nowpayments-sig"];
+  if (!signature) {
+    return res.status(400).send("Missing IPN signature.");
+  }
+
+  /* Verify HMAC-SHA512: sort keys alphabetically, stringify, hash */
+  const sortedBody = JSON.stringify(sortObjectKeys(req.body));
+  const expectedSig = crypto
+    .createHmac("sha512", nowpaymentsIpnKey)
+    .update(sortedBody)
+    .digest("hex");
+
+  if (signature !== expectedSig) {
+    console.error("[NOWPayments IPN] Signature mismatch");
+    return res.status(400).send("Invalid IPN signature.");
+  }
+
+  const { payment_status, order_id, payment_id } = req.body;
+  console.log(`[NOWPayments IPN] payment_id=${payment_id} status=${payment_status} order_id=${order_id}`);
+
+  if (payment_status !== "finished") {
+    /* Acknowledge non-final statuses without fulfilling */
+    return res.json({ received: true });
+  }
+
+  try {
+    /* Fulfill the order using the same flow as Stripe */
+    const mockSession = {
+      id: `crypto_${payment_id}`,
+      payment_intent: `np_${payment_id}`,
+      metadata: { orderId: order_id },
+    };
+    await syncPaidOrder(mockSession);
+    console.log(`[NOWPayments IPN] Order ${order_id} fulfilled`);
+    return res.json({ received: true });
+  } catch (error) {
+    console.error("[NOWPayments IPN] Fulfillment error:", error.message);
+    return res.status(500).send("Fulfillment failed.");
+  }
+});
+
+function sortObjectKeys(obj) {
+  if (typeof obj !== "object" || obj === null) return obj;
+  if (Array.isArray(obj)) return obj.map(sortObjectKeys);
+  return Object.keys(obj)
+    .sort()
+    .reduce((sorted, key) => {
+      sorted[key] = sortObjectKeys(obj[key]);
+      return sorted;
+    }, {});
+}
 
 app.use(express.json());
 
@@ -4205,6 +4265,111 @@ app.post("/api/create-checkout-session", async (req, res) => {
     return res.status(500).json({
       error: "Unable to create checkout session.",
     });
+  }
+});
+
+/* ── Crypto checkout via NOWPayments ── */
+app.post("/api/create-crypto-checkout", async (req, res) => {
+  if (process.env.PURCHASES_DISABLED === "true") {
+    return res.status(503).json({ error: "Purchases are temporarily unavailable. Please try again later." });
+  }
+
+  if (!isConfiguredValue(nowpaymentsApiKey)) {
+    return res.status(500).json({ error: "Crypto payments are not configured yet." });
+  }
+
+  let member;
+  try {
+    member = await getAuthenticatedUser(req, res);
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to verify your member session.",
+    });
+  }
+
+  const { productSlug, variantSlug } = req.body ?? {};
+  const selection = getProductSelection(productSlug, variantSlug);
+
+  if (!selection) {
+    return res.status(404).json({ error: "Product variant not found." });
+  }
+
+  if (selection.product.available === false) {
+    return res.status(409).json({ error: "This product is currently unavailable." });
+  }
+
+  if (selection.product.checkoutBlocked || selection.variant.checkoutBlocked) {
+    return res.status(409).json({
+      error:
+        selection.variant.checkoutError ||
+        selection.product.checkoutError ||
+        "Error occurred. Please open a ticket in Discord so support can help you with this item.",
+    });
+  }
+
+  const checkoutName = `${selection.product.name} - ${selection.variant.name}`;
+  const checkoutAmount = selection.variant.amount; // cents
+
+  if (!checkoutAmount || checkoutAmount <= 0) {
+    return res.status(400).json({ error: "Invalid price for this variant." });
+  }
+
+  try {
+    if (!supabaseAdmin) {
+      return res.status(500).json({ error: "Supabase server auth is not configured." });
+    }
+
+    const { data: order, error: orderInsertError } = await supabaseAdmin
+      .from("orders")
+      .insert({
+        user_id: member.id,
+        product_slug: selection.inventorySlug,
+        status: "pending",
+      })
+      .select("id")
+      .single();
+
+    if (orderInsertError) throw orderInsertError;
+
+    /* Call NOWPayments invoice API */
+    const invoiceRes = await fetch("https://api.nowpayments.io/v1/invoice", {
+      method: "POST",
+      headers: {
+        "x-api-key": nowpaymentsApiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        price_amount: checkoutAmount / 100, // convert cents to dollars
+        price_currency: "usd",
+        order_id: order.id,
+        order_description: checkoutName,
+        ipn_callback_url: `${baseUrl}/api/nowpayments-ipn`,
+        success_url: `${baseUrl}/checkout/success/?order_id=${order.id}&method=crypto`,
+        cancel_url: `${baseUrl}/checkout/cancel/`,
+      }),
+    });
+
+    const invoiceData = await invoiceRes.json();
+
+    if (!invoiceRes.ok || !invoiceData.invoice_url) {
+      console.error("[NOWPayments] Invoice creation failed:", invoiceData);
+      throw new Error("Failed to create crypto payment.");
+    }
+
+    /* Store the NOWPayments invoice reference */
+    const { error: orderUpdateError } = await supabaseAdmin
+      .from("orders")
+      .update({
+        stripe_session_id: `crypto_${invoiceData.id}`,
+      })
+      .eq("id", order.id);
+
+    if (orderUpdateError) throw orderUpdateError;
+
+    return res.json({ url: invoiceData.invoice_url });
+  } catch (error) {
+    console.error("[Crypto checkout]", error.message);
+    return res.status(500).json({ error: "Unable to create crypto checkout." });
   }
 });
 
