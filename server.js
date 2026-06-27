@@ -920,6 +920,9 @@ if (isConfiguredValue(discordBotToken)) {
           .setDescription("Make the bot say something (owner only)")
           .addStringOption(o => o.setName("message").setDescription("Message to send").setRequired(true))
           .addChannelOption(o => o.setName("channel").setDescription("Channel to send in (default: current)").setRequired(false)),
+        new SlashCommandBuilder()
+          .setName("reinvite-all")
+          .setDescription("Re-invite all authorized users to the server (owner only)"),
       ].map((c) => c.toJSON());
 
       if (discordGuildId) {
@@ -1536,6 +1539,83 @@ if (isConfiguredValue(discordBotToken)) {
         });
       } catch (err) {
         console.error("[Slash /usekey]", err.message);
+        return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
+      }
+    }
+
+    if (interaction.commandName === "reinvite-all") {
+      if (!BOT_ADMINS.includes(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
+      }
+      if (!discordGuildId || !supabaseAdmin) {
+        return interaction.reply({ embeds: [{ description: "Guild ID or Supabase not configured.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: userList } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+        const users = (userList?.users || []).filter(
+          (u) => u.user_metadata?.discord_id && u.user_metadata?.discord_access_token
+        );
+
+        let added = 0;
+        let failed = 0;
+        let skipped = 0;
+
+        for (const user of users) {
+          const discordId = user.user_metadata.discord_id;
+          let accessToken = user.user_metadata.discord_access_token;
+          const refreshToken = user.user_metadata.discord_refresh_token;
+
+          let joinRes = await fetch(`https://discord.com/api/v10/guilds/${discordGuildId}/members/${discordId}`, {
+            method: "PUT",
+            headers: { Authorization: `Bot ${discordBotToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ access_token: accessToken }),
+          });
+
+          // Already in the server
+          if (joinRes.status === 204) { skipped++; continue; }
+
+          // Token expired, try refresh
+          if (joinRes.status === 401 || joinRes.status === 403) {
+            const refreshed = await refreshDiscordToken(refreshToken);
+            if (refreshed?.access_token) {
+              accessToken = refreshed.access_token;
+              await supabaseAdmin.auth.admin.updateUserById(user.id, {
+                user_metadata: {
+                  discord_access_token: refreshed.access_token,
+                  discord_refresh_token: refreshed.refresh_token || refreshToken,
+                },
+              });
+              joinRes = await fetch(`https://discord.com/api/v10/guilds/${discordGuildId}/members/${discordId}`, {
+                method: "PUT",
+                headers: { Authorization: `Bot ${discordBotToken}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ access_token: accessToken }),
+              });
+            }
+          }
+
+          if (joinRes.ok || joinRes.status === 201) { added++; }
+          else { failed++; }
+
+          // Rate limit: small delay between calls
+          await new Promise((r) => setTimeout(r, 500));
+        }
+
+        return interaction.editReply({
+          embeds: [{
+            title: "Reinvite Complete",
+            color: 0x00c851,
+            description: [
+              `**${users.length}** users with Discord tokens found`,
+              `**${added}** newly added`,
+              `**${skipped}** already in server`,
+              `**${failed}** failed (expired tokens)`,
+            ].join("\n"),
+            footer: { text: "Halo Cheats" },
+          }],
+        });
+      } catch (err) {
+        console.error("[Slash /reinvite-all]", err.message);
         return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
       }
     }
