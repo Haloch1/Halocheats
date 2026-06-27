@@ -234,14 +234,22 @@ async function loadReviews() {
 
     reviewsList.innerHTML = reviews
       .map(
-        (r) => `
+        (r) => {
+          const isDiscord = r.source === "discord";
+          const avatarHtml = r.avatar
+            ? `<img class="review-avatar-img" src="${esc(r.avatar)}" alt="" />`
+            : `<span class="review-avatar">${esc((r.username || "?")[0].toUpperCase())}</span>`;
+          const verifiedLabel = isDiscord
+            ? "&#10003; Discord Review"
+            : "&#10003; Verified Purchase";
+          return `
         <div class="review-card">
           <div class="review-header">
             <div class="review-user">
-              <span class="review-avatar">${esc((r.username || "?")[0].toUpperCase())}</span>
+              ${avatarHtml}
               <div class="review-user-info">
                 <span class="review-username">${esc(r.username || "Anonymous")}</span>
-                <span class="review-verified">&#10003; Verified Purchase</span>
+                <span class="review-verified">${verifiedLabel}</span>
               </div>
             </div>
             <span class="review-stars">${stars(r.rating)}</span>
@@ -251,7 +259,8 @@ async function loadReviews() {
             <span class="review-product">${esc(r.product_name || r.product_slug)}</span>
             <span class="review-date">${fmtDate(r.created_at)}</span>
           </div>
-        </div>`
+        </div>`;
+        }
       )
       .join("");
   } catch {
