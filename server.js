@@ -8,7 +8,7 @@ import Stripe from "stripe";
 import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } from "discord.js";
+import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ChannelType, PermissionFlagsBits } from "discord.js";
 import { products } from "./data/products.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1189,94 +1189,143 @@ if (isConfiguredValue(discordBotToken)) {
       return interaction.showModal(modal);
     }
 
-    /* ── Handle modal submits ── */
+    /* ── Handle modal submits — create a private ticket channel ── */
     if (interaction.isModalSubmit && interaction.isModalSubmit() && interaction.customId === "ticket_modal") {
       await interaction.deferReply({ ephemeral: true });
 
       const topic = interaction.fields.getTextInputValue("ticket_topic");
       const details = interaction.fields.getTextInputValue("ticket_details");
-      const discordId = interaction.user.id;
-      const discordTag = interaction.user.tag || interaction.user.username;
+      const user = interaction.user;
+      const ticketCategoryId = "1517998282960277544";
 
       try {
-        let userId = null;
-        if (supabaseAdmin) {
-          const { data: users } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-          const linked = users?.users?.find(u => u.user_metadata?.discord_id === discordId);
-          if (linked) userId = linked.id;
-        }
+        const guild = interaction.guild;
+        if (!guild) throw new Error("Not in a server");
 
-        const threadInsert = await supabaseAdmin
-          .from("support_threads")
-          .insert({
-            user_id: userId,
-            contact_name: discordTag,
-            contact_method: `discord:${discordId}`,
-            subject: topic,
-            status: "open",
-            last_message_at: new Date().toISOString(),
-          })
-          .select("id, subject, status, created_at, contact_name")
-          .single();
-
-        if (threadInsert.error) throw threadInsert.error;
-
-        await supabaseAdmin.from("support_messages").insert({
-          thread_id: threadInsert.data.id,
-          sender_type: "user",
-          body: details,
+        // Create private channel under the tickets category
+        const ticketNum = Date.now().toString(36).slice(-4);
+        const channel = await guild.channels.create({
+          name: `ticket-${user.username}-${ticketNum}`,
+          type: ChannelType.GuildText,
+          parent: ticketCategoryId,
+          permissionOverwrites: [
+            { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+            { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+            { id: discordBot.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ReadMessageHistory] },
+            // Allow all BOT_ADMINS to see the ticket
+            ...BOT_ADMINS.map(adminId => ({
+              id: adminId,
+              allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+            })),
+          ],
         });
 
-        if (isConfiguredValue(discordWebhookUrl)) {
-          try {
-            await fetch(discordWebhookUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                embeds: [{
-                  title: `New Discord Ticket: ${topic}`,
-                  description: details.substring(0, 200) + (details.length > 200 ? "..." : ""),
-                  color: 0x7c3aed,
-                  fields: [
-                    { name: "From", value: discordTag, inline: true },
-                    { name: "Ticket ID", value: threadInsert.data.id, inline: true },
-                  ],
-                  timestamp: new Date().toISOString(),
-                  footer: { text: "Discord Ticket" },
-                }],
-              }),
-            });
-          } catch {}
-        }
+        // Post the ticket info as first message
+        await channel.send({
+          embeds: [{
+            title: `Ticket: ${topic}`,
+            description: details,
+            color: 0x7c3aed,
+            fields: [
+              { name: "Opened by", value: `<@${user.id}>`, inline: true },
+              { name: "Created", value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true },
+            ],
+            footer: { text: "Halo Cheats Support" },
+          }],
+          components: [{
+            type: 1,
+            components: [{
+              type: 2,
+              style: 4,
+              label: "Close Ticket",
+              customId: "close_ticket",
+              emoji: { name: "🔒" },
+            }],
+          }],
+        });
 
-        try {
-          const aiReply = await generateAILiveDeskReply(threadInsert.data, details, userId ? { userId } : {});
-          if (aiReply) {
-            await supabaseAdmin.from("support_messages").insert({
-              thread_id: threadInsert.data.id,
-              sender_type: "bot",
-              sender_name: "AI Support",
-              body: aiReply,
-            });
-            await supabaseAdmin.from("support_threads").update({
-              last_message_at: new Date().toISOString(),
-            }).eq("id", threadInsert.data.id);
-          }
-        } catch {}
+        await channel.send(`<@${user.id}> Welcome to your ticket! Staff will be with you shortly.`);
 
         return interaction.editReply({
           embeds: [{
             title: "Ticket Created",
-            description: `Your ticket **${topic}** has been submitted. Our team will respond soon.\n\nYou can track it at ${baseUrl}/desk/`,
+            description: `Your ticket has been opened in <#${channel.id}>`,
             color: 0x22c55e,
-            footer: { text: `Ticket ID: ${threadInsert.data.id}` },
           }],
         });
       } catch (err) {
         console.error("[Discord ticket]", err.message);
         return interaction.editReply({
-          embeds: [{ description: "Failed to create ticket. Try again or use the website desk.", color: 0xff4444 }],
+          embeds: [{ description: `Failed to create ticket: ${err.message}`, color: 0xff4444 }],
         });
+      }
+    }
+
+    /* ── Close ticket button — generate transcript and delete channel ── */
+    if (interaction.isButton && interaction.isButton() && interaction.customId === "close_ticket") {
+      // Only allow admins or the ticket creator to close
+      const isAdmin = BOT_ADMINS.includes(interaction.user.id) || (interaction.member && interaction.member.permissions.has(PermissionFlagsBits.ManageChannels));
+      // Check if user is the ticket creator (their name is in the channel name)
+      const isCreator = interaction.channel.name.includes(interaction.user.username.toLowerCase());
+
+      if (!isAdmin && !isCreator) {
+        return interaction.reply({ embeds: [{ description: "Only staff or the ticket creator can close this.", color: 0xff4444 }], ephemeral: true });
+      }
+
+      await interaction.reply({ embeds: [{ description: "Closing ticket and saving transcript...", color: 0xfbbf24 }] });
+
+      try {
+        const channel = interaction.channel;
+
+        // Fetch all messages for transcript
+        let allMessages = [];
+        let lastId = null;
+        while (true) {
+          const options = { limit: 100 };
+          if (lastId) options.before = lastId;
+          const batch = await channel.messages.fetch(options);
+          if (batch.size === 0) break;
+          allMessages.push(...batch.values());
+          lastId = batch.last().id;
+          if (batch.size < 100) break;
+        }
+
+        // Build transcript (oldest first)
+        allMessages.reverse();
+        const transcript = allMessages
+          .filter(m => !m.author.bot || m.embeds.length > 0)
+          .map(m => {
+            const time = new Date(m.createdTimestamp).toISOString().replace("T", " ").slice(0, 19);
+            if (m.embeds.length > 0 && m.author.bot) {
+              const e = m.embeds[0];
+              return `[${time}] [TICKET INFO] ${e.title || ""}\n${e.description || ""}`;
+            }
+            return `[${time}] ${m.author.username}: ${m.content}`;
+          })
+          .join("\n");
+
+        // Try to send transcript to a logs channel or DM the closer
+        const transcriptEmbed = {
+          title: `Transcript: #${channel.name}`,
+          description: transcript.length > 4000 ? transcript.slice(0, 4000) + "\n... (truncated)" : transcript,
+          color: 0x6b7280,
+          timestamp: new Date().toISOString(),
+          footer: { text: `Closed by ${interaction.user.username}` },
+        };
+
+        // DM transcript to the admin who closed it
+        try {
+          await interaction.user.send({ embeds: [transcriptEmbed] });
+        } catch {}
+
+        // Delete channel after short delay
+        setTimeout(async () => {
+          try { await channel.delete("Ticket closed"); } catch {}
+        }, 3000);
+
+      } catch (err) {
+        console.error("[Discord ticket close]", err.message);
+        await interaction.followUp({ embeds: [{ description: `Error closing: ${err.message}`, color: 0xff4444 }], ephemeral: true });
       }
     }
 
