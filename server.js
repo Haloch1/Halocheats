@@ -1305,12 +1305,21 @@ if (isConfiguredValue(discordBotToken)) {
         // Extract ticket info from the first embed
         let ticketTopic = channel.name;
         let ticketCreator = "Unknown";
+        let ticketCreatorUsername = "Unknown";
         let ticketCreatedAt = null;
         const firstEmbed = allMessages.find(m => m.author.bot && m.embeds.length > 0 && m.embeds[0].title?.startsWith("Ticket:"));
         if (firstEmbed) {
           ticketTopic = firstEmbed.embeds[0].title.replace("Ticket: ", "");
           const creatorField = firstEmbed.embeds[0].fields?.find(f => f.name === "Opened by");
-          if (creatorField) ticketCreator = creatorField.value;
+          if (creatorField) {
+            ticketCreator = creatorField.value;
+            // Resolve Discord ID to username
+            const creatorId = creatorField.value.replace(/<@|>/g, "");
+            try {
+              const creatorMember = await interaction.guild.members.fetch(creatorId);
+              ticketCreatorUsername = creatorMember.user.username;
+            } catch { ticketCreatorUsername = creatorId; }
+          }
           ticketCreatedAt = firstEmbed.createdTimestamp;
         }
 
@@ -1334,7 +1343,12 @@ if (isConfiguredValue(discordBotToken)) {
           })
           .join("\n\n");
 
-        const messageCount = allMessages.filter(m => m.content && !m.author.bot).length;
+        const msgDataForCount = allMessages.filter(m => {
+          if (m.content?.includes("Closing ticket and saving transcript")) return false;
+          if (m.author.bot && m.embeds.length > 0 && m.embeds[0].title?.startsWith("Ticket:")) return false;
+          return m.content || (m.author.bot && m.embeds.length > 0);
+        });
+        const messageCount = msgDataForCount.length;
         const duration = ticketCreatedAt ? Math.floor((Date.now() - ticketCreatedAt) / 60000) : 0;
         const durationText = duration < 60 ? `${duration}m` : `${Math.floor(duration / 60)}h ${duration % 60}m`;
 
@@ -1379,7 +1393,7 @@ if (isConfiguredValue(discordBotToken)) {
             await supabaseAdmin.from("ticket_transcripts").insert({
               channel_name: channel.name,
               topic: ticketTopic,
-              opened_by: ticketCreator.replace(/<@|>/g, ""),
+              opened_by: ticketCreatorUsername,
               closed_by: interaction.user.username,
               duration_minutes: duration,
               message_count: messageCount,
