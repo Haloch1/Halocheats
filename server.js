@@ -991,7 +991,7 @@ if (isConfiguredValue(discordBotToken)) {
         return;
       }
 
-      const stars = "★".repeat(rating) + "☆".repeat(5 - rating);
+      const stars = "⭐".repeat(rating);
       const username = message.author.displayName || message.author.username;
 
       // Save to database
