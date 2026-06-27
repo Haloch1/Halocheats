@@ -520,6 +520,63 @@
         border: 1px solid rgba(255, 80, 80, 0.2);
       }
 
+      .button-danger {
+        background: rgba(255, 68, 68, 0.15);
+        color: #ff6b6b;
+        border: 1px solid rgba(255, 68, 68, 0.3);
+      }
+      .button-danger:hover { background: rgba(255, 68, 68, 0.3); }
+
+      .product-edit-card {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 16px;
+      }
+      .product-edit-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+      .product-edit-header strong { font-size: 1.1rem; }
+      .product-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      .product-toggle input { cursor: pointer; }
+      .product-variants { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+      .product-variant-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        background: rgba(255,255,255,0.02);
+        border-radius: 8px;
+      }
+      .variant-name { font-size: 0.9rem; }
+      .variant-price-edit {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--muted);
+      }
+      .variant-price-edit input {
+        width: 80px;
+        padding: 4px 8px;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 6px;
+        color: #fff;
+        font-size: 0.9rem;
+      }
+      .product-save-btn { margin-top: 4px; }
+
       @media (max-width: 768px) {
         .revenue-grid {
           grid-template-columns: repeat(2, 1fr);
@@ -929,6 +986,14 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
               Status
             </button>
+            <button class="admin-nav-item" data-panel="reviews">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              Reviews
+            </button>
+            <button class="admin-nav-item" data-panel="products">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+              Products
+            </button>
           </nav>
         </aside>
 
@@ -1083,6 +1148,29 @@
               <p>Update cheat detection status shown on the status page.</p>
             </div>
             <div id="statusEditor"></div>
+          </div>
+
+          <!-- REVIEWS -->
+          <div class="admin-panel" id="panel-reviews">
+            <div class="admin-panel-header">
+              <h2>Reviews</h2>
+              <p>Manage customer reviews.</p>
+            </div>
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead><tr><th>User</th><th>Rating</th><th>Review</th><th>Source</th><th>Date</th><th></th></tr></thead>
+                <tbody id="reviewsBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- PRODUCTS -->
+          <div class="admin-panel" id="panel-products">
+            <div class="admin-panel-header">
+              <h2>Products</h2>
+              <p>Edit prices and availability.</p>
+            </div>
+            <div id="productsEditor"></div>
           </div>
         </div>
       </div>
