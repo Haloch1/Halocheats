@@ -985,7 +985,7 @@ if (isConfiguredValue(discordBotToken)) {
           : message.content.replace(new RegExp(`<@!?${discordBot.user.id}>`, "g"), "")
         ).trim();
 
-        if (!cleanMessage || cleanMessage.length < 5) return; // Ignore empty or too-short messages
+        if (!cleanMessage) return;
 
         await message.channel.sendTyping();
 
