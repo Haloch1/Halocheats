@@ -139,6 +139,8 @@ function loadPanel(name) {
     analytics: loadAnalytics,
     support: loadSupport,
     status: loadStatus,
+    reviews: loadAdminReviews,
+    products: loadProducts,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -740,6 +742,153 @@ async function processImportFile(file) {
     importResult.className = "import-result error";
     importResult.textContent = err.message;
     importResult.style.display = "block";
+  }
+}
+
+// ── Admin Reviews ──
+
+async function loadAdminReviews() {
+  try {
+    const data = await apiFetch("/api/admin/reviews");
+    const tbody = document.getElementById("reviewsBody");
+
+    if (!data.reviews.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No reviews yet.</td></tr>';
+      return;
+    }
+
+    const stars = (n) => "★".repeat(n) + "☆".repeat(5 - n);
+
+    tbody.innerHTML = data.reviews
+      .map(
+        (r) => `
+      <tr>
+        <td>${esc(r.username)}</td>
+        <td style="color:#ffd700;letter-spacing:1px;">${stars(r.rating)}</td>
+        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.review_text)}</td>
+        <td>${esc(r.source === "discord" ? "Discord" : "Site")}</td>
+        <td>${fmtDate(r.created_at)}</td>
+        <td><button class="button button-small button-danger" data-delete-review="${r.id}">Delete</button></td>
+      </tr>
+    `
+      )
+      .join("");
+
+    tbody.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-delete-review]");
+      if (!btn) return;
+      if (!confirm("Delete this review?")) return;
+      btn.disabled = true;
+      btn.textContent = "...";
+      try {
+        await apiFetch(`/api/admin/reviews/${btn.dataset.deleteReview}`, { method: "DELETE" });
+        loadAdminReviews();
+      } catch (err) {
+        alert(err.message);
+        btn.disabled = false;
+        btn.textContent = "Delete";
+      }
+    });
+  } catch (err) {
+    console.error("Reviews load error:", err);
+  }
+}
+
+// ── Admin Products ──
+
+async function loadProducts() {
+  try {
+    const data = await apiFetch("/api/admin/products");
+    const editor = document.getElementById("productsEditor");
+
+    if (!data.products.length) {
+      editor.innerHTML = '<div class="empty-state">No products found.</div>';
+      return;
+    }
+
+    editor.innerHTML = data.products
+      .map(
+        (p) => `
+      <div class="product-edit-card" data-slug="${esc(p.slug)}">
+        <div class="product-edit-header">
+          <strong>${esc(p.name)}</strong>
+          <label class="product-toggle">
+            <input type="checkbox" data-toggle-product="${esc(p.slug)}" ${p.available !== false ? "checked" : ""} />
+            <span>${p.available !== false ? "Active" : "Disabled"}</span>
+          </label>
+        </div>
+        <div class="product-variants">
+          ${(p.variants || [])
+            .map(
+              (v) => `
+            <div class="product-variant-row">
+              <span class="variant-name">${esc(v.name)}</span>
+              <div class="variant-price-edit">
+                <span>$</span>
+                <input type="number" step="0.01" min="0" value="${(v.amount / 100).toFixed(2)}"
+                  data-price-input data-product="${esc(p.slug)}" data-variant="${esc(v.slug)}" />
+              </div>
+            </div>
+          `
+            )
+            .join("")}
+        </div>
+        <button class="button button-primary button-small product-save-btn" data-save-product="${esc(p.slug)}">Save</button>
+      </div>
+    `
+      )
+      .join("");
+
+    editor.addEventListener("change", async (e) => {
+      const toggle = e.target.closest("[data-toggle-product]");
+      if (!toggle) return;
+      const slug = toggle.dataset.toggleProduct;
+      const available = toggle.checked;
+      toggle.nextElementSibling.textContent = available ? "Active" : "Disabled";
+      try {
+        await apiFetch("/api/admin/products", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slug, available }),
+        });
+      } catch (err) {
+        alert(err.message);
+        toggle.checked = !available;
+      }
+    });
+
+    editor.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-save-product]");
+      if (!btn) return;
+      const slug = btn.dataset.saveProduct;
+      const card = btn.closest(".product-edit-card");
+      const inputs = card.querySelectorAll("[data-price-input]");
+      const variants = [];
+      inputs.forEach((input) => {
+        variants.push({
+          slug: input.dataset.variant,
+          amount: Math.round(parseFloat(input.value) * 100),
+        });
+      });
+      btn.disabled = true;
+      btn.textContent = "Saving...";
+      try {
+        await apiFetch("/api/admin/products", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slug, variants }),
+        });
+        btn.textContent = "Saved!";
+        setTimeout(() => { btn.textContent = "Save"; btn.disabled = false; }, 1500);
+      } catch (err) {
+        alert(err.message);
+        btn.textContent = "Save";
+        btn.disabled = false;
+      }
+    });
+  } catch (err) {
+    console.error("Products load error:", err);
+    document.getElementById("productsEditor").innerHTML = '<div class="empty-state">Failed to load products.</div>';
   }
 }
 

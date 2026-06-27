@@ -2083,6 +2083,37 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+/* ── Sitemap ── */
+app.get("/sitemap.xml", (_req, res) => {
+  const base = "https://halocheats.cc";
+  const pages = [
+    { loc: "/", priority: "1.0", changefreq: "weekly" },
+    { loc: "/products/", priority: "0.9", changefreq: "weekly" },
+    { loc: "/reviews/", priority: "0.8", changefreq: "weekly" },
+    { loc: "/status/", priority: "0.7", changefreq: "daily" },
+    { loc: "/desk/", priority: "0.5", changefreq: "monthly" },
+    { loc: "/account/", priority: "0.5", changefreq: "monthly" },
+    { loc: "/terms/", priority: "0.3", changefreq: "yearly" },
+    { loc: "/instructions/", priority: "0.4", changefreq: "monthly" },
+  ];
+  const urls = pages
+    .map(
+      (p) =>
+        `  <url>\n    <loc>${base}${p.loc}</loc>\n    <changefreq>${p.changefreq}</changefreq>\n    <priority>${p.priority}</priority>\n  </url>`
+    )
+    .join("\n");
+  res.type("application/xml").send(
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`
+  );
+});
+
+/* ── Robots.txt ── */
+app.get("/robots.txt", (_req, res) => {
+  res.type("text/plain").send(
+    `User-agent: *\nAllow: /\nSitemap: https://halocheats.cc/sitemap.xml`
+  );
+});
+
 /* ── Product status from Supabase ── */
 app.get("/api/status", async (_req, res) => {
   try {
@@ -3509,6 +3540,45 @@ app.get("/api/admin/keys", async (req, res) => {
   }
 });
 
+/* ── Admin: products list + edit ── */
+app.get("/api/admin/products", async (req, res) => {
+  try {
+    await getAuthenticatedUser(req, res);
+    ensureOwnerAccess(req);
+    return res.json({ products: products.map((p) => ({ slug: p.slug, name: p.name, available: p.available !== false, variants: (p.variants || []).map((v) => ({ slug: v.slug, name: v.name, amount: v.amount })) })) });
+  } catch (error) {
+    return res.status(error.status || 500).json({ error: "Unable to load products." });
+  }
+});
+
+app.patch("/api/admin/products", async (req, res) => {
+  try {
+    await getAuthenticatedUser(req, res);
+    ensureOwnerAccess(req);
+
+    const { slug, available, variants } = req.body;
+    const product = products.find((p) => p.slug === slug);
+    if (!product) return res.status(404).json({ error: "Product not found." });
+
+    if (typeof available === "boolean") {
+      product.available = available;
+    }
+
+    if (Array.isArray(variants)) {
+      for (const update of variants) {
+        const variant = product.variants?.find((v) => v.slug === update.slug);
+        if (variant && typeof update.amount === "number" && update.amount >= 0) {
+          variant.amount = update.amount;
+        }
+      }
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(error.status || 500).json({ error: "Unable to update product." });
+  }
+});
+
 /* ── Admin: revenue stats ── */
 app.get("/api/admin/revenue", async (req, res) => {
   try {
@@ -4563,6 +4633,60 @@ app.get("/api/reviews", async (_req, res) => {
     return res.json({ reviews });
   } catch (error) {
     return res.status(500).json({ error: "Unable to load reviews." });
+  }
+});
+
+/* ── Reviews: admin list all ── */
+app.get("/api/admin/reviews", async (req, res) => {
+  try {
+    await getAuthenticatedUser(req, res);
+    ensureOwnerAccess(req);
+
+    const result = await supabaseAdmin
+      .from("reviews")
+      .select("id, user_id, product_slug, rating, review_text, status, created_at, discord_username, source")
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (result.error) throw result.error;
+
+    const userIds = [...new Set((result.data || []).map((r) => r.user_id).filter(Boolean))];
+    const userMap = {};
+    for (const uid of userIds) {
+      try {
+        const { data: userData } = await supabaseAdmin.auth.admin.getUserById(uid);
+        userMap[uid] = userData?.user?.user_metadata?.username || userData?.user?.email || uid;
+      } catch {}
+    }
+
+    const reviews = (result.data || []).map((r) => ({
+      id: r.id,
+      username: r.discord_username || userMap[r.user_id] || "Unknown",
+      rating: r.rating,
+      review_text: r.review_text,
+      status: r.status,
+      source: r.source || "site",
+      created_at: r.created_at,
+    }));
+
+    return res.json({ reviews });
+  } catch (error) {
+    return res.status(error.status || 500).json({ error: "Unable to load reviews." });
+  }
+});
+
+/* ── Reviews: admin delete ── */
+app.delete("/api/admin/reviews/:id", async (req, res) => {
+  try {
+    await getAuthenticatedUser(req, res);
+    ensureOwnerAccess(req);
+
+    const { error } = await supabaseAdmin.from("reviews").delete().eq("id", req.params.id);
+    if (error) throw error;
+
+    return res.json({ success: true });
+  } catch (error) {
+    return res.status(error.status || 500).json({ error: "Unable to delete review." });
   }
 });
 
