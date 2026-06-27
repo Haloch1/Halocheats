@@ -484,7 +484,7 @@ function renderSupportList() {
 
   if (!supportThreads.length) {
     tbody.innerHTML =
-      '<tr><td colspan="4" class="empty-state">No support threads.</td></tr>';
+      '<tr><td colspan="5" class="empty-state">No support threads.</td></tr>';
     return;
   }
 
@@ -496,6 +496,7 @@ function renderSupportList() {
       <td>${esc(t.contactName || "-")} ${t.contactMethod ? `(${esc(t.contactMethod)})` : ""}</td>
       <td>${chip(t.status)}</td>
       <td>${fmtDate(t.lastMessageAt || t.updatedAt)}</td>
+      <td><button class="btn-danger-sm" data-delete-thread="${esc(t.id)}" onclick="event.stopPropagation()">Delete</button></td>
     </tr>
   `
     )
@@ -515,7 +516,7 @@ window.viewThread = function (threadId) {
       (m) => `
     <div class="thread-msg ${m.senderType === "admin" ? "thread-msg-admin" : "thread-msg-user"}">
       <div class="thread-msg-meta">
-        <span class="thread-msg-sender">${m.senderType === "admin" ? "Admin" : esc(thread.contactName || "Customer")}</span>
+        <span class="thread-msg-sender">${m.senderType === "admin" ? esc(m.senderName || "Support") : m.senderType === "bot" ? "AI Support" : esc(thread.contactName || "Customer")}</span>
         <span class="thread-msg-time">${fmtDate(m.createdAt)}</span>
       </div>
       <div class="thread-msg-body">${esc(m.body)}</div>
@@ -575,6 +576,24 @@ window.sendReply = async function (threadId) {
     }
   } catch (err) {
     alert("Failed to send: " + err.message);
+  }
+};
+
+window.deleteThread = async function (threadId) {
+  const thread = supportThreads.find((t) => t.id === threadId);
+  const label = thread?.subject || "this ticket";
+  if (!confirm(`Delete "${label}"? This cannot be undone.`)) return;
+
+  try {
+    const res = await fetch(`/api/admin/live-desk/${encodeURIComponent(threadId)}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+    const payload = await res.json();
+    if (!res.ok) throw new Error(payload.error || "Delete failed");
+    await loadSupport();
+  } catch (err) {
+    alert("Failed to delete: " + err.message);
   }
 };
 
@@ -649,6 +668,9 @@ document.addEventListener("click", (e) => {
 
   const closeBtn = e.target.closest("[data-close-modal]");
   if (closeBtn) { closeModal(); return; }
+
+  const deleteThreadBtn = e.target.closest("[data-delete-thread]");
+  if (deleteThreadBtn) { deleteThread(deleteThreadBtn.dataset.deleteThread); return; }
 
   const threadRow = e.target.closest("[data-view-thread]");
   if (threadRow) { viewThread(threadRow.dataset.viewThread); return; }

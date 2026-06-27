@@ -272,6 +272,26 @@
         color: #fff;
       }
 
+      .btn-danger-sm {
+        background: rgba(255, 60, 60, 0.15);
+        color: #ff4d4d;
+        border: 1px solid rgba(255, 60, 60, 0.25);
+        padding: 4px 10px;
+        font-size: 0.7rem;
+        border-radius: 6px;
+        cursor: pointer;
+        font-family: inherit;
+        font-weight: 600;
+        transition: all 0.15s;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+
+      .btn-danger-sm:hover {
+        background: rgba(255, 60, 60, 0.3);
+        color: #ff6b6b;
+      }
+
       /* ── Toolbar ── */
       .admin-toolbar {
         display: flex;
@@ -1134,7 +1154,7 @@
               <div id="supportListView">
                 <div class="admin-table-wrap">
                   <table class="admin-table">
-                    <thead><tr><th>Subject</th><th>Contact</th><th>Status</th><th>Last Activity</th></tr></thead>
+                    <thead><tr><th>Subject</th><th>Contact</th><th>Status</th><th>Last Activity</th><th></th></tr></thead>
                     <tbody id="supportBody"></tbody>
                   </table>
                 </div>
