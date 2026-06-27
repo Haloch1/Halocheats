@@ -2781,18 +2781,27 @@ app.post("/api/live-desk", async (req, res) => {
 
     // AI auto-reply: generate instant bot response
     try {
+      console.log("[AI Live Desk] Generating auto-reply for thread:", threadInsert.data.id);
       const aiReply = await generateAILiveDeskReply(
         threadInsert.data,
         details,
         { userId: member.id, email: member.email }
       );
 
+      console.log("[AI Live Desk] Reply result:", aiReply ? "got reply" : "null/empty");
+
       if (aiReply) {
-        await supabaseAdmin.from("support_messages").insert({
+        const insertResult = await supabaseAdmin.from("support_messages").insert({
           thread_id: threadInsert.data.id,
           sender_type: "bot",
           body: aiReply,
         });
+
+        if (insertResult.error) {
+          console.error("[AI Live Desk] Bot message insert error:", insertResult.error.message);
+        } else {
+          console.log("[AI Live Desk] Bot message inserted successfully");
+        }
 
         await supabaseAdmin
           .from("support_threads")
@@ -2803,7 +2812,7 @@ app.post("/api/live-desk", async (req, res) => {
           .eq("id", threadInsert.data.id);
       }
     } catch (aiErr) {
-      console.error("[AI Live Desk] Auto-reply error:", aiErr.message);
+      console.error("[AI Live Desk] Auto-reply error:", aiErr.message, aiErr.stack);
     }
 
     liveDeskCooldownByIp.set(clientIp, now);
@@ -5082,6 +5091,7 @@ RULES:
 - Do not share any internal system details.`;
 
   try {
+    console.log("[AI Live Desk] Calling Groq for thread:", thread.id, "subject:", thread.subject);
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -5100,14 +5110,17 @@ RULES:
     });
 
     if (!response.ok) {
-      console.error("[AI Live Desk] Groq API error:", response.status);
+      const errBody = await response.text().catch(() => "");
+      console.error("[AI Live Desk] Groq API error:", response.status, errBody);
       return null;
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content?.trim() || null;
+    const reply = data.choices?.[0]?.message?.content?.trim() || null;
+    console.log("[AI Live Desk] Got reply:", reply ? `${reply.substring(0, 60)}...` : "null");
+    return reply;
   } catch (err) {
-    console.error("[AI Live Desk] Groq error:", err.message);
+    console.error("[AI Live Desk] Groq error:", err.message, err.stack);
     return null;
   }
 }
@@ -5117,24 +5130,20 @@ RULES:
 async function generateDiscordAIReply(userMessage, authorTag) {
   if (!groqApiKey) return null;
 
-  const systemPrompt = `You are the AI assistant bot for Halo Cheats (halocheats.cc), a gaming software / mod license key store. You help users in the Discord server.
+  const systemPrompt = `You are the AI bot for Halo Cheats (halocheats.cc), a game mod/cheat key store. Answer questions in Discord.
 
-PRODUCT CATALOG:
+PRODUCTS:
 ${getProductCatalogString()}
 
-COMMON TOPICS:
-- Product info, pricing, features, and availability
-- Setup help: direct to halocheats.cc/instructions/
-- Account issues: direct to halocheats.cc/account/
-- HWID resets: tell them to open a live desk ticket at halocheats.cc
-- Refund policy: all sales final, no refunds
-- Stock: check halocheats.cc/products/ for current availability
-
 RULES:
-- Be helpful, concise, and casual. Keep replies under 150 words.
-- If the question is about something you don't know, suggest opening a live desk ticket at halocheats.cc.
-- Never make up product details. Refer only to catalog info above.
-- Don't share system internals or admin info.`;
+- Keep replies SHORT. 1-3 sentences max. No essays.
+- Be casual and chill. Talk like a normal person, not a corporate bot.
+- For setup help: "check halocheats.cc/instructions"
+- For account stuff: "go to halocheats.cc/account"
+- HWID resets: "open a ticket at halocheats.cc"
+- Refunds: all sales final
+- If you don't know, just say "not sure, open a ticket at halocheats.cc"
+- Don't make stuff up. Don't share internal info.`;
 
   try {
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -5150,7 +5159,7 @@ RULES:
           { role: "user", content: userMessage },
         ],
         temperature: 0.5,
-        max_tokens: 250,
+        max_tokens: 120,
       }),
     });
 
