@@ -2135,12 +2135,20 @@ app.post("/api/nowpayments-ipn", express.json(), async (req, res) => {
     return res.status(400).send("Invalid IPN signature.");
   }
 
-  const { payment_status, order_id, payment_id } = req.body;
-  console.log(`[NOWPayments IPN] payment_id=${payment_id} status=${payment_status} order_id=${order_id}`);
+  const { payment_status, order_id, payment_id, actually_paid, pay_amount, pay_currency, price_amount, price_currency } = req.body;
+  console.log(`[NOWPayments IPN] payment_id=${payment_id} status=${payment_status} order_id=${order_id} paid=${actually_paid} ${pay_currency} (expected ${pay_amount} ${pay_currency}, price ${price_amount} ${price_currency})`);
 
   if (payment_status !== "finished") {
     /* Acknowledge non-final statuses without fulfilling */
+    if (payment_status === "partially_paid") {
+      console.warn(`[NOWPayments IPN] Partial payment for order ${order_id} - customer underpaid`);
+    }
     return res.json({ received: true });
+  }
+
+  if (!order_id) {
+    console.error("[NOWPayments IPN] No order_id in IPN body, cannot fulfill");
+    return res.status(400).send("Missing order_id.");
   }
 
   try {
@@ -2151,7 +2159,7 @@ app.post("/api/nowpayments-ipn", express.json(), async (req, res) => {
       metadata: { orderId: order_id },
     };
     await syncPaidOrder(mockSession);
-    console.log(`[NOWPayments IPN] Order ${order_id} fulfilled`);
+    console.log(`[NOWPayments IPN] Order ${order_id} fulfilled successfully`);
     return res.json({ received: true });
   } catch (error) {
     console.error("[NOWPayments IPN] Fulfillment error:", error.message);
