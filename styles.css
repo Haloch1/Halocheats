@@ -3448,6 +3448,12 @@ a {
   .variant-art {
     border-right: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    min-height: auto;
+    aspect-ratio: 1;
+  }
+
+  .variant-product-image {
+    object-position: center center;
   }
 
   .variant-details {
