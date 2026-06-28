@@ -714,20 +714,6 @@ a {
   animation: badge-pulse 2.4s ease-in-out infinite;
 }
 
-.product-card-image {
-  display: flex;
-  justify-content: center;
-  margin: -28px -28px 16px -28px;
-  padding: 20px;
-  background: rgba(0, 0, 0, 0.2);
-}
-
-.product-card-image img {
-  width: 160px;
-  height: 160px;
-  object-fit: contain;
-}
-
 .product-top {
   display: flex;
   align-items: center;
@@ -2441,173 +2427,13 @@ a {
   bottom: -100px;
 }
 
-.variant-box-scene {
+.variant-product-image {
   position: relative;
   z-index: 1;
-  width: min(88%, 390px);
-  min-height: 340px;
-  perspective: 900px;
+  width: min(80%, 340px);
+  height: auto;
+  object-fit: contain;
   filter: drop-shadow(0 30px 44px rgba(0, 0, 0, 0.55));
-}
-
-.variant-box-scene::after {
-  content: "";
-  position: absolute;
-  left: 18%;
-  right: 6%;
-  bottom: -22px;
-  height: 34px;
-  border-radius: 50%;
-  background: radial-gradient(ellipse, rgba(255, 45, 45, 0.42), transparent 68%);
-  filter: blur(10px);
-}
-
-.variant-box-side,
-.variant-box-front {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-}
-
-.variant-box-side {
-  left: 0;
-  width: 92px;
-  border-radius: 22px 0 0 22px;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.08), transparent 30%),
-    linear-gradient(180deg, #17171b, #050506);
-  transform: skewY(-7deg);
-  transform-origin: right center;
-  box-shadow: inset -16px 0 28px rgba(0, 0, 0, 0.48);
-}
-
-.variant-box-side span,
-.variant-box-side strong {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%) rotate(-90deg);
-  color: rgba(255, 255, 255, 0.72);
-  font-family: "Oxanium", sans-serif;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.variant-box-side span {
-  top: 74px;
-  font-size: 0.8rem;
-}
-
-.variant-box-side strong {
-  bottom: 92px;
-  font-size: 1.1rem;
-}
-
-.variant-box-front {
-  left: 66px;
-  right: 0;
-  border-radius: 8px 24px 24px 8px;
-  background:
-    radial-gradient(circle at 54% 62%, rgba(255, 46, 46, 0.36), transparent 30%),
-    radial-gradient(circle at top right, rgba(255, 255, 255, 0.12), transparent 28%),
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(145deg, #232329, #08080a 62%, #151519);
-  background-size: auto, auto, 34px 34px, 34px 34px, auto;
-  box-shadow:
-    inset 18px 0 22px rgba(0, 0, 0, 0.26),
-    22px 22px 0 rgba(130, 8, 8, 0.75);
-}
-
-.variant-box-front::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.18) 0 13%, transparent 14% 70%, rgba(255, 42, 42, 0.26) 72%),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.48) 62%, rgba(0, 0, 0, 0.82)),
-    radial-gradient(circle at 50% 48%, rgba(255, 40, 40, 0.18), transparent 38%);
-  pointer-events: none;
-  z-index: 1;
-}
-
-.variant-product-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.9;
-  filter: saturate(0.82) contrast(1.08) brightness(0.78);
-  transform: scale(1.03);
-}
-
-.variant-box-brand,
-.variant-box-title,
-.variant-box-footer {
-  position: absolute;
-  z-index: 2;
-}
-
-.variant-box-brand {
-  top: 28px;
-  left: 26px;
-  right: 22px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.variant-box-brand strong {
-  font-family: "Oxanium", sans-serif;
-  font-size: clamp(1.6rem, 3vw, 2.25rem);
-  line-height: 0.9;
-}
-
-.variant-box-brand strong span,
-.variant-box-title strong {
-  color: #ff3030;
-}
-
-.variant-box-title {
-  right: 24px;
-  bottom: 76px;
-  display: grid;
-  justify-items: end;
-  gap: 2px;
-  text-align: right;
-}
-
-.variant-box-title span {
-  color: rgba(255, 255, 255, 0.9);
-  font-family: "Oxanium", sans-serif;
-  font-size: clamp(2rem, 5vw, 3.2rem);
-  font-weight: 900;
-  line-height: 0.9;
-}
-
-.variant-box-title strong {
-  max-width: 10ch;
-  font-family: "Oxanium", sans-serif;
-  font-size: clamp(1.35rem, 3vw, 2.15rem);
-  line-height: 0.9;
-}
-
-.variant-box-footer {
-  left: 24px;
-  right: 24px;
-  bottom: 22px;
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: #ffd5d5;
-  font-size: 0.65rem;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .variant-details h3 {
@@ -3658,42 +3484,8 @@ a {
     min-height: 250px;
   }
 
-  .variant-box-scene {
-    width: min(92%, 310px);
-    min-height: 260px;
-  }
-
-  .variant-box-side {
-    width: 72px;
-  }
-
-  .variant-box-front {
-    left: 50px;
-    box-shadow:
-      inset 14px 0 18px rgba(0, 0, 0, 0.26),
-      14px 14px 0 rgba(130, 8, 8, 0.75);
-  }
-
-  .variant-box-brand {
-    top: 20px;
-    left: 18px;
-    right: 16px;
-  }
-
   .variant-product-image {
-    object-position: center;
-  }
-
-  .variant-box-title {
-    right: 18px;
-    bottom: 58px;
-  }
-
-  .variant-box-footer {
-    left: 18px;
-    right: 18px;
-    bottom: 16px;
-    font-size: 0.56rem;
+    width: min(85%, 300px);
   }
 
   .variant-actions {
@@ -3860,29 +3652,8 @@ a {
     min-height: 220px;
   }
 
-  .variant-box-scene {
-    width: min(96%, 270px);
-    min-height: 228px;
-  }
-
-  .variant-box-side {
-    width: 58px;
-  }
-
-  .variant-box-front {
-    left: 42px;
-  }
-
-  .variant-box-brand strong {
-    font-size: 1.25rem;
-  }
-
-  .variant-box-title strong {
-    font-size: 1.12rem;
-  }
-
-  .variant-box-footer {
-    display: none;
+  .variant-product-image {
+    width: min(90%, 260px);
   }
 
   .variant-option {
