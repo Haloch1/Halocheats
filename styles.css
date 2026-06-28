@@ -2390,12 +2390,20 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 50, 50, 0.18), transparent 50%),
+    rgba(10, 10, 14, 0.85);
+  padding: 24px;
+  overflow: hidden;
 }
 
 .variant-product-image {
   width: 100%;
+  max-width: 420px;
   height: auto;
   display: block;
+  filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.6));
 }
 
 .variant-details h3 {
