@@ -2430,7 +2430,7 @@ a {
 .variant-product-image {
   position: relative;
   z-index: 1;
-  width: min(80%, 340px);
+  width: min(92%, 520px);
   height: auto;
   object-fit: contain;
   filter: drop-shadow(0 30px 44px rgba(0, 0, 0, 0.55));
