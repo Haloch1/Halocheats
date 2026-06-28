@@ -305,11 +305,7 @@ function renderProductCard(product, index) {
     product.featured ? " featured" : ""
   }`;
   item.dataset.delay = String(30 + (index % 4) * 35);
-  const artSrc = productImageSrc(product);
   item.innerHTML = `
-    <div class="product-card-image">
-      <img src="${artSrc}" alt="${escapeHtml(product.name)}" />
-    </div>
     <div class="product-top">
       <span class="product-status ${product.featured ? "pulse" : statusClass}">${escapeHtml(product.badge)}</span>
       <span class="product-tier">${escapeHtml(product.vendor)}</span>
@@ -347,26 +343,7 @@ function ensureVariantModal() {
     <section class="variant-dialog" role="dialog" aria-modal="true" aria-labelledby="variant-title">
       <button class="variant-close" type="button" data-variant-close aria-label="Close variant selector">&times;</button>
       <div class="variant-art">
-        <div class="variant-box-scene">
-          <div class="variant-box-side">
-            <span>Halo</span>
-            <strong>Cheats</strong>
-          </div>
-          <div class="variant-box-front">
-            <img class="variant-product-image" data-variant-product-image alt="" />
-            <div class="variant-box-brand">
-              <strong>Halo<span>Cheats</span></strong>
-            </div>
-            <div class="variant-box-title">
-              <span data-variant-art-category>R6</span>
-              <strong data-variant-art-title>Access Key</strong>
-            </div>
-            <div class="variant-box-footer">
-              <span>Instant delivery</span>
-              <span>Global compatibility</span>
-            </div>
-          </div>
-        </div>
+        <img class="variant-product-image" data-variant-product-image alt="" />
       </div>
       <div class="variant-details">
         <p class="eyebrow">Product view</p>
@@ -628,8 +605,6 @@ function openVariantModal(product) {
   const modal = ensureVariantModal();
   resetVariantControls(modal);
   modal.querySelector("[data-variant-title]").textContent = product.name;
-  modal.querySelector("[data-variant-art-title]").textContent = product.name;
-  modal.querySelector("[data-variant-art-category]").textContent = product.category || product.game || "Product";
   modal.querySelector("[data-variant-status]").textContent = product.badge;
   modal.querySelector("[data-variant-summary]").textContent = product.summary;
   modal.querySelector("[data-detail-about]").textContent = product.summary;
