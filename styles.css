@@ -2387,55 +2387,15 @@ a {
 }
 
 .variant-art {
-  position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 560px;
-  padding: 32px;
-  border-radius: 24px;
-  background:
-    radial-gradient(circle at 24% 18%, rgba(255, 72, 72, 0.34), transparent 32%),
-    linear-gradient(135deg, rgba(255, 45, 45, 0.18), rgba(20, 20, 24, 0.72)),
-    rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  overflow: hidden;
-}
-
-.variant-art::before,
-.variant-art::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-}
-
-.variant-art::before {
-  inset: 22px;
-  border-radius: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.026) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.026) 1px, transparent 1px);
-  background-size: 38px 38px;
-  mask-image: linear-gradient(135deg, transparent, #000 20%, #000 80%, transparent);
-}
-
-.variant-art::after {
-  width: 280px;
-  height: 280px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 42, 42, 0.2), transparent 68%);
-  right: -90px;
-  bottom: -100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .variant-product-image {
-  position: relative;
-  z-index: 1;
   width: 100%;
-  max-width: 100%;
   height: auto;
-  object-fit: contain;
-  filter: drop-shadow(0 30px 44px rgba(0, 0, 0, 0.55));
+  display: block;
 }
 
 .variant-details h3 {
@@ -3482,14 +3442,6 @@ a {
     padding: 18px;
   }
 
-  .variant-art {
-    min-height: 250px;
-  }
-
-  .variant-product-image {
-    width: 100%;
-  }
-
   .variant-actions {
     grid-template-columns: 1fr;
   }
@@ -3648,14 +3600,6 @@ a {
 
   .variant-dialog {
     border-radius: 22px;
-  }
-
-  .variant-art {
-    min-height: 220px;
-  }
-
-  .variant-product-image {
-    width: 100%;
   }
 
   .variant-option {
