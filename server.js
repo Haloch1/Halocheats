@@ -644,7 +644,7 @@ async function getOptionalVisitorUserLabel(req) {
 }
 
 function recordVisitorPageView({ visitorId, userLabel, pagePath, referrer, ipAddress, now }) {
-  recentVisitorViews.unshift({
+  const entry = {
     id: createSecretToken(8),
     visitorLabel: hashToken(visitorId).slice(0, 10),
     userLabel: trimField(userLabel, 120),
@@ -652,10 +652,29 @@ function recordVisitorPageView({ visitorId, userLabel, pagePath, referrer, ipAdd
     referrer: normalizeVisitorReferrer(referrer),
     ipAddress: normalizeVisitorIp(ipAddress),
     viewedAt: new Date(now).toISOString(),
-  });
+  };
+
+  recentVisitorViews.unshift(entry);
 
   if (recentVisitorViews.length > visitorViewLogLimit) {
     recentVisitorViews.length = visitorViewLogLimit;
+  }
+
+  // Persist to Supabase (non-blocking)
+  if (supabaseAdmin) {
+    supabaseAdmin
+      .from("page_views")
+      .insert({
+        visitor_label: entry.visitorLabel,
+        user_label: entry.userLabel || null,
+        page_path: entry.pagePath,
+        referrer: entry.referrer || null,
+        ip_address: entry.ipAddress || null,
+        viewed_at: entry.viewedAt,
+      })
+      .then(({ error }) => {
+        if (error) console.error("[Analytics] DB insert error:", error.message);
+      });
   }
 }
 
@@ -3626,11 +3645,32 @@ app.get("/api/admin/visitors", async (req, res) => {
       .map(([pagePath, count]) => ({ pagePath, count }))
       .sort((left, right) => right.count - left.count || left.pagePath.localeCompare(right.pagePath));
 
+    // Fetch persistent views from Supabase
+    let persistedViews = [];
+    if (supabaseAdmin) {
+      const { data, error: dbError } = await supabaseAdmin
+        .from("page_views")
+        .select("*")
+        .order("viewed_at", { ascending: false })
+        .limit(200);
+      if (!dbError && data) {
+        persistedViews = data.map((row) => ({
+          id: String(row.id),
+          visitorLabel: row.visitor_label,
+          userLabel: row.user_label,
+          pagePath: row.page_path,
+          referrer: row.referrer,
+          ipAddress: row.ip_address,
+          viewedAt: row.viewed_at,
+        }));
+      }
+    }
+
     return res.json({
       activeVisitors: visitorSessions.size,
       activeWindowSeconds: Math.round(visitorHeartbeatTtlMs / 1000),
       pages: pageBreakdown,
-      recentViews: recentVisitorViews.slice(0, 40),
+      recentViews: persistedViews.length > 0 ? persistedViews : recentVisitorViews.slice(0, 40),
       updatedAt: new Date().toISOString(),
     });
   } catch (error) {
