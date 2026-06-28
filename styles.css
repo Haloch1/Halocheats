@@ -2394,13 +2394,13 @@ a {
   background:
     radial-gradient(circle at 30% 30%, rgba(255, 50, 50, 0.18), transparent 50%),
     rgba(10, 10, 14, 0.85);
-  padding: 24px;
+  padding: 40px 32px;
   overflow: hidden;
+  min-height: 0;
 }
 
 .variant-product-image {
-  width: 100%;
-  max-width: 420px;
+  width: 90%;
   height: auto;
   display: block;
   filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.6));
