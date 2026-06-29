@@ -53,7 +53,14 @@ const youtubeRefreshToken = process.env.YOUTUBE_REFRESH_TOKEN || "";
 const uploadPostApiKey = process.env.UPLOADPOST_API_KEY || "";
 const uploadPostUser = process.env.UPLOADPOST_USER || "";
 const postpeerApiKey = process.env.POSTPEER_API_KEY || "";
-const postpeerTiktokAccountId = process.env.POSTPEER_TIKTOK_ACCOUNT_ID || "";
+// POSTPEER_ACCOUNTS format: "tiktok:accId,instagram:accId,x:accId,facebook:accId"
+const postpeerAccounts = (process.env.POSTPEER_ACCOUNTS || "").split(",").filter(Boolean).reduce((map, pair) => {
+  const [platform, accountId] = pair.split(":");
+  if (platform && accountId) map[platform.trim()] = accountId.trim();
+  return map;
+}, {});
+// UPLOADPOST_PLATFORMS format: "instagram,x,facebook,pinterest,bluesky,linkedin"
+const uploadPostPlatforms = (process.env.UPLOADPOST_PLATFORMS || "").split(",").map(p => p.trim().toLowerCase()).filter(Boolean);
 const discordLowStockChannelId = "1517987031723282607";
 const liveDeskCooldownMs = 45_000;
 const liveDeskCooldownByIp = new Map();
@@ -967,9 +974,7 @@ if (isConfiguredValue(discordBotToken)) {
           .addStringOption(o => o.setName("title").setDescription("Video title").setRequired(true))
           .addStringOption(o => o.setName("description").setDescription("Video description").setRequired(false))
           .addStringOption(o => o.setName("tags").setDescription("Comma-separated tags (e.g. foryou,gaming,cheats)").setRequired(false))
-          .addBooleanOption(o => o.setName("shorts").setDescription("Mark as a YouTube Short (default: true)").setRequired(false))
-          .addBooleanOption(o => o.setName("tiktok").setDescription("Also upload to TikTok (default: true)").setRequired(false))
-          .addStringOption(o => o.setName("platforms").setDescription("Extra platforms via Upload-Post (e.g. instagram,x,facebook)").setRequired(false)),
+          .addBooleanOption(o => o.setName("shorts").setDescription("Mark as a YouTube Short (default: true)").setRequired(false)),
       ].map((c) => c.toJSON());
 
       if (discordGuildId) {
@@ -2029,7 +2034,7 @@ if (isConfiguredValue(discordBotToken)) {
       return interaction.reply({ embeds: [{ description: "Verify panel posted.", color: 0x22c55e }], ephemeral: true });
     }
 
-    /* ── /upload — Upload video to YouTube + TikTok (PostPeer) + other platforms (Upload-Post) ── */
+    /* ── /upload — YouTube (direct) + all socials (PostPeer → Upload-Post fallback) ── */
     if (interaction.commandName === "upload") {
       if (!BOT_ADMINS.includes(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
@@ -2041,14 +2046,14 @@ if (isConfiguredValue(discordBotToken)) {
       }
 
       const isShorts = interaction.options.getBoolean("shorts") !== false;
-      const postToTiktok = interaction.options.getBoolean("tiktok") !== false;
       const rawTitle = interaction.options.getString("title");
       const ytTitle = isShorts && !rawTitle.includes("#Shorts") ? `${rawTitle} #Shorts` : rawTitle;
       const description = interaction.options.getString("description") || "";
       const tagsInput = interaction.options.getString("tags") || "";
       const tags = tagsInput ? tagsInput.split(",").map(t => t.trim().replace(/^#/, "")) : [];
       if (isShorts && !tags.includes("Shorts")) tags.unshift("Shorts");
-      const extraPlatforms = (interaction.options.getString("platforms") || "").split(",").map(p => p.trim().toLowerCase()).filter(Boolean);
+      const hashtagStr = tags.map(t => `#${t}`).join(" ");
+      const socialCaption = hashtagStr ? `${rawTitle} ${hashtagStr}` : rawTitle;
 
       await interaction.deferReply();
       const results = [];
@@ -2078,93 +2083,96 @@ if (isConfiguredValue(discordBotToken)) {
           console.error("[YouTube upload]", err.message);
           results.push(`**YouTube:** Failed - ${err.message}`);
         }
-      } else {
-        results.push("**YouTube:** Skipped - credentials not set");
       }
 
-      // ── 2. TikTok via PostPeer (20 free/month) ──
-      if (postToTiktok) {
-        if (!postpeerApiKey || !postpeerTiktokAccountId) {
-          results.push("**TikTok:** Skipped - Set POSTPEER_API_KEY and POSTPEER_TIKTOK_ACCOUNT_ID env vars.");
-        } else {
-          try {
-            const tiktokHashtags = tags.map(t => `#${t}`).join(" ");
-            const tiktokCaption = tiktokHashtags ? `${rawTitle} ${tiktokHashtags}` : rawTitle;
+      // ── 2. PostPeer — all connected platforms (20 free/month) ──
+      const ppPlatformNames = Object.keys(postpeerAccounts);
+      let postpeerFailed = false;
+      let postpeerFailedPlatforms = [];
 
-            const ppRes = await fetch("https://api.postpeer.dev/v1/posts", {
-              method: "POST",
-              headers: {
-                "x-access-key": postpeerApiKey,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                content: tiktokCaption.slice(0, 2200),
-                mediaItems: [{ type: "video", url: attachment.url }],
-                platforms: [{ platform: "tiktok", accountId: postpeerTiktokAccountId }],
-                publishNow: true,
-              }),
-            });
+      if (postpeerApiKey && ppPlatformNames.length > 0) {
+        try {
+          const ppRes = await fetch("https://api.postpeer.dev/v1/posts", {
+            method: "POST",
+            headers: { "x-access-key": postpeerApiKey, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              content: socialCaption.slice(0, 2200),
+              mediaItems: [{ type: "video", url: attachment.url }],
+              platforms: ppPlatformNames.map(p => ({ platform: p, accountId: postpeerAccounts[p] })),
+              publishNow: true,
+            }),
+          });
 
-            const ppData = await ppRes.json();
-            if (ppData.success) {
-              const tiktokUrl = ppData.platforms?.find(p => p.platform === "tiktok")?.platformPostUrl || "Posted!";
-              results.push(`**TikTok:** ${tiktokUrl}`);
-            } else {
-              results.push(`**TikTok:** Failed - ${ppData.message || ppData.error || "Unknown error"}`);
-            }
-          } catch (err) {
-            console.error("[TikTok/PostPeer]", err.message);
-            results.push(`**TikTok:** Failed - ${err.message}`);
-          }
-        }
-      }
-
-      // ── 3. Other platforms via Upload-Post (10 free/month) ──
-      if (extraPlatforms.length > 0) {
-        if (!uploadPostApiKey || !uploadPostUser) {
-          results.push(`**${extraPlatforms.join(", ")}:** Skipped - Set UPLOADPOST_API_KEY and UPLOADPOST_USER env vars.`);
-        } else {
-          try {
-            const { FormData, Blob } = await import("node-fetch");
-
-            const vidRes = await fetch(attachment.url);
-            if (!vidRes.ok) throw new Error("Failed to download attachment");
-            const videoBuffer = await vidRes.buffer();
-
-            const form = new FormData();
-            form.append("user", uploadPostUser);
-            form.append("title", rawTitle);
-            if (description) form.append("description", description);
-            form.append("video", new Blob([videoBuffer], { type: attachment.contentType }), attachment.name || "video.mp4");
-            for (const p of extraPlatforms) {
-              form.append("platform[]", p);
-            }
-
-            const upRes = await fetch("https://api.upload-post.com/api/upload", {
-              method: "POST",
-              headers: { Authorization: `Apikey ${uploadPostApiKey}` },
-              body: form,
-            });
-
-            const upData = await upRes.json();
-            if (upData.success) {
-              for (const p of extraPlatforms) {
-                const platformResult = upData.results?.[p];
-                if (platformResult?.success) {
-                  results.push(`**${p}:** ${platformResult.url || "Posted!"}`);
-                } else {
-                  results.push(`**${p}:** Failed - ${platformResult?.error || "Unknown error"}`);
-                }
+          const ppData = await ppRes.json();
+          if (ppData.success) {
+            const platformResults = ppData.platforms || [];
+            for (const pr of platformResults) {
+              if (pr.success) {
+                results.push(`**${pr.platform}:** ${pr.platformPostUrl || "Posted!"}`);
+              } else {
+                results.push(`**${pr.platform}:** Failed - ${pr.error || "Unknown"}`);
+                postpeerFailedPlatforms.push(pr.platform);
               }
-            } else {
-              results.push(`**Upload-Post:** Failed - ${upData.message || "Unknown error"}`);
             }
-          } catch (err) {
-            console.error("[Upload-Post]", err.message);
-            results.push(`**Upload-Post:** Failed - ${err.message}`);
+          } else {
+            // Quota exceeded or other error — fall back to Upload-Post for non-TikTok
+            postpeerFailed = true;
+            console.error("[PostPeer]", ppData.message || ppData.error);
+            results.push(`**PostPeer:** ${ppData.message || "Quota reached"} — trying Upload-Post...`);
           }
+        } catch (err) {
+          postpeerFailed = true;
+          console.error("[PostPeer]", err.message);
+          results.push(`**PostPeer:** Failed - ${err.message} — trying Upload-Post...`);
         }
       }
+
+      // ── 3. Upload-Post fallback (10 free/month) — fires when PostPeer fails or for extra platforms ──
+      const fallbackPlatforms = postpeerFailed
+        ? uploadPostPlatforms // PostPeer quota hit: send all Upload-Post platforms
+        : uploadPostPlatforms.filter(p => !ppPlatformNames.includes(p)); // Only platforms not on PostPeer
+
+      if (fallbackPlatforms.length > 0 && uploadPostApiKey && uploadPostUser) {
+        try {
+          const { FormData, Blob } = await import("node-fetch");
+
+          const vidRes = await fetch(attachment.url);
+          if (!vidRes.ok) throw new Error("Failed to download attachment");
+          const videoBuffer = await vidRes.buffer();
+
+          const form = new FormData();
+          form.append("user", uploadPostUser);
+          form.append("title", socialCaption);
+          if (description) form.append("description", description);
+          form.append("video", new Blob([videoBuffer], { type: attachment.contentType }), attachment.name || "video.mp4");
+          for (const p of fallbackPlatforms) form.append("platform[]", p);
+
+          const upRes = await fetch("https://api.upload-post.com/api/upload", {
+            method: "POST",
+            headers: { Authorization: `Apikey ${uploadPostApiKey}` },
+            body: form,
+          });
+
+          const upData = await upRes.json();
+          if (upData.success) {
+            for (const p of fallbackPlatforms) {
+              const pr = upData.results?.[p];
+              if (pr?.success) {
+                results.push(`**${p}:** ${pr.url || "Posted!"}`);
+              } else {
+                results.push(`**${p}:** Failed - ${pr?.error || "Unknown"}`);
+              }
+            }
+          } else {
+            results.push(`**Upload-Post:** Failed - ${upData.message || "Unknown error"}`);
+          }
+        } catch (err) {
+          console.error("[Upload-Post]", err.message);
+          results.push(`**Upload-Post:** Failed - ${err.message}`);
+        }
+      }
+
+      if (results.length === 0) results.push("No platforms configured. Set POSTPEER_ACCOUNTS and/or UPLOADPOST_PLATFORMS env vars.");
 
       const color = results.every(r => !r.includes("Failed") && !r.includes("Skipped")) ? 0x22c55e : 0xffaa00;
       await interaction.editReply({ embeds: [{ description: results.join("\n"), color }] });
