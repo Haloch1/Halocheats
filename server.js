@@ -1007,9 +1007,11 @@ if (isConfiguredValue(discordBotToken)) {
   discordBot.on("guildMemberAdd", async (member) => {
     if (!discordGuildId || member.guild.id !== discordGuildId) return;
 
-    // Assign unverified role to all new joins
+    // Assign unverified role to new joins (skip if already verified via OAuth)
     if (discordUnverifiedRoleId) {
-      await member.roles.add(discordUnverifiedRoleId).catch(() => {});
+      if (!discordVerifiedRoleId || !member.roles.cache.has(discordVerifiedRoleId)) {
+        await member.roles.add(discordUnverifiedRoleId).catch(() => {});
+      }
     }
   });
 
@@ -6006,19 +6008,26 @@ app.get("/api/auth/discord/callback", async (req, res) => {
       discord_refresh_token: tokenData.refresh_token,
     };
 
-    if (mode === "link" && userId) {
-      /* ── Link mode: attach Discord to existing Supabase user ── */
+    if ((mode === "link" || mode === "verify") && userId) {
+      /* ── Link/verify mode: attach Discord to existing Supabase user ── */
       await supabaseAdmin.auth.admin.updateUserById(userId, {
         user_metadata: discordMeta,
       });
     } else {
       /* ── Sign-in mode: find or create Supabase user by discord_id ── */
-      const { data: userList } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
       const realEmail = discordUser.email || "";
       const syntheticEmail = `discord_${discordUser.id}@halocheats.cc`;
-      let existingUser = userList?.users?.find(
-        (u) => u.user_metadata?.discord_id === discordUser.id || u.email === syntheticEmail || (realEmail && u.email === realEmail)
-      );
+      let existingUser = null;
+      let page = 1;
+      while (!existingUser) {
+        const { data: userList } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 });
+        if (!userList?.users?.length) break;
+        existingUser = userList.users.find(
+          (u) => u.user_metadata?.discord_id === discordUser.id || u.email === syntheticEmail || (realEmail && u.email === realEmail)
+        );
+        if (userList.users.length < 1000) break;
+        page++;
+      }
 
       const tempPassword = crypto.randomBytes(32).toString("hex");
 
@@ -6080,7 +6089,10 @@ app.get("/api/auth/discord/callback", async (req, res) => {
             Authorization: `Bot ${discordBotToken}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ access_token: tokenData.access_token }),
+          body: JSON.stringify({
+            access_token: tokenData.access_token,
+            ...(discordVerifiedRoleId ? { roles: [discordVerifiedRoleId] } : {}),
+          }),
         });
         if (!joinRes.ok) {
           console.error(`[Discord] Auto-join failed (${joinRes.status}):`, await joinRes.text());
