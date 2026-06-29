@@ -11,7 +11,7 @@ import rateLimit from "express-rate-limit";
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ChannelType, PermissionFlagsBits } from "discord.js";
 import { products } from "./data/products.js";
 import { google } from "googleapis";
-import OAuth from "oauth-1.0a";
+// OAuth 1.0a signing handled with native crypto
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2165,36 +2165,44 @@ if (isConfiguredValue(discordBotToken)) {
       if (xApiKey && xApiSecret && xAccessToken && xAccessSecret) {
         tasks.push((async () => {
           try {
-            const oauth = OAuth({
-              consumer: { key: xApiKey, secret: xApiSecret },
-              signature_method: "HMAC-SHA1",
-              hash_function(baseString, key) { return crypto.createHmac("sha1", key).update(baseString).digest("base64"); },
-            });
-            const token = { key: xAccessToken, secret: xAccessSecret };
+            // Manual OAuth 1.0a signing using native crypto
+            const pctEnc = (s) => encodeURIComponent(s).replace(/[!'()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+            const oauthSign = (method, url, params = {}) => {
+              const oauthParams = {
+                oauth_consumer_key: xApiKey,
+                oauth_nonce: crypto.randomBytes(16).toString("hex"),
+                oauth_signature_method: "HMAC-SHA1",
+                oauth_timestamp: String(Math.floor(Date.now() / 1000)),
+                oauth_token: xAccessToken,
+                oauth_version: "1.0",
+              };
+              const allParams = { ...oauthParams, ...params };
+              const paramStr = Object.keys(allParams).sort().map(k => `${pctEnc(k)}=${pctEnc(allParams[k])}`).join("&");
+              const baseStr = `${method}&${pctEnc(url)}&${pctEnc(paramStr)}`;
+              const sigKey = `${pctEnc(xApiSecret)}&${pctEnc(xAccessSecret)}`;
+              oauthParams.oauth_signature = crypto.createHmac("sha1", sigKey).update(baseStr).digest("base64");
+              const authHeader = "OAuth " + Object.keys(oauthParams).sort().map(k => `${pctEnc(k)}="${pctEnc(oauthParams[k])}"`).join(", ");
+              return authHeader;
+            };
 
             const xFetch = async (url, method, params = {}, isJson = false) => {
-              let requestData, headers, res;
+              let headers, res;
               if (isJson) {
-                // JSON body: don't include body params in OAuth signature
-                requestData = { url, method };
-                headers = oauth.toHeader(oauth.authorize(requestData, token));
-                headers["Content-Type"] = "application/json";
+                headers = { Authorization: oauthSign(method, url), "Content-Type": "application/json" };
                 res = await fetch(url, { method, headers, body: JSON.stringify(params) });
               } else if (method === "GET") {
-                requestData = { url, method };
-                headers = oauth.toHeader(oauth.authorize(requestData, token));
+                // Parse query params from URL for signing
+                const u = new URL(url);
+                const qp = Object.fromEntries(u.searchParams.entries());
+                headers = { Authorization: oauthSign(method, u.origin + u.pathname, qp) };
                 res = await fetch(url, { method, headers });
               } else {
-                // Form body: include params in OAuth signature base string
-                requestData = { url, method, data: params };
-                headers = oauth.toHeader(oauth.authorize(requestData, token));
-                const form = new URLSearchParams(params);
-                headers["Content-Type"] = "application/x-www-form-urlencoded";
-                res = await fetch(url, { method, headers, body: form.toString() });
+                headers = { Authorization: oauthSign(method, url, params), "Content-Type": "application/x-www-form-urlencoded" };
+                res = await fetch(url, { method, headers, body: new URLSearchParams(params).toString() });
               }
               const text = await res.text();
               if (!res.ok) throw new Error(`X API ${res.status}: ${text.slice(0, 200)}`);
-              return JSON.parse(text);
+              return text ? JSON.parse(text) : {};
             };
 
             // Step 1: INIT chunked upload
@@ -2204,16 +2212,19 @@ if (isConfiguredValue(discordBotToken)) {
             });
             const mediaId = initData.media_id_string;
 
-            // Step 2: APPEND in 5MB chunks
+            // Step 2: APPEND in 5MB chunks (don't include media_data in signature)
             const chunkSize = 5 * 1024 * 1024;
             for (let i = 0; i * chunkSize < videoBuffer.length; i++) {
               const chunk = videoBuffer.slice(i * chunkSize, (i + 1) * chunkSize);
               const b64 = Buffer.from(chunk).toString("base64");
-              const appendReq = { url: "https://upload.twitter.com/1.1/media/upload.json", method: "POST" };
-              const appendHeaders = oauth.toHeader(oauth.authorize(appendReq, token));
-              const appendForm = new URLSearchParams({ command: "APPEND", media_id: mediaId, segment_index: String(i), media_data: b64 });
-              appendHeaders["Content-Type"] = "application/x-www-form-urlencoded";
-              const appendRes = await fetch("https://upload.twitter.com/1.1/media/upload.json", { method: "POST", headers: appendHeaders, body: appendForm.toString() });
+              const appendParams = { command: "APPEND", media_id: mediaId, segment_index: String(i) };
+              const authHeader = oauthSign("POST", "https://upload.twitter.com/1.1/media/upload.json", appendParams);
+              const bodyParams = { ...appendParams, media_data: b64 };
+              const appendRes = await fetch("https://upload.twitter.com/1.1/media/upload.json", {
+                method: "POST",
+                headers: { Authorization: authHeader, "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams(bodyParams).toString(),
+              });
               if (!appendRes.ok && appendRes.status !== 204 && appendRes.status !== 202) {
                 throw new Error(`APPEND failed: ${appendRes.status} ${(await appendRes.text()).slice(0, 200)}`);
               }
