@@ -2319,6 +2319,49 @@ if (isConfiguredValue(discordBotToken)) {
         })());
       }
 
+      // TikTok via Buffer API
+      const bufferApiKey = process.env.BUFFER_API_KEY || "";
+      const bufferTiktokChannelId = process.env.BUFFER_TIKTOK_CHANNEL_ID || "";
+      if (bufferApiKey && bufferTiktokChannelId) {
+        tasks.push((async () => {
+          try {
+            const bufferRes = await fetch("https://api.buffer.com", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${bufferApiKey}`,
+              },
+              body: JSON.stringify({
+                query: `mutation CreatePost {
+                  createPost(input: {
+                    text: ${JSON.stringify(socialCaption)},
+                    channelId: "${bufferTiktokChannelId}",
+                    schedulingType: automatic,
+                    mode: addToQueue,
+                    assets: [{ video: { url: ${JSON.stringify(attachment.url)} } }]
+                  }) {
+                    ... on PostActionSuccess {
+                      post { id }
+                    }
+                    ... on MutationError {
+                      message
+                    }
+                  }
+                }`,
+              }),
+            });
+            const bufferData = await bufferRes.json();
+            if (bufferData.errors) throw new Error(bufferData.errors[0].message);
+            if (bufferData.data?.createPost?.message) throw new Error(bufferData.data.createPost.message);
+            const postId = bufferData.data?.createPost?.post?.id;
+            return `**TikTok:** Queued via Buffer (ID: ${postId})`;
+          } catch (err) {
+            console.error("[TikTok/Buffer]", err.message);
+            return `**TikTok:** Failed - ${err.message}`;
+          }
+        })());
+      }
+
       // Run all uploads in parallel
       const settled = await Promise.allSettled(tasks);
       const results = settled.map(s => s.status === "fulfilled" ? s.value : `Failed: ${s.reason?.message || "Unknown"}`);
