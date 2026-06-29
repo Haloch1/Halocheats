@@ -2099,46 +2099,54 @@ if (isConfiguredValue(discordBotToken)) {
       // Bluesky (direct API, unlimited)
       if (blueskyHandle && blueskyAppPassword) {
         tasks.push((async () => {
+          const bskyJson = async (res, label) => {
+            const text = await res.text();
+            if (!res.ok || text.startsWith("<")) throw new Error(`${label}: ${res.status} ${text.slice(0, 120)}`);
+            return JSON.parse(text);
+          };
           try {
-            const bskySession = await fetch("https://bsky.social/xrpc/com.atproto.server.createSession", {
+            const bskySession = await bskyJson(await fetch("https://bsky.social/xrpc/com.atproto.server.createSession", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ identifier: blueskyHandle, password: blueskyAppPassword }),
-            }).then(r => r.json());
+            }), "createSession");
             if (!bskySession.accessJwt) throw new Error(bskySession.message || "Auth failed");
 
-            const serviceAuth = await fetch(
-              `https://bsky.social/xrpc/com.atproto.server.getServiceAuth?aud=${encodeURIComponent("did:web:video.bsky.app")}&lxm=com.atproto.repo.uploadBlob`,
+            const serviceAuth = await bskyJson(await fetch(
+              `https://bsky.social/xrpc/com.atproto.server.getServiceAuth?aud=${encodeURIComponent("did:web:video.bsky.app")}&lxm=com.atproto.repo.uploadBlob&exp=${Math.floor(Date.now() / 1000) + 600}`,
               { headers: { Authorization: `Bearer ${bskySession.accessJwt}` } }
-            ).then(r => r.json());
+            ), "getServiceAuth");
             if (!serviceAuth.token) throw new Error("Failed to get video service auth");
 
             const fname = attachment.name || "video.mp4";
-            const uploadRes = await fetch(
+            const vidUpRes = await fetch(
               `https://video.bsky.app/xrpc/app.bsky.video.uploadVideo?did=${encodeURIComponent(bskySession.did)}&name=${encodeURIComponent(fname)}`,
               { method: "POST", headers: { Authorization: `Bearer ${serviceAuth.token}`, "Content-Type": attachment.contentType || "video/mp4" }, body: videoBuffer }
-            ).then(r => r.json());
+            );
+            const vidUpData = await bskyJson(vidUpRes, "uploadVideo");
 
-            let job = uploadRes.jobStatus || uploadRes;
-            if (!job.jobId) throw new Error("No job ID from video upload");
+            let job = vidUpData.jobStatus || vidUpData;
+            if (!job.jobId) throw new Error(`No job ID: ${JSON.stringify(vidUpData).slice(0, 150)}`);
             for (let i = 0; i < 30; i++) {
               if (job.state === "JOB_STATE_COMPLETED" || job.state === "JOB_STATE_FAILED") break;
               await new Promise(r => setTimeout(r, 2000));
-              job = await fetch(`https://video.bsky.app/xrpc/app.bsky.video.getJobStatus?jobId=${encodeURIComponent(job.jobId)}`,
-                { headers: { Authorization: `Bearer ${serviceAuth.token}` } }).then(r => r.json());
-              job = job.jobStatus || job;
+              const statusData = await bskyJson(await fetch(
+                `https://video.bsky.app/xrpc/app.bsky.video.getJobStatus?jobId=${encodeURIComponent(job.jobId)}`,
+                { headers: { Authorization: `Bearer ${serviceAuth.token}` } }
+              ), "getJobStatus");
+              job = statusData.jobStatus || statusData;
             }
-            if (job.state === "JOB_STATE_FAILED") throw new Error("Video processing failed");
+            if (job.state === "JOB_STATE_FAILED") throw new Error(`Video processing failed: ${job.error || "unknown"}`);
             if (job.state !== "JOB_STATE_COMPLETED") throw new Error("Video processing timed out");
 
-            const postRes = await fetch("https://bsky.social/xrpc/com.atproto.repo.createRecord", {
+            const postRes = await bskyJson(await fetch("https://bsky.social/xrpc/com.atproto.repo.createRecord", {
               method: "POST",
               headers: { Authorization: `Bearer ${bskySession.accessJwt}`, "Content-Type": "application/json" },
               body: JSON.stringify({
                 repo: bskySession.did, collection: "app.bsky.feed.post",
                 record: { text: socialCaption.slice(0, 300), embed: { $type: "app.bsky.embed.video", video: job.blob, aspectRatio: { width: 9, height: 16 } }, createdAt: new Date().toISOString() },
               }),
-            }).then(r => r.json());
+            }), "createRecord");
 
             if (postRes.uri) {
               const postId = postRes.uri.split("/").pop();
