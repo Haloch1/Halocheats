@@ -2061,233 +2061,175 @@ if (isConfiguredValue(discordBotToken)) {
       const socialCaption = hashtagStr ? `${rawTitle} ${hashtagStr}` : rawTitle;
 
       await interaction.deferReply();
-      const results = [];
       const { default: fetch } = await import("node-fetch");
+      const { FormData, Blob } = await import("node-fetch");
 
-      // ── 1. YouTube (direct API, unlimited) ──
+      // Download video once, reuse buffer for all platforms
+      const vidDl = await fetch(attachment.url);
+      if (!vidDl.ok) return interaction.editReply({ embeds: [{ description: "Failed to download video.", color: 0xff4444 }] });
+      const videoBuffer = await vidDl.buffer();
+
+      // ── Build all upload tasks in parallel ──
+      const tasks = [];
+
+      // YouTube (direct API, unlimited)
       if (youtubeClientId && youtubeClientSecret && youtubeRefreshToken) {
-        try {
-          const oauth2Client = new google.auth.OAuth2(youtubeClientId, youtubeClientSecret);
-          oauth2Client.setCredentials({ refresh_token: youtubeRefreshToken });
-          const youtube = google.youtube({ version: "v3", auth: oauth2Client });
-
-          const videoResponse = await fetch(attachment.url);
-          if (!videoResponse.ok) throw new Error("Failed to download attachment");
-
-          const res = await youtube.videos.insert({
-            part: ["snippet", "status"],
-            requestBody: {
-              snippet: { title: ytTitle, description, tags, categoryId: "20" },
-              status: { privacyStatus: "public", selfDeclaredMadeForKids: false },
-            },
-            media: { body: videoResponse.body },
-          });
-
-          results.push(`**YouTube:** https://youtube.com/watch?v=${res.data.id}`);
-        } catch (err) {
-          console.error("[YouTube upload]", err.message);
-          results.push(`**YouTube:** Failed - ${err.message}`);
-        }
-      }
-
-      // ── 2. Bluesky direct API (unlimited, no third-party) ──
-      const directApiPosted = new Set();
-      if (blueskyHandle && blueskyAppPassword) {
-        try {
-          const bskySession = await fetch("https://bsky.social/xrpc/com.atproto.server.createSession", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ identifier: blueskyHandle, password: blueskyAppPassword }),
-          }).then(r => r.json());
-          if (!bskySession.accessJwt) throw new Error(bskySession.message || "Auth failed");
-
-          const vidRes2 = await fetch(attachment.url);
-          if (!vidRes2.ok) throw new Error("Failed to download attachment");
-          const videoBuffer = await vidRes2.buffer();
-
-          // Get service auth for video upload
-          const serviceAuth = await fetch(
-            `https://bsky.social/xrpc/com.atproto.server.getServiceAuth?aud=${encodeURIComponent("did:web:video.bsky.app")}&lxm=com.atproto.repo.uploadBlob`,
-            { headers: { Authorization: `Bearer ${bskySession.accessJwt}` } }
-          ).then(r => r.json());
-          if (!serviceAuth.token) throw new Error("Failed to get video service auth");
-
-          // Upload video to video service
-          const fname = attachment.name || "video.mp4";
-          const uploadRes = await fetch(
-            `https://video.bsky.app/xrpc/app.bsky.video.uploadVideo?did=${encodeURIComponent(bskySession.did)}&name=${encodeURIComponent(fname)}`,
-            {
-              method: "POST",
-              headers: { Authorization: `Bearer ${serviceAuth.token}`, "Content-Type": attachment.contentType || "video/mp4" },
-              body: videoBuffer,
-            }
-          ).then(r => r.json());
-
-          // Poll for processing
-          let job = uploadRes.jobStatus || uploadRes;
-          const jobId = job.jobId;
-          if (!jobId) throw new Error("No job ID from video upload");
-
-          for (let i = 0; i < 30; i++) {
-            if (job.state === "JOB_STATE_COMPLETED" || job.state === "JOB_STATE_FAILED") break;
-            await new Promise(r => setTimeout(r, 2000));
-            const statusRes = await fetch(
-              `https://video.bsky.app/xrpc/app.bsky.video.getJobStatus?jobId=${encodeURIComponent(jobId)}`,
-              { headers: { Authorization: `Bearer ${serviceAuth.token}` } }
-            ).then(r => r.json());
-            job = statusRes.jobStatus || statusRes;
-          }
-          if (job.state === "JOB_STATE_FAILED") throw new Error("Video processing failed");
-          if (job.state !== "JOB_STATE_COMPLETED") throw new Error("Video processing timed out");
-
-          // Create post with video
-          const postRes = await fetch("https://bsky.social/xrpc/com.atproto.repo.createRecord", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${bskySession.accessJwt}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              repo: bskySession.did,
-              collection: "app.bsky.feed.post",
-              record: {
-                text: socialCaption.slice(0, 300),
-                embed: { $type: "app.bsky.embed.video", video: job.blob, aspectRatio: { width: 9, height: 16 } },
-                createdAt: new Date().toISOString(),
+        tasks.push((async () => {
+          try {
+            const oauth2Client = new google.auth.OAuth2(youtubeClientId, youtubeClientSecret);
+            oauth2Client.setCredentials({ refresh_token: youtubeRefreshToken });
+            const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+            const { Readable } = await import("stream");
+            const res = await youtube.videos.insert({
+              part: ["snippet", "status"],
+              requestBody: {
+                snippet: { title: ytTitle, description, tags, categoryId: "20" },
+                status: { privacyStatus: "public", selfDeclaredMadeForKids: false },
               },
-            }),
-          }).then(r => r.json());
+              media: { body: Readable.from(videoBuffer) },
+            });
+            return `**YouTube:** https://youtube.com/watch?v=${res.data.id}`;
+          } catch (err) {
+            console.error("[YouTube]", err.message);
+            return `**YouTube:** Failed - ${err.message}`;
+          }
+        })());
+      }
 
-          if (postRes.uri) {
-            const postId = postRes.uri.split("/").pop();
-            results.push(`**Bluesky:** https://bsky.app/profile/${blueskyHandle}/post/${postId}`);
-            directApiPosted.add("bluesky");
-          } else {
+      // Bluesky (direct API, unlimited)
+      if (blueskyHandle && blueskyAppPassword) {
+        tasks.push((async () => {
+          try {
+            const bskySession = await fetch("https://bsky.social/xrpc/com.atproto.server.createSession", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ identifier: blueskyHandle, password: blueskyAppPassword }),
+            }).then(r => r.json());
+            if (!bskySession.accessJwt) throw new Error(bskySession.message || "Auth failed");
+
+            const serviceAuth = await fetch(
+              `https://bsky.social/xrpc/com.atproto.server.getServiceAuth?aud=${encodeURIComponent("did:web:video.bsky.app")}&lxm=com.atproto.repo.uploadBlob`,
+              { headers: { Authorization: `Bearer ${bskySession.accessJwt}` } }
+            ).then(r => r.json());
+            if (!serviceAuth.token) throw new Error("Failed to get video service auth");
+
+            const fname = attachment.name || "video.mp4";
+            const uploadRes = await fetch(
+              `https://video.bsky.app/xrpc/app.bsky.video.uploadVideo?did=${encodeURIComponent(bskySession.did)}&name=${encodeURIComponent(fname)}`,
+              { method: "POST", headers: { Authorization: `Bearer ${serviceAuth.token}`, "Content-Type": attachment.contentType || "video/mp4" }, body: videoBuffer }
+            ).then(r => r.json());
+
+            let job = uploadRes.jobStatus || uploadRes;
+            if (!job.jobId) throw new Error("No job ID from video upload");
+            for (let i = 0; i < 30; i++) {
+              if (job.state === "JOB_STATE_COMPLETED" || job.state === "JOB_STATE_FAILED") break;
+              await new Promise(r => setTimeout(r, 2000));
+              job = await fetch(`https://video.bsky.app/xrpc/app.bsky.video.getJobStatus?jobId=${encodeURIComponent(job.jobId)}`,
+                { headers: { Authorization: `Bearer ${serviceAuth.token}` } }).then(r => r.json());
+              job = job.jobStatus || job;
+            }
+            if (job.state === "JOB_STATE_FAILED") throw new Error("Video processing failed");
+            if (job.state !== "JOB_STATE_COMPLETED") throw new Error("Video processing timed out");
+
+            const postRes = await fetch("https://bsky.social/xrpc/com.atproto.repo.createRecord", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${bskySession.accessJwt}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                repo: bskySession.did, collection: "app.bsky.feed.post",
+                record: { text: socialCaption.slice(0, 300), embed: { $type: "app.bsky.embed.video", video: job.blob, aspectRatio: { width: 9, height: 16 } }, createdAt: new Date().toISOString() },
+              }),
+            }).then(r => r.json());
+
+            if (postRes.uri) {
+              const postId = postRes.uri.split("/").pop();
+              return `**Bluesky:** https://bsky.app/profile/${blueskyHandle}/post/${postId}`;
+            }
             throw new Error(postRes.message || "Post creation failed");
+          } catch (err) {
+            console.error("[Bluesky]", err.message);
+            return `**Bluesky:** Failed - ${err.message}`;
           }
-        } catch (err) {
-          console.error("[Bluesky]", err.message);
-          results.push(`**Bluesky:** Failed - ${err.message}`);
-        }
+        })());
       }
 
-      // ── 3. PostPeer — connected platforms (20 free/month) ──
-      const ppPlatformNames = Object.keys(postpeerAccounts).filter(p => !directApiPosted.has(p));
-      let postpeerFailed = false;
-      let postpeerFailedPlatforms = [];
-
+      // PostPeer (TikTok, Instagram, Facebook, X — 20 free/month)
+      const ppPlatformNames = Object.keys(postpeerAccounts);
       if (postpeerApiKey && ppPlatformNames.length > 0) {
-        try {
-          const ppRes = await fetch("https://api.postpeer.dev/v1/posts", {
-            method: "POST",
-            headers: { "x-access-key": postpeerApiKey, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              content: socialCaption.slice(0, 2200),
-              mediaItems: [{ type: "video", url: attachment.url }],
-              platforms: ppPlatformNames.map(p => ({ platform: p, accountId: postpeerAccounts[p] })),
-              publishNow: true,
-            }),
-          });
-
-          const ppText = await ppRes.text();
-          console.log("[PostPeer response]", ppText);
-          const ppData = JSON.parse(ppText);
-          const platformResults = ppData.platforms || ppData.results || [];
-
-          if (ppData.success && platformResults.length > 0) {
-            for (const pr of platformResults) {
-              if (pr.success) {
-                results.push(`**${pr.platform}:** ${pr.platformPostUrl || "Posted!"}`);
-              } else {
-                results.push(`**${pr.platform} (PostPeer):** Failed - ${pr.error || "Unknown"}`);
-                postpeerFailedPlatforms.push(pr.platform);
+        tasks.push((async () => {
+          try {
+            const ppRes = await fetch("https://api.postpeer.dev/v1/posts", {
+              method: "POST",
+              headers: { "x-access-key": postpeerApiKey, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                content: socialCaption.slice(0, 2200),
+                mediaItems: [{ type: "video", url: attachment.url }],
+                platforms: ppPlatformNames.map(p => ({ platform: p, accountId: postpeerAccounts[p] })),
+                publishNow: true,
+              }),
+            });
+            const ppData = await ppRes.json();
+            const lines = [];
+            const platformResults = ppData.platforms || ppData.results || [];
+            if (platformResults.length > 0) {
+              for (const pr of platformResults) {
+                lines.push(pr.success ? `**${pr.platform}:** ${pr.platformPostUrl || "Posted!"}` : `**${pr.platform} (PostPeer):** Failed - ${pr.error || "Unknown"}`);
               }
+            } else {
+              lines.push(`**PostPeer:** ${ppData.message || ppData.error || "Failed"}`);
             }
-          } else if (platformResults.length > 0) {
-            // Partial failure — some platforms may have succeeded
-            let anySuccess = false;
-            for (const pr of platformResults) {
-              if (pr.success) {
-                results.push(`**${pr.platform}:** ${pr.platformPostUrl || "Posted!"}`);
-                anySuccess = true;
-              } else {
-                results.push(`**${pr.platform} (PostPeer):** Failed - ${pr.error || "Unknown"}`);
-                postpeerFailedPlatforms.push(pr.platform);
-              }
-            }
-            if (!anySuccess) {
-              postpeerFailed = true;
-              results.push("PostPeer: All platforms failed — trying Upload-Post...");
-            }
-          } else {
-            postpeerFailed = true;
-            console.error("[PostPeer]", ppData.message || ppData.error);
-            results.push(`**PostPeer:** ${ppData.message || ppData.error || "Quota reached"} — trying Upload-Post...`);
+            return lines.join("\n");
+          } catch (err) {
+            console.error("[PostPeer]", err.message);
+            return `**PostPeer:** Failed - ${err.message}`;
           }
-        } catch (err) {
-          postpeerFailed = true;
-          console.error("[PostPeer]", err.message);
-          results.push(`**PostPeer:** Failed - ${err.message} — trying Upload-Post...`);
-        }
+        })());
       }
 
-      // ── 4. Upload-Post fallback (10 free/month) — fires when PostPeer fails or for extra platforms ──
-      // Normalize platform names so "x" and "twitter" are treated as the same
-      const ppNormalized = new Set(ppPlatformNames.map(p => p === "twitter" ? "x" : p));
-      const directNormalized = new Set([...directApiPosted].map(p => p === "twitter" ? "x" : p));
-      const allCovered = new Set([...ppNormalized, ...directNormalized]);
-      const fallbackPlatforms = postpeerFailed
-        ? uploadPostPlatforms.filter(p => !directNormalized.has(p === "twitter" ? "x" : p)) // Skip direct API platforms
-        : uploadPostPlatforms.filter(p => !allCovered.has(p === "twitter" ? "x" : p)); // Skip PostPeer + direct API platforms
+      // Upload-Post (Instagram, Facebook, X, Threads — 10 free/month fallback)
+      if (uploadPostPlatforms.length > 0 && uploadPostApiKey && uploadPostUser) {
+        tasks.push((async () => {
+          try {
+            const form = new FormData();
+            form.append("user", uploadPostUser);
+            form.append("title", socialCaption);
+            if (description) form.append("description", description);
+            form.append("video", new Blob([videoBuffer], { type: attachment.contentType }), attachment.name || "video.mp4");
+            for (const p of uploadPostPlatforms) form.append("platform[]", p);
 
-      if (fallbackPlatforms.length > 0 && uploadPostApiKey && uploadPostUser) {
-        try {
-          const { FormData, Blob } = await import("node-fetch");
+            const upRes = await fetch("https://api.upload-post.com/api/upload", {
+              method: "POST",
+              headers: { Authorization: `Apikey ${uploadPostApiKey}` },
+              body: form,
+            });
+            const upText = await upRes.text();
+            console.log("[Upload-Post response]", upText);
+            let upData;
+            try { upData = JSON.parse(upText); } catch { return "**Upload-Post:** Failed - Bad response"; }
 
-          const vidRes = await fetch(attachment.url);
-          if (!vidRes.ok) throw new Error("Failed to download attachment");
-          const videoBuffer = await vidRes.buffer();
-
-          const form = new FormData();
-          form.append("user", uploadPostUser);
-          form.append("title", socialCaption);
-          if (description) form.append("description", description);
-          form.append("video", new Blob([videoBuffer], { type: attachment.contentType }), attachment.name || "video.mp4");
-          for (const p of fallbackPlatforms) form.append("platform[]", p);
-
-          const upRes = await fetch("https://api.upload-post.com/api/upload", {
-            method: "POST",
-            headers: { Authorization: `Apikey ${uploadPostApiKey}` },
-            body: form,
-          });
-
-          const upText = await upRes.text();
-          console.log("[Upload-Post response]", upText);
-          let upData;
-          try { upData = JSON.parse(upText); } catch { upData = null; }
-
-          if (!upData) {
-            results.push(`**Upload-Post:** Failed - Bad response`);
-          } else if (upData.success || upData.status === "success") {
-            const posted = upData.results || upData.data || {};
-            let matched = false;
-            for (const p of fallbackPlatforms) {
-              const pr = posted[p];
-              if (pr?.success || pr?.url) {
-                results.push(`**${p}:** ${pr.url || "Posted!"}`);
-                matched = true;
+            if (upData.success || upData.status === "success") {
+              const posted = upData.results || upData.data || {};
+              const lines = [];
+              for (const p of uploadPostPlatforms) {
+                const pr = posted[p];
+                if (pr?.success || pr?.url) lines.push(`**${p}:** ${pr.url || "Posted!"}`);
               }
+              return lines.length > 0 ? lines.join("\n") : `**Upload-Post:** Queued (${JSON.stringify(upData).slice(0, 200)})`;
             }
-            if (!matched) results.push(`**Upload-Post:** Queued (${JSON.stringify(upData).slice(0, 200)})`);
-          } else {
-            results.push(`**Upload-Post:** Failed - ${upData.message || upData.error || JSON.stringify(upData).slice(0, 200)}`);
+            return `**Upload-Post:** Failed - ${upData.message || upData.error || JSON.stringify(upData).slice(0, 200)}`;
+          } catch (err) {
+            console.error("[Upload-Post]", err.message);
+            return `**Upload-Post:** Failed - ${err.message}`;
           }
-        } catch (err) {
-          console.error("[Upload-Post]", err.message);
-          results.push(`**Upload-Post:** Failed - ${err.message}`);
-        }
+        })());
       }
 
-      if (results.length === 0) results.push("No platforms configured. Set POSTPEER_ACCOUNTS and/or UPLOADPOST_PLATFORMS env vars.");
+      // Run all uploads in parallel
+      const settled = await Promise.allSettled(tasks);
+      const results = settled.map(s => s.status === "fulfilled" ? s.value : `Failed: ${s.reason?.message || "Unknown"}`);
 
-      const color = results.every(r => !r.includes("Failed") && !r.includes("Skipped")) ? 0x22c55e : 0xffaa00;
+      if (results.length === 0) results.push("No platforms configured.");
+
+      const color = results.every(r => !r.includes("Failed")) ? 0x22c55e : 0xffaa00;
       await interaction.editReply({ embeds: [{ description: results.join("\n"), color }] });
     }
   });
