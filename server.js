@@ -2216,18 +2216,20 @@ if (isConfiguredValue(discordBotToken)) {
             });
             const mediaId = initData.media_id_string;
 
-            // Step 2: APPEND in 5MB chunks (don't include media_data in signature)
+            // Step 2: APPEND in 5MB chunks (multipart — media_data excluded from OAuth sig)
             const chunkSize = 5 * 1024 * 1024;
             for (let i = 0; i * chunkSize < videoBuffer.length; i++) {
               const chunk = videoBuffer.slice(i * chunkSize, (i + 1) * chunkSize);
-              const b64 = Buffer.from(chunk).toString("base64");
-              const appendParams = { command: "APPEND", media_id: mediaId, segment_index: String(i) };
-              const authHeader = oauthSign("POST", "https://upload.twitter.com/1.1/media/upload.json", appendParams);
-              const bodyParams = { ...appendParams, media_data: b64 };
+              const authHeader = oauthSign("POST", "https://upload.twitter.com/1.1/media/upload.json");
+              const form = new FormData();
+              form.append("command", "APPEND");
+              form.append("media_id", mediaId);
+              form.append("segment_index", String(i));
+              form.append("media_data", new Blob([chunk], { type: "application/octet-stream" }), "chunk");
               const appendRes = await fetch("https://upload.twitter.com/1.1/media/upload.json", {
                 method: "POST",
-                headers: { Authorization: authHeader, "Content-Type": "application/x-www-form-urlencoded" },
-                body: new URLSearchParams(bodyParams).toString(),
+                headers: { Authorization: authHeader },
+                body: form,
               });
               if (!appendRes.ok && appendRes.status !== 204 && appendRes.status !== 202) {
                 throw new Error(`APPEND failed: ${appendRes.status} ${(await appendRes.text()).slice(0, 200)}`);
