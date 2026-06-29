@@ -1030,14 +1030,18 @@ if (isConfiguredValue(discordBotToken)) {
     "inject", "injector", "injecting",
   ];
   const bannedRegex = new RegExp(`\\b(${BANNED_WORDS.join("|")})\\b`, "i");
+  const recentlyFiltered = new Set();
 
   discordBot.on("messageCreate", async (message) => {
     if (message.author.bot) return;
     if (bannedRegex.test(message.content)) {
+      if (recentlyFiltered.has(message.id)) return;
+      recentlyFiltered.add(message.id);
+      setTimeout(() => recentlyFiltered.delete(message.id), 10000);
       try {
         await message.delete();
         const matched = message.content.match(bannedRegex)[0];
-        const censored = matched.slice(0, 3) + "*".repeat(matched.length - 3);
+        const censored = matched.length <= 3 ? matched[0] + "**" : matched.slice(0, 3) + "*".repeat(matched.length - 3);
         const warn = await message.channel.send(`<@${message.author.id}> The word "${censored}" isn't allowed in this server.`);
         setTimeout(() => warn.delete().catch(() => {}), 5000);
       } catch {}
