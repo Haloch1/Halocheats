@@ -1017,30 +1017,81 @@ if (isConfiguredValue(discordBotToken)) {
 
 
   /* ── Word filter — auto-delete messages containing banned terms ── */
-  const BANNED_WORDS = [
-    "cheat", "cheats", "cheating", "cheater", "cheaters",
-    "hack", "hacks", "hacking", "hacker", "hackers", "hacked",
-    "exploit", "exploits", "exploiting", "exploiter",
-    "aimbot", "aimbots", "aimbotting",
-    "wallhack", "wallhacks", "wh",
-    "esp",
-    "triggerbot",
-    "rage hack", "ragehack",
-    "hvh",
-    "inject", "injector", "injecting",
+  const MODERATION_BANNED_TERMS = [
+    { label: "cheat", aliases: ["cheat", "cheats", "cheating", "cheater", "cheaters"] },
+    { label: "hack", aliases: ["hack", "hacks", "hacking", "hacker", "hackers", "hacked"] },
+    { label: "exploit", aliases: ["exploit", "exploits", "exploiting", "exploiter", "exploiters"] },
+    { label: "aimbot", aliases: ["aimbot", "aimbots", "aimbotting"] },
+    { label: "wallhack", aliases: ["wallhack", "wallhacks"] },
+    { label: "esp", aliases: ["esp"] },
+    { label: "triggerbot", aliases: ["triggerbot", "triggerbots"] },
+    { label: "ragehack", aliases: ["ragehack", "rage hack"] },
+    { label: "hvh", aliases: ["hvh"] },
+    { label: "inject", aliases: ["inject", "injector", "injecting"] },
+    { label: "wh", aliases: ["wh"] },
   ];
-  const bannedRegex = new RegExp(`\\b(${BANNED_WORDS.join("|")})\\b`, "i");
+
+  const normalizeModerationText = (value) =>
+    String(value || "")
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[4@]/g, "a")
+      .replace(/3/g, "e")
+      .replace(/[1!|]/g, "i")
+      .replace(/0/g, "o")
+      .replace(/5|\$/g, "s")
+      .replace(/7/g, "t")
+      .replace(/([a-z])\1+/g, "$1");
+
+  const compactModerationText = (value) =>
+    normalizeModerationText(value).replace(/[^a-z0-9]+/g, "");
+
+  const bannedTermLookup = new Map();
+  for (const term of MODERATION_BANNED_TERMS) {
+    for (const alias of term.aliases) {
+      bannedTermLookup.set(compactModerationText(alias), term.label);
+    }
+  }
+
+  function findBannedModerationTerm(content) {
+    const compactSegments = String(content || "")
+      .split(/\s+/)
+      .map(compactModerationText)
+      .filter(Boolean);
+
+    for (const segment of compactSegments) {
+      const label = bannedTermLookup.get(segment);
+      if (label) return label;
+    }
+
+    const normalizedWords = normalizeModerationText(content)
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    for (let i = 0; i < normalizedWords.length - 1; i += 1) {
+      const phraseLabel = bannedTermLookup.get(`${normalizedWords[i]}${normalizedWords[i + 1]}`);
+      if (phraseLabel) return phraseLabel;
+    }
+
+    return null;
+  }
 
   /* ── Word filter — runs before all other handlers ── */
   discordBot.on("messageCreate", async (message) => {
     if (message.author.bot) return;
-    if (!bannedRegex.test(message.content)) return;
+    const matchedTerm = findBannedModerationTerm(message.content);
+    if (!matchedTerm) return;
     message._filtered = true;
     try {
       await message.delete();
-      const matched = message.content.match(bannedRegex)[0];
-      const censored = matched.slice(0, 2) + "*".repeat(Math.max(0, matched.length - 2));
-      const warn = await message.channel.send(`<@${message.author.id}> The word "${censored}" isn't allowed in this server.`);
+      const censored = `${matchedTerm.slice(0, 2)}...`;
+      const warn = await message.channel.send({
+        content: `<@${message.author.id}> You can't say "${censored}" in this server.`,
+        allowedMentions: { users: [message.author.id] },
+      });
       setTimeout(() => warn.delete().catch(() => {}), 5000);
     } catch {}
   });
