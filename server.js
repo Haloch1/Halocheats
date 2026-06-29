@@ -50,6 +50,8 @@ const nowpaymentsIpnKey = process.env.NOWPAYMENTS_IPN_KEY || "";
 const youtubeClientId = process.env.YOUTUBE_CLIENT_ID || "";
 const youtubeClientSecret = process.env.YOUTUBE_CLIENT_SECRET || "";
 const youtubeRefreshToken = process.env.YOUTUBE_REFRESH_TOKEN || "";
+const uploadPostApiKey = process.env.UPLOADPOST_API_KEY || "";
+const uploadPostUser = process.env.UPLOADPOST_USER || "";
 const discordLowStockChannelId = "1517987031723282607";
 const liveDeskCooldownMs = 45_000;
 const liveDeskCooldownByIp = new Map();
@@ -963,7 +965,8 @@ if (isConfiguredValue(discordBotToken)) {
           .addStringOption(o => o.setName("title").setDescription("Video title").setRequired(true))
           .addStringOption(o => o.setName("description").setDescription("Video description").setRequired(false))
           .addStringOption(o => o.setName("tags").setDescription("Comma-separated tags (e.g. foryou,gaming,cheats)").setRequired(false))
-          .addBooleanOption(o => o.setName("shorts").setDescription("Mark as a YouTube Short (default: true)").setRequired(false)),
+          .addBooleanOption(o => o.setName("shorts").setDescription("Mark as a YouTube Short (default: true)").setRequired(false))
+          .addBooleanOption(o => o.setName("tiktok").setDescription("Also upload to TikTok (default: true)").setRequired(false)),
       ].map((c) => c.toJSON());
 
       if (discordGuildId) {
@@ -2023,7 +2026,7 @@ if (isConfiguredValue(discordBotToken)) {
       return interaction.reply({ embeds: [{ description: "Verify panel posted.", color: 0x22c55e }], ephemeral: true });
     }
 
-    /* ── /upload — Upload a video to YouTube ── */
+    /* ── /upload — Upload a video to YouTube + optionally TikTok ── */
     if (interaction.commandName === "upload") {
       if (!BOT_ADMINS.includes(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
@@ -2038,15 +2041,18 @@ if (isConfiguredValue(discordBotToken)) {
       }
 
       const isShorts = interaction.options.getBoolean("shorts") !== false; // defaults to true
+      const postToTiktok = interaction.options.getBoolean("tiktok") !== false; // defaults to true
       const rawTitle = interaction.options.getString("title");
-      const title = isShorts && !rawTitle.includes("#Shorts") ? `${rawTitle} #Shorts` : rawTitle;
+      const ytTitle = isShorts && !rawTitle.includes("#Shorts") ? `${rawTitle} #Shorts` : rawTitle;
       const description = interaction.options.getString("description") || "";
       const tagsInput = interaction.options.getString("tags") || "";
       const tags = tagsInput ? tagsInput.split(",").map(t => t.trim().replace(/^#/, "")) : [];
       if (isShorts && !tags.includes("Shorts")) tags.unshift("Shorts");
 
       await interaction.deferReply();
+      const results = [];
 
+      // ── YouTube upload ──
       try {
         const oauth2Client = new google.auth.OAuth2(youtubeClientId, youtubeClientSecret);
         oauth2Client.setCredentials({ refresh_token: youtubeRefreshToken });
@@ -2059,18 +2065,66 @@ if (isConfiguredValue(discordBotToken)) {
         const res = await youtube.videos.insert({
           part: ["snippet", "status"],
           requestBody: {
-            snippet: { title, description, tags, categoryId: "20" },
+            snippet: { title: ytTitle, description, tags, categoryId: "20" },
             status: { privacyStatus: "public", selfDeclaredMadeForKids: false },
           },
           media: { body: videoResponse.body },
         });
 
         const videoId = res.data.id;
-        await interaction.editReply({ embeds: [{ description: `Uploaded! https://youtube.com/watch?v=${videoId}`, color: 0x22c55e }] });
+        results.push(`**YouTube:** https://youtube.com/watch?v=${videoId}`);
       } catch (err) {
         console.error("[YouTube upload]", err.message);
-        await interaction.editReply({ embeds: [{ description: `Upload failed: ${err.message}`, color: 0xff4444 }] });
+        results.push(`**YouTube:** Failed - ${err.message}`);
       }
+
+      // ── TikTok upload via Upload-Post ──
+      if (postToTiktok) {
+        if (!uploadPostApiKey || !uploadPostUser) {
+          results.push("**TikTok:** Skipped - Set UPLOADPOST_API_KEY and UPLOADPOST_USER env vars.");
+        } else {
+          try {
+            const { default: fetch } = await import("node-fetch");
+            const { FormData, Blob } = await import("node-fetch");
+
+            // Download video as buffer
+            const vidRes = await fetch(attachment.url);
+            if (!vidRes.ok) throw new Error("Failed to download attachment");
+            const videoBuffer = await vidRes.buffer();
+
+            // Build TikTok title with hashtags
+            const tiktokHashtags = tags.map(t => `#${t}`).join(" ");
+            const tiktokTitle = tiktokHashtags ? `${rawTitle} ${tiktokHashtags}` : rawTitle;
+
+            // Build multipart form
+            const form = new FormData();
+            form.append("user", uploadPostUser);
+            form.append("platform[]", "tiktok");
+            form.append("title", tiktokTitle.slice(0, 2200));
+            form.append("video", new Blob([videoBuffer], { type: attachment.contentType }), attachment.name || "video.mp4");
+
+            const tiktokRes = await fetch("https://api.upload-post.com/api/upload", {
+              method: "POST",
+              headers: { Authorization: `Apikey ${uploadPostApiKey}` },
+              body: form,
+            });
+
+            const tiktokData = await tiktokRes.json();
+            if (tiktokData.success) {
+              const tiktokUrl = tiktokData.results?.tiktok?.url || "Posted!";
+              results.push(`**TikTok:** ${tiktokUrl}`);
+            } else {
+              results.push(`**TikTok:** Failed - ${tiktokData.message || "Unknown error"}`);
+            }
+          } catch (err) {
+            console.error("[TikTok upload]", err.message);
+            results.push(`**TikTok:** Failed - ${err.message}`);
+          }
+        }
+      }
+
+      const color = results.every(r => !r.includes("Failed")) ? 0x22c55e : 0xffaa00;
+      await interaction.editReply({ embeds: [{ description: results.join("\n"), color }] });
     }
   });
 
