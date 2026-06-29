@@ -2299,105 +2299,22 @@ if (isConfiguredValue(discordBotToken)) {
         })());
       }
 
-      // Instagram Reels (direct API via Meta Graph)
-      if (metaPageToken && metaIgAccountId) {
+
+      // Instagram + Facebook via Make.com webhook
+      const makeWebhookUrl = process.env.MAKE_WEBHOOK_URL || "";
+      if (makeWebhookUrl) {
         tasks.push((async () => {
           try {
-            const graphBase = `https://graph.facebook.com/${metaGraphVersion}`;
-            const containerData = await metaJson(await metaPost(`${graphBase}/${metaIgAccountId}/media`, {
-              media_type: "REELS",
-              video_url: attachment.url,
-              caption: socialCaption,
-              access_token: metaPageToken,
-            }), "create Instagram Reel container");
-            const containerId = containerData.id;
-            let isReady = false;
-
-            for (let i = 0; i < 60; i++) {
-              await new Promise(r => setTimeout(r, 5000));
-              const statusData = await metaJson(await metaGet(`${graphBase}/${containerId}`, {
-                fields: "status_code,status",
-                access_token: metaPageToken,
-              }), "check Instagram Reel container");
-              if (statusData.status_code === "FINISHED") {
-                isReady = true;
-                break;
-              }
-              if (statusData.status_code === "ERROR") throw new Error(statusData.status || "Container processing failed");
-            }
-
-            if (!isReady) throw new Error("Container processing timed out");
-
-            const pubData = await metaJson(await metaPost(`${graphBase}/${metaIgAccountId}/media_publish`, {
-              creation_id: containerId,
-              access_token: metaPageToken,
-            }), "publish Instagram Reel");
-            return `**Instagram:** Posted (ID: ${pubData.id})`;
-          } catch (err) {
-            console.error("[Instagram]", err.message);
-            return `**Instagram:** Failed - ${err.message}`;
-          }
-        })());
-      }
-
-      // Facebook Page Video (direct API via Meta Graph)
-      if (metaPageToken && metaPageId) {
-        tasks.push((async () => {
-          try {
-            const fbForm = new FormData();
-            fbForm.append("source", new Blob([videoBuffer], { type: attachment.contentType || "video/mp4" }), attachment.name || "video.mp4");
-            fbForm.append("description", socialCaption);
-            fbForm.append("access_token", metaPageToken);
-            const fbRes = await fetch(`https://graph-video.facebook.com/${metaGraphVersion}/${metaPageId}/videos`, {
+            const makeRes = await fetch(makeWebhookUrl, {
               method: "POST",
-              body: fbForm,
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ video_url: attachment.url, caption: socialCaption }),
             });
-            const fbData = await metaJson(fbRes, "publish Facebook Page video");
-            return `**Facebook:** Posted (ID: ${fbData.id})`;
+            if (!makeRes.ok) throw new Error(`HTTP ${makeRes.status}`);
+            return "**Instagram + Facebook:** Sent to Make.com";
           } catch (err) {
-            console.error("[Facebook]", err.message);
-            return `**Facebook:** Failed - ${err.message}`;
-          }
-        })());
-      }
-
-      // Threads (direct API via Threads Graph)
-      if (metaThreadsToken && metaThreadsUserId) {
-        tasks.push((async () => {
-          try {
-            const threadsBase = "https://graph.threads.net/v1.0";
-            const tContainerData = await metaJson(await metaPost(`${threadsBase}/${metaThreadsUserId}/threads`, {
-              media_type: "VIDEO",
-              video_url: attachment.url,
-              text: socialCaption,
-              access_token: metaThreadsToken,
-            }), "create Threads media container");
-            const tContainerId = tContainerData.id;
-            let isReady = false;
-
-            for (let i = 0; i < 60; i++) {
-              await new Promise(r => setTimeout(r, 5000));
-              const tStatusData = await metaJson(await metaGet(`${threadsBase}/${tContainerId}`, {
-                fields: "status,error_message",
-                access_token: metaThreadsToken,
-              }), "check Threads media container");
-              if (tStatusData.status === "FINISHED") {
-                isReady = true;
-                break;
-              }
-              if (tStatusData.status === "ERROR") throw new Error(tStatusData.error_message || "Processing failed");
-            }
-
-            if (!isReady) throw new Error("Container processing timed out");
-
-            const tPubData = await metaJson(await metaPost(`${threadsBase}/${metaThreadsUserId}/threads_publish`, {
-              creation_id: tContainerId,
-              access_token: metaThreadsToken,
-            }), "publish Threads post");
-            return `**Threads:** Posted (ID: ${tPubData.id})`;
-          } catch (err) {
-            console.error("[Threads]", err.message);
-            return `**Threads:** Failed - ${err.message}`;
+            console.error("[Make.com]", err.message);
+            return `**Instagram + Facebook:** Failed - ${err.message}`;
           }
         })());
       }
