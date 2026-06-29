@@ -11,6 +11,9 @@ import rateLimit from "express-rate-limit";
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ChannelType, PermissionFlagsBits } from "discord.js";
 import { products } from "./data/products.js";
 import { google } from "googleapis";
+import OAuth from "oauth-1.0a";
+import hmacSHA1 from "crypto-js/hmac-sha1.js";
+import encBase64 from "crypto-js/enc-base64.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -52,6 +55,10 @@ const youtubeClientSecret = process.env.YOUTUBE_CLIENT_SECRET || "";
 const youtubeRefreshToken = process.env.YOUTUBE_REFRESH_TOKEN || "";
 const blueskyHandle = process.env.BLUESKY_HANDLE || "";
 const blueskyAppPassword = process.env.BLUESKY_APP_PASSWORD || "";
+const xApiKey = process.env.X_API_KEY || "";
+const xApiSecret = process.env.X_API_SECRET || "";
+const xAccessToken = process.env.X_ACCESS_TOKEN || "";
+const xAccessSecret = process.env.X_ACCESS_SECRET || "";
 const discordLowStockChannelId = "1517987031723282607";
 const liveDeskCooldownMs = 45_000;
 const liveDeskCooldownByIp = new Map();
@@ -2156,7 +2163,89 @@ if (isConfiguredValue(discordBotToken)) {
         })());
       }
 
-      // PostPeer and Upload-Post disabled — using direct APIs only
+      // X/Twitter (direct API via OAuth 1.0a, unlimited)
+      if (xApiKey && xApiSecret && xAccessToken && xAccessSecret) {
+        tasks.push((async () => {
+          try {
+            const oauth = OAuth({
+              consumer: { key: xApiKey, secret: xApiSecret },
+              signature_method: "HMAC-SHA1",
+              hash_function(baseString, key) { return hmacSHA1(baseString, key).toString(encBase64); },
+            });
+            const token = { key: xAccessToken, secret: xAccessSecret };
+
+            const xFetch = async (url, method, params = {}, isJson = false) => {
+              const requestData = { url, method };
+              const headers = oauth.toHeader(oauth.authorize(requestData, token));
+              let res;
+              if (isJson) {
+                headers["Content-Type"] = "application/json";
+                res = await fetch(url, { method, headers, body: JSON.stringify(params) });
+              } else if (method === "GET") {
+                res = await fetch(url, { method, headers });
+              } else {
+                const form = new URLSearchParams(params);
+                headers["Content-Type"] = "application/x-www-form-urlencoded";
+                res = await fetch(url, { method, headers, body: form.toString() });
+              }
+              const text = await res.text();
+              if (!res.ok) throw new Error(`X API ${res.status}: ${text.slice(0, 200)}`);
+              return JSON.parse(text);
+            };
+
+            // Step 1: INIT chunked upload
+            const mediaType = attachment.contentType || "video/mp4";
+            const initData = await xFetch("https://upload.twitter.com/1.1/media/upload.json", "POST", {
+              command: "INIT", total_bytes: String(videoBuffer.length), media_type: mediaType, media_category: "tweet_video",
+            });
+            const mediaId = initData.media_id_string;
+
+            // Step 2: APPEND in 5MB chunks
+            const chunkSize = 5 * 1024 * 1024;
+            for (let i = 0; i * chunkSize < videoBuffer.length; i++) {
+              const chunk = videoBuffer.slice(i * chunkSize, (i + 1) * chunkSize);
+              const b64 = Buffer.from(chunk).toString("base64");
+              const appendReq = { url: "https://upload.twitter.com/1.1/media/upload.json", method: "POST" };
+              const appendHeaders = oauth.toHeader(oauth.authorize(appendReq, token));
+              const appendForm = new URLSearchParams({ command: "APPEND", media_id: mediaId, segment_index: String(i), media_data: b64 });
+              appendHeaders["Content-Type"] = "application/x-www-form-urlencoded";
+              const appendRes = await fetch("https://upload.twitter.com/1.1/media/upload.json", { method: "POST", headers: appendHeaders, body: appendForm.toString() });
+              if (!appendRes.ok && appendRes.status !== 204 && appendRes.status !== 202) {
+                throw new Error(`APPEND failed: ${appendRes.status} ${(await appendRes.text()).slice(0, 200)}`);
+              }
+            }
+
+            // Step 3: FINALIZE
+            const finalData = await xFetch("https://upload.twitter.com/1.1/media/upload.json", "POST", {
+              command: "FINALIZE", media_id: mediaId,
+            });
+
+            // Step 4: Poll processing status
+            if (finalData.processing_info) {
+              let info = finalData.processing_info;
+              while (info && info.state !== "succeeded" && info.state !== "failed") {
+                const wait = (info.check_after_secs || 5) * 1000;
+                await new Promise(r => setTimeout(r, wait));
+                const statusData = await xFetch(`https://upload.twitter.com/1.1/media/upload.json?command=STATUS&media_id=${mediaId}`, "GET");
+                info = statusData.processing_info;
+              }
+              if (info?.state === "failed") throw new Error(`Video processing failed: ${info.error?.message || "unknown"}`);
+            }
+
+            // Step 5: Create tweet with video
+            const tweetText = socialCaption.slice(0, 280);
+            const tweetData = await xFetch("https://api.twitter.com/2/tweets", "POST", {
+              text: tweetText, media: { media_ids: [mediaId] },
+            }, true);
+
+            const tweetId = tweetData.data?.id;
+            return tweetId ? `**X:** https://x.com/i/status/${tweetId}` : `**X:** Posted (${JSON.stringify(tweetData).slice(0, 100)})`;
+          } catch (err) {
+            console.error("[X/Twitter]", err.message);
+            return `**X:** Failed - ${err.message}`;
+          }
+        })());
+      }
 
       // Run all uploads in parallel
       const settled = await Promise.allSettled(tasks);
