@@ -2175,15 +2175,21 @@ if (isConfiguredValue(discordBotToken)) {
             const token = { key: xAccessToken, secret: xAccessSecret };
 
             const xFetch = async (url, method, params = {}, isJson = false) => {
-              const requestData = { url, method };
-              const headers = oauth.toHeader(oauth.authorize(requestData, token));
-              let res;
+              let requestData, headers, res;
               if (isJson) {
+                // JSON body: don't include body params in OAuth signature
+                requestData = { url, method };
+                headers = oauth.toHeader(oauth.authorize(requestData, token));
                 headers["Content-Type"] = "application/json";
                 res = await fetch(url, { method, headers, body: JSON.stringify(params) });
               } else if (method === "GET") {
+                requestData = { url, method };
+                headers = oauth.toHeader(oauth.authorize(requestData, token));
                 res = await fetch(url, { method, headers });
               } else {
+                // Form body: include params in OAuth signature base string
+                requestData = { url, method, data: params };
+                headers = oauth.toHeader(oauth.authorize(requestData, token));
                 const form = new URLSearchParams(params);
                 headers["Content-Type"] = "application/x-www-form-urlencoded";
                 res = await fetch(url, { method, headers, body: form.toString() });
