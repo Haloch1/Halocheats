@@ -956,6 +956,12 @@ if (isConfiguredValue(discordBotToken)) {
         new SlashCommandBuilder()
           .setName("ticket-panel")
           .setDescription("Post a ticket panel embed in this channel (owner only)"),
+        new SlashCommandBuilder()
+          .setName("upload")
+          .setDescription("Upload a video to YouTube (admin only)")
+          .addAttachmentOption(o => o.setName("video").setDescription("Video file to upload").setRequired(true))
+          .addStringOption(o => o.setName("title").setDescription("Video title").setRequired(true))
+          .addStringOption(o => o.setName("description").setDescription("Video description").setRequired(false)),
       ].map((c) => c.toJSON());
 
       if (discordGuildId) {
@@ -1140,59 +1146,6 @@ if (isConfiguredValue(discordBotToken)) {
       }
     } catch (err) {
       console.error("[Discord review moderation]", err.message);
-    }
-  });
-
-  /* ── Discord !upload command: upload video to YouTube ── */
-  discordBot.on("messageCreate", async (message) => {
-    if (message.author.bot) return;
-    if (!message.content.startsWith("!upload")) return;
-    if (!BOT_ADMINS.includes(message.author.id)) {
-      return message.reply("You don't have permission to use this command.");
-    }
-
-    if (!youtubeClientId || !youtubeClientSecret || !youtubeRefreshToken) {
-      return message.reply("YouTube API credentials are not configured. Set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, and YOUTUBE_REFRESH_TOKEN env vars.");
-    }
-
-    const attachment = message.attachments.find(a => a.contentType?.startsWith("video/"));
-    if (!attachment) {
-      return message.reply("Attach a video file to your message.\nUsage: `!upload <title> | <description>`\nExample: `!upload My Clip | Check out this gameplay`");
-    }
-
-    // Parse title and description from message text
-    const textAfterCommand = message.content.slice("!upload".length).trim();
-    const [rawTitle, ...descParts] = textAfterCommand.split("|");
-    const title = rawTitle?.trim() || "Untitled";
-    const description = descParts.join("|").trim() || "";
-
-    const status = await message.reply(`Uploading **${title}** to YouTube...`);
-
-    try {
-      const oauth2Client = new google.auth.OAuth2(youtubeClientId, youtubeClientSecret);
-      oauth2Client.setCredentials({ refresh_token: youtubeRefreshToken });
-
-      const youtube = google.youtube({ version: "v3", auth: oauth2Client });
-
-      // Download the video attachment as a stream
-      const { default: fetch } = await import("node-fetch");
-      const videoResponse = await fetch(attachment.url);
-      if (!videoResponse.ok) throw new Error("Failed to download attachment");
-
-      const res = await youtube.videos.insert({
-        part: ["snippet", "status"],
-        requestBody: {
-          snippet: { title, description, categoryId: "20" },
-          status: { privacyStatus: "public" },
-        },
-        media: { body: videoResponse.body },
-      });
-
-      const videoId = res.data.id;
-      await status.edit(`Uploaded! https://youtube.com/watch?v=${videoId}`);
-    } catch (err) {
-      console.error("[YouTube upload]", err.message);
-      await status.edit(`Upload failed: ${err.message}`).catch(() => {});
     }
   });
 
@@ -2066,6 +2019,51 @@ if (isConfiguredValue(discordBotToken)) {
       });
 
       return interaction.reply({ embeds: [{ description: "Verify panel posted.", color: 0x22c55e }], ephemeral: true });
+    }
+
+    /* ── /upload — Upload a video to YouTube ── */
+    if (interaction.commandName === "upload") {
+      if (!BOT_ADMINS.includes(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      if (!youtubeClientId || !youtubeClientSecret || !youtubeRefreshToken) {
+        return interaction.reply({ embeds: [{ description: "YouTube API credentials not configured. Set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, and YOUTUBE_REFRESH_TOKEN env vars.", color: 0xff4444 }], ephemeral: true });
+      }
+
+      const attachment = interaction.options.getAttachment("video");
+      if (!attachment.contentType?.startsWith("video/")) {
+        return interaction.reply({ embeds: [{ description: "That file isn't a video.", color: 0xff4444 }], ephemeral: true });
+      }
+
+      const title = interaction.options.getString("title");
+      const description = interaction.options.getString("description") || "";
+
+      await interaction.deferReply();
+
+      try {
+        const oauth2Client = new google.auth.OAuth2(youtubeClientId, youtubeClientSecret);
+        oauth2Client.setCredentials({ refresh_token: youtubeRefreshToken });
+        const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+
+        const { default: fetch } = await import("node-fetch");
+        const videoResponse = await fetch(attachment.url);
+        if (!videoResponse.ok) throw new Error("Failed to download attachment");
+
+        const res = await youtube.videos.insert({
+          part: ["snippet", "status"],
+          requestBody: {
+            snippet: { title, description, categoryId: "20" },
+            status: { privacyStatus: "public" },
+          },
+          media: { body: videoResponse.body },
+        });
+
+        const videoId = res.data.id;
+        await interaction.editReply({ embeds: [{ description: `Uploaded! https://youtube.com/watch?v=${videoId}`, color: 0x22c55e }] });
+      } catch (err) {
+        console.error("[YouTube upload]", err.message);
+        await interaction.editReply({ embeds: [{ description: `Upload failed: ${err.message}`, color: 0xff4444 }] });
+      }
     }
   });
 
