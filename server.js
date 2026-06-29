@@ -50,22 +50,8 @@ const nowpaymentsIpnKey = process.env.NOWPAYMENTS_IPN_KEY || "";
 const youtubeClientId = process.env.YOUTUBE_CLIENT_ID || "";
 const youtubeClientSecret = process.env.YOUTUBE_CLIENT_SECRET || "";
 const youtubeRefreshToken = process.env.YOUTUBE_REFRESH_TOKEN || "";
-const uploadPostApiKey = process.env.UPLOADPOST_API_KEY || "";
-const uploadPostUser = process.env.UPLOADPOST_USER || "";
-const postpeerApiKey = process.env.POSTPEER_API_KEY || "";
 const blueskyHandle = process.env.BLUESKY_HANDLE || "";
 const blueskyAppPassword = process.env.BLUESKY_APP_PASSWORD || "";
-// POSTPEER_ACCOUNTS format: "tiktok:accId,instagram:accId,x:accId,facebook:accId"
-const postpeerAccounts = (process.env.POSTPEER_ACCOUNTS || "").split(",").filter(Boolean).reduce((map, pair) => {
-  const idx = pair.indexOf(":");
-  if (idx === -1) return map;
-  const platform = pair.slice(0, idx).trim();
-  const accountId = pair.slice(idx + 1).trim();
-  if (platform && accountId) map[platform] = accountId;
-  return map;
-}, {});
-// UPLOADPOST_PLATFORMS format: "instagram,x,facebook,pinterest,bluesky,linkedin"
-const uploadPostPlatforms = (process.env.UPLOADPOST_PLATFORMS || "").split(",").map(p => p.trim().toLowerCase()).filter(Boolean);
 const discordLowStockChannelId = "1517987031723282607";
 const liveDeskCooldownMs = 45_000;
 const liveDeskCooldownByIp = new Map();
@@ -2170,76 +2156,7 @@ if (isConfiguredValue(discordBotToken)) {
         })());
       }
 
-      // PostPeer (TikTok, Instagram, Facebook, X — 20 free/month)
-      const ppPlatformNames = Object.keys(postpeerAccounts);
-      if (postpeerApiKey && ppPlatformNames.length > 0) {
-        tasks.push((async () => {
-          try {
-            const ppRes = await fetch("https://api.postpeer.dev/v1/posts", {
-              method: "POST",
-              headers: { "x-access-key": postpeerApiKey, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                content: socialCaption.slice(0, 2200),
-                mediaItems: [{ type: "video", url: attachment.url }],
-                platforms: ppPlatformNames.map(p => ({ platform: p, accountId: postpeerAccounts[p] })),
-                publishNow: true,
-              }),
-            });
-            const ppData = await ppRes.json();
-            const lines = [];
-            const platformResults = ppData.platforms || ppData.results || [];
-            if (platformResults.length > 0) {
-              for (const pr of platformResults) {
-                lines.push(pr.success ? `**${pr.platform}:** ${pr.platformPostUrl || "Posted!"}` : `**${pr.platform} (PostPeer):** Failed - ${pr.error || "Unknown"}`);
-              }
-            } else {
-              lines.push(`**PostPeer:** ${ppData.message || ppData.error || "Failed"}`);
-            }
-            return lines.join("\n");
-          } catch (err) {
-            console.error("[PostPeer]", err.message);
-            return `**PostPeer:** Failed - ${err.message}`;
-          }
-        })());
-      }
-
-      // Upload-Post (Instagram, Facebook, X, Threads — 10 free/month fallback)
-      if (uploadPostPlatforms.length > 0 && uploadPostApiKey && uploadPostUser) {
-        tasks.push((async () => {
-          try {
-            const form = new FormData();
-            form.append("user", uploadPostUser);
-            form.append("title", socialCaption);
-            if (description) form.append("description", description);
-            form.append("video", new Blob([videoBuffer], { type: attachment.contentType }), attachment.name || "video.mp4");
-            for (const p of uploadPostPlatforms) form.append("platform[]", p);
-
-            const upRes = await fetch("https://api.upload-post.com/api/upload", {
-              method: "POST",
-              headers: { Authorization: `Apikey ${uploadPostApiKey}` },
-              body: form,
-            });
-            const upText = await upRes.text();
-            console.log("[Upload-Post response]", upText);
-            let upData;
-            try { upData = JSON.parse(upText); } catch { return "**Upload-Post:** Failed - Bad response"; }
-
-            if (upData.success || upData.status === "success") {
-              const posted = upData.results || upData.data || {};
-              const lines = [];
-              for (const p of uploadPostPlatforms) {
-                const pr = posted[p];
-                if (pr?.success || pr?.url) lines.push(`**${p}:** ${pr.url || "Posted!"}`);
-              }
-              return lines.length > 0 ? lines.join("\n") : `**Upload-Post:** Queued (${JSON.stringify(upData).slice(0, 200)})`;
-            }
-            return `**Upload-Post:** Failed - ${upData.message || upData.error || JSON.stringify(upData).slice(0, 200)}`;
-          } catch (err) {
-            console.error("[Upload-Post]", err.message);
-            return `**Upload-Post:** Failed - ${err.message}`;
-          }
-        })());
-      }
+      // PostPeer and Upload-Post disabled — using direct APIs only
 
       // Run all uploads in parallel
       const settled = await Promise.allSettled(tasks);
