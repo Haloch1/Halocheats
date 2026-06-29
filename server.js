@@ -1039,8 +1039,7 @@ if (isConfiguredValue(discordBotToken)) {
     try {
       await message.delete();
       const matched = message.content.match(bannedRegex)[0];
-      const showCount = Math.max(1, Math.ceil(matched.length * 0.75));
-      const censored = matched.slice(0, showCount) + "*".repeat(matched.length - showCount);
+      const censored = matched[0] + "*".repeat(matched.length - 1);
       const warn = await message.channel.send(`<@${message.author.id}> The word "${censored}" isn't allowed in this server.`);
       setTimeout(() => warn.delete().catch(() => {}), 5000);
     } catch {}
