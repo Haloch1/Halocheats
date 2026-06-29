@@ -2225,7 +2225,7 @@ if (isConfiguredValue(discordBotToken)) {
               const authHeader = oauthSign("POST", appendUrl, appendQs);
               const qs = new URLSearchParams(appendQs).toString();
               const form = new FormData();
-              form.append("media_data", new Blob([chunk], { type: "application/octet-stream" }), "chunk");
+              form.append("media", new Blob([chunk], { type: mediaType }), "video.mp4");
               const appendRes = await fetch(`${appendUrl}?${qs}`, {
                 method: "POST",
                 headers: { Authorization: authHeader },
