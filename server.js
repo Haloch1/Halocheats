@@ -2325,7 +2325,9 @@ if (isConfiguredValue(discordBotToken)) {
 
       if (results.length === 0) results.push("No platforms configured.");
 
-      const color = results.every(r => !r.includes("Failed")) ? 0x22c55e : 0xffaa00;
+      const failedResults = results.filter(r => r.includes("Failed"));
+      const onlyBlueskyFailed = failedResults.length > 0 && failedResults.every(r => r.startsWith("**Bluesky:**"));
+      const color = failedResults.length === 0 ? 0x22c55e : onlyBlueskyFailed ? 0x22c55e : 0xffaa00;
       await interaction.editReply({ embeds: [{ description: results.join("\n"), color }] });
     }
   });
