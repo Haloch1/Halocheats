@@ -128,14 +128,20 @@ function renderThreads(threads) {
   activeThreads = threads;
 
   if (!threads.length) {
-    threadList.innerHTML =
-      '<div class="member-empty">No threads yet. Open a request from the homepage live desk.</div>';
-    threadTitle.textContent = "Select a thread";
-    threadMeta.textContent = "Choose a thread from the left to read the full conversation.";
-    threadMessages.innerHTML = '<div class="member-empty">No thread selected.</div>';
+    threadList.innerHTML = "";
+    threadTitle.textContent = "No tickets yet";
+    threadMeta.textContent = "Open your first request below.";
+    threadMessages.innerHTML = "";
     replyForm.hidden = true;
+    // Show form directly, hide toggle button
+    if (newTicketShell) newTicketShell.hidden = false;
+    if (toggleBtn) toggleBtn.hidden = true;
     return;
   }
+
+  // Has threads: show toggle button, keep form hidden by default
+  if (toggleBtn) toggleBtn.hidden = false;
+  if (newTicketShell && !toggleBtn?.dataset.manualOpen) newTicketShell.hidden = true;
 
   const unreadTotal = getUnreadCount(threads);
   const headerEl = document.querySelector(".desk-inbox-header h3");
@@ -316,12 +322,13 @@ toggleBtn?.addEventListener("click", () => {
   const showing = !newTicketShell.hidden;
   newTicketShell.hidden = showing;
   toggleBtn.textContent = showing ? "New request" : "Cancel";
+  toggleBtn.dataset.manualOpen = showing ? "" : "1";
 });
 
 cancelBtn?.addEventListener("click", () => {
   if (!newTicketShell) return;
   newTicketShell.hidden = true;
-  toggleBtn.textContent = "New request";
+  if (toggleBtn) { toggleBtn.textContent = "New request"; toggleBtn.dataset.manualOpen = ""; }
   newTicketForm?.reset();
 });
 
