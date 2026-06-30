@@ -293,6 +293,86 @@ replyForm?.addEventListener("submit", async (event) => {
   }
 });
 
+/* ── New ticket form (inline) ── */
+const newTicketShell = document.querySelector("[data-new-ticket-shell]");
+const newTicketForm = document.querySelector("[data-desk-new-ticket-form]");
+const toggleBtn = document.querySelector("[data-toggle-new-ticket]");
+const cancelBtn = document.querySelector("[data-cancel-new-ticket]");
+
+toggleBtn?.addEventListener("click", () => {
+  if (!newTicketShell) return;
+  const showing = !newTicketShell.hidden;
+  newTicketShell.hidden = showing;
+  toggleBtn.textContent = showing ? "New request" : "Cancel";
+});
+
+cancelBtn?.addEventListener("click", () => {
+  if (!newTicketShell) return;
+  newTicketShell.hidden = true;
+  toggleBtn.textContent = "New request";
+  newTicketForm?.reset();
+});
+
+newTicketForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const session = await getCurrentSession();
+  if (!session) {
+    renderMessage(messageBox, "Sign in first to open a support request.", "warn");
+    return;
+  }
+
+  const fd = new FormData(newTicketForm);
+  const name = String(fd.get("name") || "").trim();
+  const contact = String(fd.get("contact") || "").trim();
+  const topic = String(fd.get("topic") || "").trim();
+  const details = String(fd.get("details") || "").trim();
+  const company = String(fd.get("company") || "").trim();
+
+  if (!name || !contact || !topic || !details) return;
+
+  const submitBtn = newTicketForm.querySelector('button[type="submit"]');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Sending...";
+    submitBtn.style.opacity = "0.5";
+  }
+
+  try {
+    const response = await fetch("/api/live-desk", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ name, contact, topic, details, company }),
+    });
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to open the request.");
+    }
+
+    newTicketForm.reset();
+    newTicketShell.hidden = true;
+    toggleBtn.textContent = "New request";
+    await loadThreads();
+    renderMessage(messageBox, "Request opened. Support will reply soon.", "success");
+  } catch (error) {
+    renderMessage(
+      messageBox,
+      error instanceof Error ? error.message : "Unable to open the request.",
+      "error"
+    );
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Submit Request";
+      submitBtn.style.opacity = "";
+    }
+  }
+});
+
 try {
   await loadThreads();
 } catch (error) {
