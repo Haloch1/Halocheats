@@ -53,19 +53,11 @@ function unlockRequestsPanel() {
   }
 }
 
-async function unlockOwnerPanel(ownerKey) {
-  const response = await fetch("/api/owner/sign-in", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ ownerKey }),
-  });
+async function checkAdminRole() {
+  const response = await fetch("/api/auth/role", { credentials: "same-origin" });
   const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.error || "Unable to unlock owner panel.");
+  if (payload.role !== "admin") {
+    throw new Error("Admin access required.");
   }
 }
 
@@ -222,30 +214,19 @@ async function deleteRequest(requestId) {
   renderMessage(messageBox, "Request deleted and logged.", "success");
 }
 
-ownerAccessForm?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  const formData = new FormData(ownerAccessForm);
-  const ownerKey = String(formData.get("ownerKey") || "").trim();
-  const ownerLabel = String(formData.get("ownerLabel") || "").trim();
-
-  if (!ownerKey || !ownerLabel) {
-    return;
-  }
-
-  setOwnerLabel(ownerLabel);
-
+/* Auto-check admin role */
+(async () => {
   try {
-    await unlockOwnerPanel(ownerKey);
+    await checkAdminRole();
     await loadRequests();
   } catch (error) {
     renderMessage(
       messageBox,
-      error instanceof Error ? error.message : "Unable to unlock request panel.",
+      error instanceof Error ? error.message : "Admin access required.",
       "error"
     );
   }
-});
+})();
 
 requestList?.addEventListener("click", async (event) => {
   const approveButton = event.target.closest("[data-approve-request]");
@@ -277,5 +258,3 @@ requestList?.addEventListener("click", async (event) => {
     );
   }
 });
-
-loadRequests().catch(() => {});

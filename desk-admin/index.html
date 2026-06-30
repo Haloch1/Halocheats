@@ -35,37 +35,12 @@
         </div>
 
         <div class="inline-message info reveal" data-delay="20" data-admin-message>
-          Enter the admin desk key to load support threads.
+          Checking access...
         </div>
 
-        <section class="admin-access-card reveal" data-delay="40">
-          <form class="auth-form admin-access-form" data-admin-access-form>
-            <label>
-              Admin desk key
-              <input type="password" name="adminKey" autocomplete="current-password" required />
-            </label>
-            <label>
-              Discord username
-              <input
-                type="text"
-                name="discordUsername"
-                autocomplete="username"
-                placeholder="username#0000 or @username"
-                required
-              />
-            </label>
-            <label>
-              Why do you need access?
-              <textarea
-                name="reason"
-                rows="3"
-                maxlength="500"
-                placeholder="Example: replying to a paid customer ticket"
-                required
-              ></textarea>
-            </label>
-            <button class="button button-primary" type="submit">Request Desk Access</button>
-          </form>
+        <section class="admin-access-card reveal" data-delay="40" hidden>
+          <p>Sign in with a staff or admin account to access the desk.</p>
+          <a href="/account/" class="button button-primary" style="text-decoration:none;text-align:center;margin-top:12px;">Go to Account</a>
         </section>
 
         <section
