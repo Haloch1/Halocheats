@@ -2427,19 +2427,49 @@ if (isConfiguredValue(discordBotToken)) {
           }
         }
 
-        /* ── Buffer platforms (Instagram, TikTok, Threads) ── */
-        const bufferKey = process.env.BUFFER_API_KEY || "";
-        const bufferChannels = [
-          { name: "📸 Instagram", id: process.env.BUFFER_INSTAGRAM_CHANNEL_ID, color: 0xe1306c },
-          { name: "🎵 TikTok", id: process.env.BUFFER_TIKTOK_CHANNEL_ID, color: 0x25f4ee },
-          { name: "🧵 Threads", id: process.env.BUFFER_THREADS_CHANNEL_ID, color: 0x000000 },
-        ].filter(c => c.id);
+        /* ── Instagram (Meta Graph API) ── */
+        if (metaIgAccountId && metaPageToken) {
+          try {
+            const igUrl = `https://graph.facebook.com/${metaGraphVersion}/${metaIgAccountId}?fields=followers_count,media_count,username,media.limit(5){id,caption,timestamp,like_count,comments_count,media_type}&access_token=${metaPageToken}`;
+            const igRes = await fetch(igUrl);
+            const igData = await igRes.json();
+            if (igData.error) throw new Error(igData.error.message);
 
-        if (bufferKey && bufferChannels.length) {
-          // Fetch organization ID from account
-          let bufferOrgId = process.env.BUFFER_ORGANIZATION_ID || "";
-          if (!bufferOrgId) {
-            try {
+            const igMedia = igData.media?.data || [];
+            let totalLikes = 0, totalComments = 0;
+            const desc = igMedia.map(m => {
+              totalLikes += m.like_count || 0;
+              totalComments += m.comments_count || 0;
+              const text = (m.caption || "").slice(0, 40) + ((m.caption || "").length > 40 ? "..." : "");
+              const parts = [];
+              if (m.like_count) parts.push(`${fmt(m.like_count)} likes`);
+              if (m.comments_count) parts.push(`${fmt(m.comments_count)} comments`);
+              return `\u25aa **${text}**\n  ${parts.join(" \u2022 ") || "No engagement yet"}`;
+            }).join("\n\n");
+
+            const fields = [
+              { name: "Followers", value: fmt(igData.followers_count || 0), inline: true },
+              { name: "Posts", value: fmt(igData.media_count || 0), inline: true },
+            ];
+            if (igMedia.length) {
+              fields.push(
+                { name: `Likes (last ${igMedia.length})`, value: fmt(totalLikes), inline: true },
+              );
+            }
+
+            embeds.push({ title: "\ud83d\udcf8 Instagram", fields, description: desc || "No recent posts.", color: 0xe1306c });
+          } catch (igErr) {
+            embeds.push({ title: "\ud83d\udcf8 Instagram", description: `\u274c ${igErr.message}`, color: 0xff4444 });
+          }
+        }
+
+        /* ── TikTok (via Buffer — no direct API available) ── */
+        const bufferKey = process.env.BUFFER_API_KEY || "";
+        const bufferTikTokId = process.env.BUFFER_TIKTOK_CHANNEL_ID || "";
+        if (bufferKey && bufferTikTokId) {
+          try {
+            let bufferOrgId = process.env.BUFFER_ORGANIZATION_ID || "";
+            if (!bufferOrgId) {
               const orgRes = await fetch("https://api.buffer.com", {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Authorization": `Bearer ${bufferKey}` },
@@ -2447,72 +2477,106 @@ if (isConfiguredValue(discordBotToken)) {
               });
               const orgData = await orgRes.json();
               bufferOrgId = orgData?.data?.account?.organizations?.[0]?.id || "";
-            } catch {}
-          }
-
-          if (!bufferOrgId) {
-            embeds.push({ title: "Buffer", description: "Could not fetch organization ID.", color: 0xff4444 });
-          } else {
-            for (const ch of bufferChannels) {
-              try {
-                const bRes = await fetch("https://api.buffer.com", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${bufferKey}` },
-                  body: JSON.stringify({
-                    query: `query {
-                      posts(input: {
-                        organizationId: "${bufferOrgId}",
-                        filter: { status: [sent], channelIds: ["${ch.id}"] }
-                        sort: [{ field: dueAt, direction: desc }]
-                      }, first: 5) {
-                        edges {
-                          node {
-                            id text sentAt externalLink
-                            metrics { type name value }
-                          }
-                        }
-                      }
-                    }`,
-                  }),
-                });
-                const bData = await bRes.json();
-                if (bData.errors) throw new Error(bData.errors[0].message);
-                const posts = (bData?.data?.posts?.edges || []).map(e => e.node);
-
-                if (posts.length) {
-                  let totalViews = 0, totalLikes = 0, totalComments = 0;
-                  for (const p of posts) {
-                    for (const met of (p.metrics || [])) {
-                      if (["impressions", "reach", "views"].includes(met.type)) totalViews += met.value;
-                      else if (["reactions", "likes"].includes(met.type)) totalLikes += met.value;
-                      else if (["comments", "replies"].includes(met.type)) totalComments += met.value;
-                    }
-                  }
-
-                  const fields = [
-                    { name: `Views (last ${posts.length})`, value: fmt(totalViews), inline: true },
-                    { name: `Likes (last ${posts.length})`, value: fmt(totalLikes), inline: true },
-                    { name: `Comments (last ${posts.length})`, value: fmt(totalComments), inline: true },
-                  ];
-
-                  const desc = posts.map(p => {
-                    const text = (p.text || "").slice(0, 40) + ((p.text || "").length > 40 ? "..." : "");
-                    const parts = [];
-                    for (const met of (p.metrics || [])) {
-                      if (met.value > 0) parts.push(`${fmt(met.value)} ${met.name || met.type}`);
-                    }
-                    const link = p.externalLink ? ` [View](${p.externalLink})` : "";
-                    return `\u25aa **${text}**${link}\n  ${parts.join(" \u2022 ") || "No metrics yet"}`;
-                  }).join("\n\n");
-
-                  embeds.push({ title: ch.name, fields, description: desc, color: ch.color });
-                } else {
-                  embeds.push({ title: ch.name, description: "No sent posts found.", color: ch.color });
-                }
-              } catch (chErr) {
-                embeds.push({ title: ch.name, description: `\u274c ${chErr.message}`, color: 0xff4444 });
-              }
             }
+            if (!bufferOrgId) throw new Error("Could not fetch org ID");
+
+            const bRes = await fetch("https://api.buffer.com", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${bufferKey}` },
+              body: JSON.stringify({
+                query: `query {
+                  posts(input: {
+                    organizationId: "${bufferOrgId}",
+                    filter: { status: [sent], channelIds: ["${bufferTikTokId}"] }
+                    sort: [{ field: dueAt, direction: desc }]
+                  }, first: 5) {
+                    edges { node { id text sentAt externalLink metrics { type name value } } }
+                  }
+                }`,
+              }),
+            });
+            const bData = await bRes.json();
+            if (bData.errors) throw new Error(bData.errors[0].message);
+            const posts = (bData?.data?.posts?.edges || []).map(e => e.node);
+
+            if (posts.length) {
+              let totalViews = 0, totalLikes = 0;
+              const desc = posts.map(p => {
+                const text = (p.text || "").slice(0, 40) + ((p.text || "").length > 40 ? "..." : "");
+                const parts = [];
+                for (const met of (p.metrics || [])) {
+                  if (met.value > 0) {
+                    parts.push(`${fmt(met.value)} ${met.name || met.type}`);
+                    if (["impressions", "reach", "views"].includes(met.type)) totalViews += met.value;
+                    if (["reactions", "likes"].includes(met.type)) totalLikes += met.value;
+                  }
+                }
+                const link = p.externalLink ? ` [View](${p.externalLink})` : "";
+                return `\u25aa **${text}**${link}\n  ${parts.join(" \u2022 ") || "Metrics pending"}`;
+              }).join("\n\n");
+
+              const fields = [];
+              if (totalViews) fields.push({ name: "Views", value: fmt(totalViews), inline: true });
+              if (totalLikes) fields.push({ name: "Likes", value: fmt(totalLikes), inline: true });
+              fields.push({ name: "Posts", value: String(posts.length), inline: true });
+
+              embeds.push({ title: "\ud83c\udfb5 TikTok", fields, description: desc, color: 0x25f4ee });
+            } else {
+              embeds.push({ title: "\ud83c\udfb5 TikTok", description: "No sent posts found.", color: 0x25f4ee });
+            }
+          } catch (ttErr) {
+            embeds.push({ title: "\ud83c\udfb5 TikTok", description: `\u274c ${ttErr.message}`, color: 0xff4444 });
+          }
+        }
+
+        /* ── Threads (Meta Threads API) ── */
+        if (metaThreadsUserId && metaThreadsToken) {
+          try {
+            // Get profile info
+            const thProfileUrl = `https://graph.threads.net/${metaGraphVersion}/${metaThreadsUserId}?fields=username,threads_profile_picture_url&access_token=${metaThreadsToken}`;
+            const thProfileRes = await fetch(thProfileUrl);
+            const thProfile = await thProfileRes.json();
+            if (thProfile.error) throw new Error(thProfile.error.message);
+
+            // Get recent threads
+            const thPostsUrl = `https://graph.threads.net/${metaGraphVersion}/${metaThreadsUserId}/threads?fields=id,text,timestamp,is_quote_status&limit=5&access_token=${metaThreadsToken}`;
+            const thPostsRes = await fetch(thPostsUrl);
+            const thPostsData = await thPostsRes.json();
+            if (thPostsData.error) throw new Error(thPostsData.error.message);
+
+            const thPosts = thPostsData.data || [];
+            let totalLikes = 0, totalViews = 0, totalReplies = 0;
+
+            // Fetch insights for each post
+            const postDescs = [];
+            for (const tp of thPosts) {
+              const text = (tp.text || "").slice(0, 40) + ((tp.text || "").length > 40 ? "..." : "");
+              const parts = [];
+              try {
+                const insUrl = `https://graph.threads.net/${metaGraphVersion}/${tp.id}/insights?metric=views,likes,replies,reposts,quotes&access_token=${metaThreadsToken}`;
+                const insRes = await fetch(insUrl);
+                const insData = await insRes.json();
+                if (insData.data) {
+                  for (const metric of insData.data) {
+                    const val = metric.values?.[0]?.value || 0;
+                    if (val > 0) parts.push(`${fmt(val)} ${metric.name}`);
+                    if (metric.name === "views") totalViews += val;
+                    if (metric.name === "likes") totalLikes += val;
+                    if (metric.name === "replies") totalReplies += val;
+                  }
+                }
+              } catch {}
+              postDescs.push(`\u25aa **${text}**\n  ${parts.join(" \u2022 ") || "No engagement yet"}`);
+            }
+
+            const fields = [];
+            if (totalViews) fields.push({ name: `Views (last ${thPosts.length})`, value: fmt(totalViews), inline: true });
+            if (totalLikes) fields.push({ name: `Likes (last ${thPosts.length})`, value: fmt(totalLikes), inline: true });
+            fields.push({ name: "Posts Shown", value: String(thPosts.length), inline: true });
+
+            embeds.push({ title: "\ud83e\uddf5 Threads", fields, description: postDescs.join("\n\n") || "No recent posts.", color: 0x000000 });
+          } catch (thErr) {
+            embeds.push({ title: "\ud83e\uddf5 Threads", description: `\u274c ${thErr.message}`, color: 0xff4444 });
           }
         }
 
