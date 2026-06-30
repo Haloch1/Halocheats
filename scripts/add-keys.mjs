@@ -7,17 +7,9 @@ const supabase = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
+// Add keys here before running. Clear after use - never commit real key values.
 const keys = [
-  {
-    product_slug: "r6-frost-day",
-    key_value: "Yo53D3v73nWGst7rTqgReGe15XqXEc4CAaGddclhzi5ef356ec",
-    status: "unused",
-  },
-  {
-    product_slug: "linked-nfa-account",
-    key_value: "Prelinked112@outlook.com:Edits2x3",
-    status: "unused",
-  },
+  // { product_slug: "example-product-day", key_value: "YOUR-KEY-HERE", status: "unused" },
 ];
 
 const { data, error } = await supabase
