@@ -129,22 +129,32 @@ function renderThreadMessages(thread) {
 function renderThreads(threads) {
   activeThreads = threads;
 
+  const inboxShell = document.querySelector(".desk-inbox-shell");
+  const headerEyebrow = inboxPanel?.querySelector(".eyebrow");
+  const headerH3 = inboxPanel?.querySelector("h3");
+
   if (!threads.length) {
-    // Hide thread list and thread panel entirely
+    // Hide thread list and thread panel, make form full-width centered
     threadList.innerHTML = "";
     if (threadPanel) threadPanel.style.display = "none";
+    if (inboxShell) inboxShell.style.gridTemplateColumns = "1fr";
+    if (inboxShell) inboxShell.style.maxWidth = "620px";
+    if (headerEyebrow) headerEyebrow.textContent = "Open a request";
+    if (headerH3) headerH3.textContent = "Need help? Start a conversation with support.";
     replyForm.hidden = true;
-    // Show form directly, hide toggle button, let inbox panel take full width
     if (newTicketShell) newTicketShell.hidden = false;
     if (toggleBtn) toggleBtn.hidden = true;
-    if (inboxPanel) inboxPanel.style.flex = "1";
+    if (cancelBtn) cancelBtn.hidden = true;
     return;
   }
 
-  // Has threads: restore both panels, show toggle button
+  // Has threads: restore normal two-column layout
   if (threadPanel) threadPanel.style.display = "";
-  if (inboxPanel) inboxPanel.style.flex = "";
+  if (inboxShell) { inboxShell.style.gridTemplateColumns = ""; inboxShell.style.maxWidth = ""; }
+  if (headerEyebrow) headerEyebrow.textContent = "Member threads";
+  if (headerH3) headerH3.textContent = "Your conversations";
   if (toggleBtn) toggleBtn.hidden = false;
+  if (cancelBtn) cancelBtn.hidden = false;
   if (newTicketShell && !toggleBtn?.dataset.manualOpen) newTicketShell.hidden = true;
 
   const unreadTotal = getUnreadCount(threads);
