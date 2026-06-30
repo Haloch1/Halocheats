@@ -1192,14 +1192,22 @@
             <div class="admin-panel-header">
               <h2>Analytics</h2>
               <p>Live visitor tracking and page activity.</p>
+              <small id="analyticsUpdatedAt" style="color:rgba(255,255,255,0.35); font-size:0.72rem;"></small>
             </div>
             <div class="stat-grid">
               <div class="stat-card"><div class="stat-label">Active Now</div><div class="stat-value" id="analyticsActiveNow">-</div></div>
+              <div class="stat-card"><div class="stat-label">Unique IPs (recent)</div><div class="stat-value" id="analyticsUniqueIps">-</div></div>
+              <div class="stat-card"><div class="stat-label">Page Views Logged</div><div class="stat-value" id="analyticsViewCount">-</div></div>
             </div>
-            <div class="panel-section-title">Pages</div>
+            <div class="panel-section-title">Live Pages</div>
             <div id="analyticsPages" class="admin-table-wrap" style="padding:14px 18px; margin-bottom:24px;"></div>
-            <div class="panel-section-title">Recent Activity</div>
-            <div id="analyticsActivity" class="admin-table-wrap" style="padding:14px 18px;"></div>
+            <div class="panel-section-title">Recent Visitor Log</div>
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead><tr><th>Page</th><th>IP</th><th>Referrer</th><th>Visitor</th><th>User</th><th>Time</th></tr></thead>
+                <tbody id="analyticsActivity"></tbody>
+              </table>
+            </div>
           </div>
 
           <!-- SUPPORT -->

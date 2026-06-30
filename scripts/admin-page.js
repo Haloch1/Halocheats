@@ -131,6 +131,7 @@ navItems.forEach((btn) => {
 });
 
 function loadPanel(name) {
+  if (name !== "analytics") stopAnalyticsRefresh();
   const loaders = {
     overview: loadOverview,
     orders: loadOrders,
@@ -415,12 +416,36 @@ async function loadUsers() {
 
 // ── Analytics ──
 
+let analyticsTimer = null;
+
+function startAnalyticsRefresh() {
+  stopAnalyticsRefresh();
+  analyticsTimer = setInterval(() => {
+    loadAnalytics().catch(() => {});
+  }, 10_000);
+}
+
+function stopAnalyticsRefresh() {
+  if (analyticsTimer) {
+    clearInterval(analyticsTimer);
+    analyticsTimer = null;
+  }
+}
+
 async function loadAnalytics() {
   try {
     const data = await apiFetch("/api/admin/visitors");
-    document.getElementById("analyticsActiveNow").textContent =
-      data.activeVisitors;
+    const views = data.recentViews || [];
 
+    document.getElementById("analyticsActiveNow").textContent = data.activeVisitors;
+    document.getElementById("analyticsViewCount").textContent = views.length;
+    document.getElementById("analyticsUpdatedAt").textContent = `Auto-refreshes every 10s · Updated ${fmtDate(data.updatedAt)}`;
+
+    // Unique IPs
+    const ips = new Set(views.map((v) => v.ipAddress).filter(Boolean));
+    document.getElementById("analyticsUniqueIps").textContent = ips.size;
+
+    // Pages breakdown
     const pagesEl = document.getElementById("analyticsPages");
     if (!data.pages.length) {
       pagesEl.innerHTML = '<div class="empty-state">No active visitors.</div>';
@@ -437,24 +462,28 @@ async function loadAnalytics() {
         .join("");
     }
 
+    // Full visitor log table
     const activityEl = document.getElementById("analyticsActivity");
-    if (!data.recentViews || !data.recentViews.length) {
-      activityEl.innerHTML =
-        '<div class="empty-state">No recent activity.</div>';
+    if (!views.length) {
+      activityEl.innerHTML = '<tr><td colspan="6" class="empty-state">No recent activity.</td></tr>';
     } else {
-      activityEl.innerHTML = data.recentViews
-        .slice(0, 20)
+      activityEl.innerHTML = views
         .map(
           (v) => `
-        <div class="activity-item">
-          <span class="activity-path">${esc(v.pagePath || v.path || "-")}</span>
-          ${v.userLabel ? `<span class="activity-user"> · ${esc(v.userLabel)}</span>` : ""}
-          <span> · ${fmtDate(v.timestamp || v.time)}</span>
-        </div>
+        <tr>
+          <td>${esc(v.pagePath || "-")}</td>
+          <td><code>${esc(v.ipAddress || "unknown")}</code></td>
+          <td>${esc(v.referrer || "Direct")}</td>
+          <td><code>${esc(v.visitorLabel || "-")}</code></td>
+          <td>${v.userLabel ? `<span style="color:var(--accent);">${esc(v.userLabel)}</span>` : '<span style="color:var(--muted);">Guest</span>'}</td>
+          <td>${fmtDate(v.viewedAt)}</td>
+        </tr>
       `
         )
         .join("");
     }
+
+    startAnalyticsRefresh();
   } catch (err) {
     console.error("Analytics load error:", err);
   }
