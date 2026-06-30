@@ -5554,7 +5554,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
   if (!stripe) {
     return res.status(500).json({
       error:
-        "Stripe is not configured yet. Add STRIPE_SECRET_KEY and the STRIPE_PRICE_* values.",
+        "Stripe is not configured yet. Add STRIPE_SECRET_KEY.",
     });
   }
 
