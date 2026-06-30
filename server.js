@@ -2268,19 +2268,19 @@ if (isConfiguredValue(discordBotToken)) {
           }
         }
 
-        /* ── YouTube channel stats ── */
-        if (youtubeClientId && youtubeClientSecret && youtubeRefreshToken) {
+        /* ── YouTube channel stats (API key, no OAuth needed) ── */
+        const ytApiKey = process.env.YOUTUBE_API_KEY || "";
+        const ytChannelId = process.env.YOUTUBE_CHANNEL_ID || "";
+        if (ytApiKey && ytChannelId) {
           try {
-            const ytOauth = new google.auth.OAuth2(youtubeClientId, youtubeClientSecret);
-            ytOauth.setCredentials({ refresh_token: youtubeRefreshToken });
-            const yt = google.youtube({ version: "v3", auth: ytOauth });
+            const yt = google.youtube({ version: "v3", auth: ytApiKey });
 
             // Get channel stats
-            const channelRes = await yt.channels.list({ part: "statistics", mine: true });
+            const channelRes = await yt.channels.list({ part: "statistics,snippet", id: ytChannelId });
             const ch = channelRes.data.items?.[0]?.statistics;
 
-            // Get last 5 videos
-            const searchRes = await yt.search.list({ part: "snippet", forMine: true, type: "video", maxResults: 5, order: "date" });
+            // Get last 5 videos from the channel
+            const searchRes = await yt.search.list({ part: "snippet", channelId: ytChannelId, type: "video", maxResults: 5, order: "date" });
             const videoIds = (searchRes.data.items || []).map(v => v.id.videoId).filter(Boolean);
             let videoLines = [];
             if (videoIds.length) {
@@ -2405,46 +2405,69 @@ if (isConfiguredValue(discordBotToken)) {
           }
         }
 
-        /* ── Buffer platforms (Instagram, TikTok, Threads) ── */
+        /* ── Buffer platforms (Instagram, TikTok, Threads) - per-platform embeds with post analytics ── */
         const bufferKey = process.env.BUFFER_API_KEY || "";
         const bufferChannels = [
-          { name: "Instagram", id: process.env.BUFFER_INSTAGRAM_CHANNEL_ID },
-          { name: "TikTok", id: process.env.BUFFER_TIKTOK_CHANNEL_ID },
-          { name: "Threads", id: process.env.BUFFER_THREADS_CHANNEL_ID },
+          { name: "Instagram", id: process.env.BUFFER_INSTAGRAM_CHANNEL_ID, color: 0xe1306c },
+          { name: "TikTok", id: process.env.BUFFER_TIKTOK_CHANNEL_ID, color: 0x000000 },
+          { name: "Threads", id: process.env.BUFFER_THREADS_CHANNEL_ID, color: 0x000000 },
         ].filter(c => c.id);
 
         if (bufferKey && bufferChannels.length) {
-          try {
-            // Fetch sent posts per channel via Buffer GraphQL
-            const bufferLines = [];
-            for (const ch of bufferChannels) {
-              try {
-                const bRes = await fetch("https://api.buffer.com", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${bufferKey}` },
-                  body: JSON.stringify({
-                    query: `query { channel(id: "${ch.id}") { name service postCount: sentPostCount } }`,
-                  }),
-                });
-                const bData = await bRes.json();
-                const channel = bData?.data?.channel;
-                if (channel) {
-                  bufferLines.push(`**${ch.name}:** ${channel.postCount ?? 0} posts sent via Buffer`);
-                } else {
-                  bufferLines.push(`**${ch.name}:** Connected`);
-                }
-              } catch {
-                bufferLines.push(`**${ch.name}:** Connected`);
-              }
-            }
+          for (const ch of bufferChannels) {
+            try {
+              // Get channel info + recent sent posts with metrics
+              const bRes = await fetch("https://api.buffer.com", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${bufferKey}` },
+                body: JSON.stringify({
+                  query: `query {
+                    channel(id: "${ch.id}") {
+                      name service
+                      sentPostCount
+                      posts(type: "sent", limit: 5) {
+                        id text status
+                        statistics { likes comments shares impressions reach clicks saves reposts replies }
+                        sentAt
+                      }
+                    }
+                  }`,
+                }),
+              });
+              const bData = await bRes.json();
+              const channel = bData?.data?.channel;
+              const desc = [];
 
-            embeds.push({
-              title: "Buffer Platforms",
-              description: bufferLines.join("\n") || "Connected but no data.",
-              color: 0x636bf6,
-            });
-          } catch (bufErr) {
-            embeds.push({ title: "Buffer", description: `Error: ${bufErr.message}`, color: 0xff4444 });
+              if (channel) {
+                desc.push(`Posts sent: **${channel.sentPostCount ?? 0}**`);
+                const posts = channel.posts || [];
+                if (posts.length) {
+                  desc.push("", "**Recent posts:**");
+                  for (const p of posts) {
+                    const s = p.statistics || {};
+                    const text = (p.text || "").slice(0, 30) + ((p.text || "").length > 30 ? "..." : "");
+                    const parts = [];
+                    if (s.impressions != null) parts.push(`${Number(s.impressions).toLocaleString()} views`);
+                    if (s.reach != null) parts.push(`${Number(s.reach).toLocaleString()} reach`);
+                    if (s.likes != null) parts.push(`${Number(s.likes).toLocaleString()} likes`);
+                    if (s.comments != null) parts.push(`${Number(s.comments).toLocaleString()} comments`);
+                    if (s.shares != null || s.reposts != null) parts.push(`${Number(s.shares || s.reposts || 0).toLocaleString()} shares`);
+                    if (s.saves != null) parts.push(`${Number(s.saves).toLocaleString()} saves`);
+                    desc.push(`> ${text}${parts.length ? " - " + parts.join(", ") : ""}`);
+                  }
+                }
+              } else {
+                desc.push("Connected but no data returned.");
+              }
+
+              embeds.push({
+                title: ch.name,
+                description: desc.join("\n"),
+                color: ch.color,
+              });
+            } catch (chErr) {
+              embeds.push({ title: ch.name, description: `Error: ${chErr.message}`, color: 0xff4444 });
+            }
           }
         }
 
