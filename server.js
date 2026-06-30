@@ -3494,7 +3494,21 @@ app.post("/api/status/update", async (req, res) => {
   }
 });
 
+// Bot user-agent detection
+const BOT_UA_PATTERN = /bot|crawl|spider|slurp|mediapartners|facebookexternalhit|linkedinbot|embedly|quora|pinterest|redditbot|applebot|bingpreview|google-inspectiontool|semrush|ahrefs|mj12bot|dotbot|petalbot|yandex|baidu|sogou|duckduckbot|ia_archiver|archive\.org|uptimerobot|pingdom|site24x7|statuspage|datadog|newrelic|headlesschrome|phantomjs|puppeteer|playwright|wget|curl|httpx|python-requests|go-http-client|java\/|libwww|scrapy|node-fetch|axios|postman|insomnia|httrack|nessus|nikto|nuclei|zgrab|masscan|shodan|censys|netcraft|prerender|lighthouse|pagespeed|gtmetrix|webpagetest/i;
+
+function isBot(req) {
+  const ua = req.headers["user-agent"] || "";
+  if (!ua || ua.length < 10) return true;
+  return BOT_UA_PATTERN.test(ua);
+}
+
 app.post("/api/visitors/heartbeat", async (req, res) => {
+  // Silently ignore bots
+  if (isBot(req)) {
+    return res.json({ ok: true });
+  }
+
   const visitorId = normalizeVisitorId(req.body?.visitorId);
 
   if (!visitorId) {
