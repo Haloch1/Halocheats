@@ -2463,67 +2463,49 @@ if (isConfiguredValue(discordBotToken)) {
           }
         }
 
-        /* ── TikTok (via Buffer — no direct API available) ── */
-        const bufferKey = process.env.BUFFER_API_KEY || "";
-        const bufferTikTokId = process.env.BUFFER_TIKTOK_CHANNEL_ID || "";
-        if (bufferKey && bufferTikTokId) {
+        /* ── TikTok (ScrapeCreators API) ── */
+        const scrapeCreatorsKey = (process.env.SCRAPECREATORS_API_KEY || "").trim();
+        const tiktokUsername = (process.env.TIKTOK_USERNAME || "").trim();
+        if (scrapeCreatorsKey && tiktokUsername) {
           try {
-            let bufferOrgId = process.env.BUFFER_ORGANIZATION_ID || "";
-            if (!bufferOrgId) {
-              const orgRes = await fetch("https://api.buffer.com", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${bufferKey}` },
-                body: JSON.stringify({ query: `query { account { organizations { id } } }` }),
-              });
-              const orgData = await orgRes.json();
-              bufferOrgId = orgData?.data?.account?.organizations?.[0]?.id || "";
-            }
-            if (!bufferOrgId) throw new Error("Could not fetch org ID");
+            const scHeaders = { "x-api-key": scrapeCreatorsKey };
 
-            const bRes = await fetch("https://api.buffer.com", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${bufferKey}` },
-              body: JSON.stringify({
-                query: `query {
-                  posts(input: {
-                    organizationId: "${bufferOrgId}",
-                    filter: { status: [sent], channelIds: ["${bufferTikTokId}"] }
-                    sort: [{ field: dueAt, direction: desc }]
-                  }, first: 5) {
-                    edges { node { id text sentAt externalLink metrics { type name value } } }
-                  }
-                }`,
-              }),
-            });
-            const bData = await bRes.json();
-            if (bData.errors) throw new Error(bData.errors[0].message);
-            const posts = (bData?.data?.posts?.edges || []).map(e => e.node);
+            // Fetch profile stats and recent videos in parallel
+            const [profileRes, videosRes] = await Promise.all([
+              fetch(`https://api.scrapecreators.com/v1/tiktok/profile?handle=${encodeURIComponent(tiktokUsername)}`, { headers: scHeaders }),
+              fetch(`https://api.scrapecreators.com/v3/tiktok/profile/videos?handle=${encodeURIComponent(tiktokUsername)}&sort_by=latest&trim=true`, { headers: scHeaders }),
+            ]);
 
-            if (posts.length) {
-              let totalViews = 0, totalLikes = 0;
-              const desc = posts.map(p => {
-                const text = (p.text || "").slice(0, 40) + ((p.text || "").length > 40 ? "..." : "");
+            const profileData = await profileRes.json();
+            const videosData = await videosRes.json();
+
+            if (!profileRes.ok) throw new Error(profileData?.message || `Profile API error ${profileRes.status}`);
+
+            const stats = profileData?.stats || {};
+            const fields = [];
+            if (stats.followerCount != null) fields.push({ name: "Followers", value: fmt(stats.followerCount), inline: true });
+            if (stats.heartCount != null) fields.push({ name: "Total Likes", value: fmt(stats.heartCount), inline: true });
+            if (stats.videoCount != null) fields.push({ name: "Videos", value: fmt(stats.videoCount), inline: true });
+
+            const videos = (videosData?.aweme_list || []).slice(0, 5);
+            let desc = "";
+            if (videos.length) {
+              desc = videos.map(v => {
+                const caption = (v.desc || "").slice(0, 40) + ((v.desc || "").length > 40 ? "..." : "");
+                const s = v.statistics || {};
                 const parts = [];
-                for (const met of (p.metrics || [])) {
-                  if (met.value > 0) {
-                    parts.push(`${fmt(met.value)} ${met.name || met.type}`);
-                    if (["impressions", "reach", "views"].includes(met.type)) totalViews += met.value;
-                    if (["reactions", "likes"].includes(met.type)) totalLikes += met.value;
-                  }
-                }
-                const link = p.externalLink ? ` [View](${p.externalLink})` : "";
-                return `\u25aa **${text}**${link}\n  ${parts.join(" \u2022 ") || "Metrics pending"}`;
+                if (s.play_count > 0) parts.push(`${fmt(s.play_count)} views`);
+                if (s.digg_count > 0) parts.push(`${fmt(s.digg_count)} likes`);
+                if (s.comment_count > 0) parts.push(`${fmt(s.comment_count)} comments`);
+                if (s.share_count > 0) parts.push(`${fmt(s.share_count)} shares`);
+                const link = v.aweme_id ? ` [View](https://www.tiktok.com/@${tiktokUsername}/video/${v.aweme_id})` : "";
+                return `\u25aa **${caption}**${link}\n  ${parts.join(" \u2022 ") || "No stats yet"}`;
               }).join("\n\n");
-
-              const fields = [];
-              if (totalViews) fields.push({ name: "Views", value: fmt(totalViews), inline: true });
-              if (totalLikes) fields.push({ name: "Likes", value: fmt(totalLikes), inline: true });
-              fields.push({ name: "Posts", value: String(posts.length), inline: true });
-
-              embeds.push({ title: "\ud83c\udfb5 TikTok", fields, description: desc, color: 0x25f4ee });
             } else {
-              embeds.push({ title: "\ud83c\udfb5 TikTok", description: "No sent posts found.", color: 0x25f4ee });
+              desc = "No recent videos found.";
             }
+
+            embeds.push({ title: "\ud83c\udfb5 TikTok", fields, description: desc, color: 0x25f4ee });
           } catch (ttErr) {
             embeds.push({ title: "\ud83c\udfb5 TikTok", description: `\u274c ${ttErr.message}`, color: 0xff4444 });
           }
