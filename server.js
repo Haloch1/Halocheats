@@ -993,7 +993,17 @@ if (isConfiguredValue(discordBotToken)) {
           .addStringOption(o => o.setName("title").setDescription("Video title").setRequired(true))
           .addStringOption(o => o.setName("description").setDescription("Video description").setRequired(false))
           .addStringOption(o => o.setName("tags").setDescription("Comma-separated tags (e.g. foryou,gaming,mods)").setRequired(false))
-          .addBooleanOption(o => o.setName("shorts").setDescription("Mark as a YouTube Short (default: true)").setRequired(false)),
+          .addBooleanOption(o => o.setName("shorts").setDescription("Mark as a YouTube Short (default: true)").setRequired(false))
+          .addStringOption(o => o.setName("platform").setDescription("Post to a single platform (default: all)")
+            .addChoices(
+              { name: "All", value: "all" },
+              { name: "YouTube", value: "youtube" },
+              { name: "Bluesky", value: "bluesky" },
+              { name: "X", value: "x" },
+              { name: "Instagram", value: "instagram" },
+              { name: "TikTok", value: "tiktok" },
+              { name: "Threads", value: "threads" },
+            ).setRequired(false)),
         new SlashCommandBuilder()
           .setName("stats")
           .setDescription("View upload stats across all platforms (admin only)"),
@@ -2386,6 +2396,7 @@ if (isConfiguredValue(discordBotToken)) {
         return interaction.reply({ embeds: [{ description: "That file isn't a video.", color: 0xff4444 }], ephemeral: true });
       }
 
+      const targetPlatform = interaction.options.getString("platform") || "all";
       const isShorts = interaction.options.getBoolean("shorts") !== false;
       const rawTitle = interaction.options.getString("title");
       const ytTitle = isShorts && !rawTitle.includes("#Shorts") ? `${rawTitle} #Shorts` : rawTitle;
@@ -2450,7 +2461,7 @@ if (isConfiguredValue(discordBotToken)) {
       const tasks = [];
 
       // YouTube (direct API, unlimited)
-      if (youtubeClientId && youtubeClientSecret && youtubeRefreshToken) {
+      if ((targetPlatform === "all" || targetPlatform === "youtube") && youtubeClientId && youtubeClientSecret && youtubeRefreshToken) {
         tasks.push((async () => {
           try {
             const oauth2Client = new google.auth.OAuth2(youtubeClientId, youtubeClientSecret);
@@ -2474,7 +2485,7 @@ if (isConfiguredValue(discordBotToken)) {
       }
 
       // Bluesky (direct API, unlimited)
-      if (blueskyHandle && blueskyAppPassword) {
+      if ((targetPlatform === "all" || targetPlatform === "bluesky") && blueskyHandle && blueskyAppPassword) {
         tasks.push((async () => {
           const bskyJson = async (res, label) => {
             const text = await res.text();
@@ -2548,7 +2559,7 @@ if (isConfiguredValue(discordBotToken)) {
       }
 
       // X/Twitter (direct API via OAuth 1.0a, unlimited)
-      if (xApiKey && xApiSecret && xAccessToken && xAccessSecret) {
+      if ((targetPlatform === "all" || targetPlatform === "x") && xApiKey && xApiSecret && xAccessToken && xAccessSecret) {
         tasks.push((async () => {
           try {
             // Manual OAuth 1.0a signing using native crypto
@@ -2654,7 +2665,7 @@ if (isConfiguredValue(discordBotToken)) {
       // Instagram via Buffer API
       const bufferApiKey = process.env.BUFFER_API_KEY || "";
       const bufferInstagramChannelId = process.env.BUFFER_INSTAGRAM_CHANNEL_ID || "";
-      if (bufferApiKey && bufferInstagramChannelId) {
+      if ((targetPlatform === "all" || targetPlatform === "instagram") && bufferApiKey && bufferInstagramChannelId) {
         tasks.push((async () => {
           try {
             const igRes = await fetch("https://api.buffer.com", {
@@ -2697,7 +2708,7 @@ if (isConfiguredValue(discordBotToken)) {
 
       // TikTok via Buffer API
       const bufferTiktokChannelId = process.env.BUFFER_TIKTOK_CHANNEL_ID || "";
-      if (bufferApiKey && bufferTiktokChannelId) {
+      if ((targetPlatform === "all" || targetPlatform === "tiktok") && bufferApiKey && bufferTiktokChannelId) {
         tasks.push((async () => {
           try {
             const bufferRes = await fetch("https://api.buffer.com", {
@@ -2739,7 +2750,7 @@ if (isConfiguredValue(discordBotToken)) {
 
       // Threads via Buffer API
       const bufferThreadsChannelId = process.env.BUFFER_THREADS_CHANNEL_ID || "";
-      if (bufferApiKey && bufferThreadsChannelId) {
+      if ((targetPlatform === "all" || targetPlatform === "threads") && bufferApiKey && bufferThreadsChannelId) {
         tasks.push((async () => {
           try {
             const threadsRes = await fetch("https://api.buffer.com", {
