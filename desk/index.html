@@ -77,10 +77,56 @@
                 <p class="eyebrow">Member threads</p>
                 <h3>Your conversations</h3>
               </div>
-              <a class="button button-secondary" href="/#support">Open new request</a>
+              <button class="button button-secondary" type="button" data-toggle-new-ticket>New request</button>
             </div>
+
+            <div class="desk-new-ticket-form" data-new-ticket-shell hidden>
+              <form class="desk-request-form" data-desk-new-ticket-form>
+                <label>
+                  Name
+                  <input type="text" name="name" maxlength="80" required />
+                </label>
+                <label>
+                  Contact
+                  <input
+                    type="text"
+                    name="contact"
+                    maxlength="140"
+                    placeholder="Discord @name, email, or Telegram"
+                    required
+                  />
+                </label>
+                <label>
+                  Topic
+                  <select name="topic" required>
+                    <option value="">Select one</option>
+                    <option value="Product question">Product question</option>
+                    <option value="Stock check">Stock check</option>
+                    <option value="Order help">Order help</option>
+                    <option value="Key delivery">Key delivery</option>
+                    <option value="Activation help">Activation help</option>
+                  </select>
+                </label>
+                <label>
+                  Details
+                  <textarea
+                    name="details"
+                    rows="4"
+                    maxlength="900"
+                    placeholder="Tell the desk what you need help with."
+                    required
+                  ></textarea>
+                </label>
+                <input class="desk-honeypot" type="text" name="company" tabindex="-1" autocomplete="off" />
+                <div style="display:flex;gap:10px">
+                  <button class="button button-primary" type="submit">Submit Request</button>
+                  <button class="button button-secondary" type="button" data-cancel-new-ticket>Cancel</button>
+                </div>
+              </form>
+            </div>
+
             <div class="desk-thread-list" data-desk-thread-list>
-              <div class="member-empty">No threads yet. Open a request from the homepage live desk.</div>
+              <div class="member-empty">No threads yet. Click "New request" above to open one.</div>
             </div>
           </div>
 
