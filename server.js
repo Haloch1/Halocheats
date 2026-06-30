@@ -533,6 +533,23 @@ function ensureOwnerAccess(req) {
   }
 }
 
+const ROLE_HIERARCHY = { admin: 2, staff: 1 };
+
+async function ensureRoleAccess(req, res, minRole) {
+  const user = await getAuthenticatedUser(req, res);
+  const userRole = user.user_metadata?.role;
+  const userLevel = ROLE_HIERARCHY[userRole] || 0;
+  const requiredLevel = ROLE_HIERARCHY[minRole] || 0;
+
+  if (userLevel < requiredLevel) {
+    throw Object.assign(new Error("You do not have permission to access this."), {
+      status: 403,
+    });
+  }
+
+  return user;
+}
+
 function createSecretToken(bytes = 32) {
   return crypto.randomBytes(bytes).toString("hex");
 }
@@ -3467,9 +3484,9 @@ app.get("/api/status", async (_req, res) => {
   }
 });
 
-/* Update a product status (owner only) */
+/* Update a product status (admin only) */
 app.post("/api/status/update", async (req, res) => {
-  try { ensureOwnerAccess(req); } catch (e) { return res.status(e.status || 401).json({ error: e.message }); }
+  try { await ensureRoleAccess(req, res, "admin"); } catch (e) { return res.status(e.status || 401).json({ error: e.message }); }
 
   const product = sanitizeInput(req.body?.product_name, 100);
   const status = sanitizeInput(req.body?.status, 30);
@@ -3779,6 +3796,16 @@ app.get("/api/auth/session", async (req, res) => {
 app.post("/api/auth/sign-out", (_req, res) => {
   clearAuthCookies(res);
   return res.json({ ok: true });
+});
+
+app.get("/api/auth/role", async (req, res) => {
+  try {
+    const user = await getAuthenticatedUser(req, res);
+    const role = user.user_metadata?.role || null;
+    return res.json({ role });
+  } catch {
+    return res.json({ role: null });
+  }
 });
 
 app.get("/api/products", async (_req, res) => {
@@ -4254,8 +4281,7 @@ app.get("/api/admin/access-request/:requestId", async (req, res) => {
 
 app.get("/api/admin/access-requests", async (req, res) => {
   try {
-    await getAuthenticatedUser(req, res);
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
 
     const [requestsResult, logsResult] = await Promise.all([
       supabaseAdmin
@@ -4297,8 +4323,7 @@ app.get("/api/admin/access-requests", async (req, res) => {
 
 app.post("/api/admin/access-requests/:requestId/approve", async (req, res) => {
   try {
-    await getAuthenticatedUser(req, res);
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
 
     const requestId = trimField(req.params?.requestId, 80);
     const approvedBy = trimField(req.body?.approvedBy, 80) || "owner";
@@ -4339,8 +4364,7 @@ app.post("/api/admin/access-requests/:requestId/approve", async (req, res) => {
 
 app.post("/api/admin/access-requests/:requestId/deny", async (req, res) => {
   try {
-    await getAuthenticatedUser(req, res);
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
 
     const requestId = trimField(req.params?.requestId, 80);
     const deniedBy = trimField(req.body?.deniedBy, 80) || "owner";
@@ -4377,8 +4401,7 @@ app.post("/api/admin/access-requests/:requestId/deny", async (req, res) => {
 
 app.delete("/api/admin/access-requests/:requestId", async (req, res) => {
   try {
-    await getAuthenticatedUser(req, res);
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
 
     const requestId = trimField(req.params?.requestId, 80);
     const deletedBy = trimField(req.body?.deletedBy, 80) || "owner";
@@ -4434,8 +4457,7 @@ app.delete("/api/admin/access-requests/:requestId", async (req, res) => {
 
 app.get("/api/admin/visitors", async (req, res) => {
   try {
-    await getAuthenticatedUser(req, res);
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
     pruneVisitorSessions();
 
     const pages = Array.from(visitorSessions.values()).reduce((summary, session) => {
@@ -4484,8 +4506,7 @@ app.get("/api/admin/visitors", async (req, res) => {
 
 app.get("/api/admin/users", async (req, res) => {
   try {
-    await getAuthenticatedUser(req, res);
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
 
     if (!supabaseAdmin) {
       return res.status(500).json({ error: "User directory is not configured." });
@@ -4519,12 +4540,7 @@ app.get("/api/admin/users", async (req, res) => {
 
 app.get("/api/admin/live-desk", async (req, res) => {
   try {
-    // Allow either staff token OR owner cookie
-    let authorized = false;
-    try { ensureOwnerAccess(req); authorized = true; } catch {}
-    if (!authorized) {
-      await getApprovedStaffAccess(req, res);
-    }
+    await ensureRoleAccess(req, res, "staff");
 
     const threads = await loadSupportThreads(
       supabaseAdmin
@@ -4546,13 +4562,8 @@ app.get("/api/admin/live-desk", async (req, res) => {
 
 app.post("/api/admin/live-desk/reply", async (req, res) => {
   try {
-    // Allow either staff token OR owner cookie
-    let staffAccess = null;
-    let isOwner = false;
-    try { ensureOwnerAccess(req); isOwner = true; } catch {}
-    if (!isOwner) {
-      staffAccess = await getApprovedStaffAccess(req, res);
-    }
+    const staffUser = await ensureRoleAccess(req, res, "staff");
+    const isOwner = staffUser.user_metadata?.role === "admin";
 
     const threadId = trimField(req.body?.threadId, 80);
     const body = sanitizeInput(req.body?.body, 900);
@@ -4632,15 +4643,12 @@ app.post("/api/admin/live-desk/reply", async (req, res) => {
 
 app.post("/api/admin/live-desk/:threadId/request-delete-key", async (req, res) => {
   try {
-    let staffAccess;
-    let authorized = false;
-    try { ensureOwnerAccess(req); authorized = true; } catch {}
-    if (!authorized) { staffAccess = await getApprovedStaffAccess(req, res); }
+    await ensureRoleAccess(req, res, "staff");
     const threadId = trimField(req.params?.threadId, 80);
 
     checkRateLimit(
       deleteKeyRateLimitByKey,
-      `delete-key:${staffAccess?.id || "owner"}:${threadId}`,
+      `delete-key:${threadId}`,
       60_000,
       "Too many delete key requests for this ticket."
     );
@@ -4739,10 +4747,7 @@ app.post("/api/admin/live-desk/:threadId/request-delete-key", async (req, res) =
 
 app.post("/api/admin/live-desk/:threadId/confirm-delete", async (req, res) => {
   try {
-    let staffAccess;
-    let authorized = false;
-    try { ensureOwnerAccess(req); authorized = true; } catch {}
-    if (!authorized) { staffAccess = await getApprovedStaffAccess(req, res); }
+    await ensureRoleAccess(req, res, "staff");
     const threadId = trimField(req.params?.threadId, 80);
     const deleteKey = trimField(req.body?.deleteKey, 80).replace(/\s+/g, "").toUpperCase();
 
@@ -4845,7 +4850,7 @@ app.post("/api/admin/live-desk/:threadId/confirm-delete", async (req, res) => {
 /* ── Admin: owner direct-delete ticket (no key needed) ── */
 app.delete("/api/admin/live-desk/:threadId", async (req, res) => {
   try {
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
   } catch (e) {
     return res.status(e.status || 401).json({ error: e.message });
   }
@@ -4886,7 +4891,7 @@ app.delete("/api/admin/live-desk/:threadId", async (req, res) => {
 /* ── Admin: ticket transcripts ── */
 app.get("/api/admin/transcripts", async (req, res) => {
   try {
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
   } catch (e) {
     return res.status(e.status || 401).json({ error: e.message });
   }
@@ -4904,7 +4909,7 @@ app.get("/api/admin/transcripts", async (req, res) => {
 /* ── Admin: look up any order by ID ── */
 app.get("/api/admin/orders/:orderId", async (req, res) => {
   try {
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
   } catch (e) {
     return res.status(e.status || 401).json({ error: e.message });
   }
@@ -4973,7 +4978,7 @@ app.get("/api/admin/orders/:orderId", async (req, res) => {
 /* ── Admin: list recent orders ── */
 app.get("/api/admin/orders", async (req, res) => {
   try {
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
   } catch (e) {
     return res.status(e.status || 401).json({ error: e.message });
   }
@@ -5021,7 +5026,7 @@ app.get("/api/admin/orders", async (req, res) => {
 /* ── Admin: key inventory ── */
 app.get("/api/admin/keys", async (req, res) => {
   try {
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
   } catch (e) {
     return res.status(e.status || 401).json({ error: e.message });
   }
@@ -5075,8 +5080,7 @@ app.get("/api/admin/keys", async (req, res) => {
 /* ── Admin: products list + edit ── */
 app.get("/api/admin/products", async (req, res) => {
   try {
-    await getAuthenticatedUser(req, res);
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
     return res.json({ products: products.map((p) => ({ slug: p.slug, name: p.name, available: p.available !== false, variants: (p.variants || []).map((v) => ({ slug: v.slug, name: v.name, amount: v.amount })) })) });
   } catch (error) {
     return res.status(error.status || 500).json({ error: "Unable to load products." });
@@ -5085,8 +5089,7 @@ app.get("/api/admin/products", async (req, res) => {
 
 app.patch("/api/admin/products", async (req, res) => {
   try {
-    await getAuthenticatedUser(req, res);
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
 
     const { slug, available, variants } = req.body;
     const product = products.find((p) => p.slug === slug);
@@ -5128,7 +5131,7 @@ app.patch("/api/admin/products", async (req, res) => {
 /* ── Admin: revenue stats ── */
 app.get("/api/admin/revenue", async (req, res) => {
   try {
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
   } catch (e) {
     return res.status(e.status || 401).json({ error: e.message });
   }
@@ -5186,7 +5189,7 @@ app.get("/api/admin/revenue", async (req, res) => {
 /* ── Admin: export orders CSV ── */
 app.get("/api/admin/orders/export/csv", async (req, res) => {
   try {
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
   } catch (e) {
     return res.status(e.status || 401).json({ error: e.message });
   }
@@ -5226,7 +5229,7 @@ app.get("/api/admin/orders/export/csv", async (req, res) => {
 /* ── Admin: bulk import keys ── */
 app.post("/api/admin/keys/import", express.json({ limit: "2mb" }), async (req, res) => {
   try {
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
   } catch (e) {
     return res.status(e.status || 401).json({ error: e.message });
   }
@@ -6876,8 +6879,7 @@ app.get("/api/reviews", async (_req, res) => {
 /* ── Reviews: admin list all ── */
 app.get("/api/admin/reviews", async (req, res) => {
   try {
-    await getAuthenticatedUser(req, res);
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
 
     const result = await supabaseAdmin
       .from("reviews")
@@ -6915,8 +6917,7 @@ app.get("/api/admin/reviews", async (req, res) => {
 /* ── Reviews: admin delete ── */
 app.delete("/api/admin/reviews/:id", async (req, res) => {
   try {
-    await getAuthenticatedUser(req, res);
-    ensureOwnerAccess(req);
+    await ensureRoleAccess(req, res, "admin");
 
     const { error } = await supabaseAdmin.from("reviews").delete().eq("id", req.params.id);
     if (error) throw error;

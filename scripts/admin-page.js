@@ -2,9 +2,7 @@
 
 const loginGate = document.getElementById("loginGate");
 const dashboard = document.getElementById("dashboard");
-const loginForm = document.getElementById("loginForm");
 const loginError = document.getElementById("loginError");
-const ownerKeyInput = document.getElementById("ownerKeyInput");
 const orderModal = document.getElementById("orderModal");
 const orderModalContent = document.getElementById("orderModalContent");
 
@@ -81,37 +79,22 @@ function showDashboard() {
   dashboard.style.display = "flex";
 }
 
-loginForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  loginError.style.display = "none";
-  const key = ownerKeyInput.value.trim();
-  if (!key) return;
-
-  try {
-    const res = await fetch("/api/owner/sign-in", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ownerKey: key }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Invalid key");
-    isAuthed = true;
-    showDashboard();
-    loadOverview();
-  } catch (err) {
-    loginError.textContent = err.message;
-    loginError.style.display = "block";
-  }
-});
-
-// Check if already authed by trying an admin endpoint
+// Check role from session
 async function checkAuth() {
   try {
-    await apiFetch("/api/admin/visitors");
-    isAuthed = true;
-    showDashboard();
-    loadOverview();
+    const res = await fetch("/api/auth/role", { credentials: "include" });
+    const data = await res.json();
+    if (data.role === "admin") {
+      isAuthed = true;
+      showDashboard();
+      loadOverview();
+    } else {
+      loginError.textContent = data.role
+        ? "Your account has staff access only. Use the Desk Admin page."
+        : "Sign in with an admin account to access this panel.";
+      loginError.style.display = "block";
+      showLogin();
+    }
   } catch {
     showLogin();
   }

@@ -62,19 +62,11 @@ function unlockAnalyticsPanel() {
   }
 }
 
-async function unlockOwnerPanel(ownerKey) {
-  const response = await fetch("/api/owner/sign-in", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ ownerKey }),
-  });
+async function checkAdminRole() {
+  const response = await fetch("/api/auth/role", { credentials: "same-origin" });
   const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.error || "Unable to unlock panel.");
+  if (payload.role !== "admin") {
+    throw new Error(payload.role ? "Staff accounts cannot access analytics." : "Sign in with an admin account.");
   }
 }
 
@@ -163,29 +155,17 @@ function startRefreshLoop() {
   }, REFRESH_INTERVAL_MS);
 }
 
-accessForm?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  const formData = new FormData(accessForm);
-  const ownerKey = String(formData.get("ownerKey") || "").trim();
-
-  if (!ownerKey) {
-    return;
-  }
-
+// Auto-check role and load if admin
+(async () => {
   try {
-    await unlockOwnerPanel(ownerKey);
+    await checkAdminRole();
     await loadAnalytics();
     startRefreshLoop();
   } catch (error) {
     renderMessage(
       messageBox,
-      error instanceof Error ? error.message : "Unable to unlock panel.",
+      error instanceof Error ? error.message : "Sign in with an admin account.",
       "error"
     );
   }
-});
-
-loadAnalytics()
-  .then(startRefreshLoop)
-  .catch(() => {});
+})();
