@@ -47,7 +47,7 @@ const discordUnverifiedRoleId = process.env.DISCORD_UNVERIFIED_ROLE_ID || "";
 const OWNER_ID = "1327675126338293921";
 const BOT_ADMINS = [OWNER_ID, "1191199172448239639"];
 const pendingSchedules = new Map(); // id -> { timer, title, postAt }
-const resellerBuyLocks = new Set(); // inventorySlug strings currently being bought
+const resellerBuyLocks = new Map(); // inventorySlug -> Promise that resolves when buy completes
 const nowpaymentsApiKey = process.env.NOWPAYMENTS_API_KEY || "";
 const nowpaymentsIpnKey = process.env.NOWPAYMENTS_IPN_KEY || "";
 const youtubeClientId = process.env.YOUTUBE_CLIENT_ID || "";
@@ -4010,6 +4010,12 @@ async function syncPaidOrder(session) {
     throw new Error(`No order record found for checkout session ${session.id}.`);
   }
 
+  /* ── Idempotency: if already fulfilled, don't re-process ── */
+  if (order.status === "fulfilled" && order.fulfilled_at) {
+    console.log(`[syncPaidOrder] Order ${order.id} already fulfilled, skipping.`);
+    return;
+  }
+
   const assignedKeyResult = await supabaseAdmin
     .from("license_keys")
     .select("id, key_value, assigned_order_id")
@@ -4062,11 +4068,15 @@ async function syncPaidOrder(session) {
       if (resellerParams) {
         try {
           const { default: fetch } = await import("node-fetch");
+          const fbAbort = new AbortController();
+          const fbTimeout = setTimeout(() => fbAbort.abort(), 15000);
           const resellerRes = await fetch(resellerApiUrl, {
             method: "POST",
             headers: { "Authorization": `Bearer ${resellerApiKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({ product_slug: resellerParams.product_slug, variant_label: resellerParams.variant_label, quantity: 1 }),
+            signal: fbAbort.signal,
           });
+          clearTimeout(fbTimeout);
           const resellerData = await resellerRes.json();
           if (resellerData.success && resellerData.license_key) {
             console.log(`[Reseller Fallback] Bought key for ${order.product_slug}: order ${resellerData.order_number}`);
@@ -6480,8 +6490,8 @@ async function ensureKeyAvailable(inventorySlug) {
 
   /* Prevent concurrent buys for the same slug (spam clicks, bots, etc.) */
   if (resellerBuyLocks.has(inventorySlug)) {
-    /* Another request is already buying this product — wait briefly then re-check stock */
-    await new Promise(r => setTimeout(r, 3000));
+    /* Another request is already buying — wait for it, then re-check stock */
+    try { await resellerBuyLocks.get(inventorySlug); } catch {}
     const { count: recheckStock } = await supabaseAdmin
       .from("license_keys")
       .select("id", { count: "exact", head: true })
@@ -6490,14 +6500,20 @@ async function ensureKeyAvailable(inventorySlug) {
     return recheckStock && recheckStock > 0;
   }
 
-  resellerBuyLocks.add(inventorySlug);
+  let lockResolve;
+  const lockPromise = new Promise(r => { lockResolve = r; });
+  resellerBuyLocks.set(inventorySlug, lockPromise);
   try {
     const { default: fetch } = await import("node-fetch");
+    const abortCtrl = new AbortController();
+    const fetchTimeout = setTimeout(() => abortCtrl.abort(), 15000);
     const resellerRes = await fetch(resellerApiUrl, {
       method: "POST",
       headers: { "Authorization": `Bearer ${resellerApiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ product_slug: resellerParams.product_slug, variant_label: resellerParams.variant_label, quantity: 1 }),
+      signal: abortCtrl.signal,
     });
+    clearTimeout(fetchTimeout);
     const resellerData = await resellerRes.json();
 
     if (resellerData.success && resellerData.license_key) {
@@ -6538,6 +6554,7 @@ async function ensureKeyAvailable(inventorySlug) {
     return false;
   } finally {
     resellerBuyLocks.delete(inventorySlug);
+    lockResolve();
   }
 }
 
