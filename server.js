@@ -2888,7 +2888,7 @@ if (isConfiguredValue(discordBotToken)) {
           const twitterCaption = (socialHashtags ? `${rawTitle} ${socialHashtags}` : rawTitle).slice(0, 280);
           const blueskyCaption = (socialHashtags ? `${rawTitle} ${socialHashtags}` : rawTitle).slice(0, 300);
           const igCaption = socialHashtags ? `${rawTitle}\n\n${socialHashtags}` : rawTitle;
-          const tiktokCaption = socialHashtags ? `${rawTitle} ${socialHashtags}` : rawTitle;
+          const tiktokCaption = socialHashtags ? `${rawTitle}\n\n${socialHashtags}` : rawTitle;
 
           // Download video
           const vidDl = await fetch(videoUrl);
@@ -3016,7 +3016,7 @@ if (isConfiguredValue(discordBotToken)) {
       const twitterCaption = (socialHashtags ? `${rawTitle} ${socialHashtags}` : rawTitle).slice(0, 280);
       const blueskyCaption = (socialHashtags ? `${rawTitle} ${socialHashtags}` : rawTitle).slice(0, 300);
       const igCaption = socialHashtags ? `${rawTitle}\n\n${socialHashtags}` : rawTitle;
-      const tiktokCaption = socialHashtags ? `${rawTitle} ${socialHashtags}` : rawTitle;
+      const tiktokCaption = socialHashtags ? `${rawTitle}\n\n${socialHashtags}` : rawTitle;
 
       await interaction.deferReply();
       const { default: fetch } = await import("node-fetch");
@@ -3376,6 +3376,27 @@ if (isConfiguredValue(discordBotToken)) {
           return { platform, title: rawTitle, status: failed ? "failed" : "success", uploaded_by: interaction.user.id };
         });
         supabaseAdmin.from("upload_stats").insert(rows).then(() => {}).catch(() => {});
+      }
+
+      // Engagement reminder after 1 minute
+      const uploadLinks = results.filter(r => !r.includes("Failed") && r.includes("http")).map(r => {
+        const nameMatch = r.match(/^\*\*(.+?):\*\*/);
+        const urlMatch = r.match(/(https?:\/\/[^\s]+)/);
+        return nameMatch && urlMatch ? `${nameMatch[1]}: ${urlMatch[1]}` : null;
+      }).filter(Boolean);
+      if (uploadLinks.length > 0) {
+        const reminderChannelId = interaction.channelId;
+        setTimeout(async () => {
+          try {
+            const ch = await discordBot.channels.fetch(reminderChannelId);
+            await ch.send({ embeds: [{
+              title: "⏰ Go engage with your posts!",
+              description: `Like, comment & share your videos within 30 min for the best reach.\n\n${uploadLinks.join("\n")}`,
+              color: 0xff6b6b,
+              footer: { text: "TikTok & Instagram especially reward early self-engagement" }
+            }] });
+          } catch {}
+        }, 60 * 1000);
       }
 
       // Auto-post today's stats after 5 minutes
