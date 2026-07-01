@@ -1062,6 +1062,11 @@ if (isConfiguredValue(discordBotToken)) {
           .setName("pendingschedules")
           .setDescription("List all pending scheduled uploads (admin only)"),
         new SlashCommandBuilder()
+          .setName("testorder")
+          .setDescription("Test order fulfillment flow without buying (admin only)")
+          .addStringOption(o => o.setName("product").setDescription("Product slug (e.g. crusader-r6)").setRequired(true))
+          .addStringOption(o => o.setName("type").setDescription("Test type: fulfilled or unfulfilled").setRequired(false).addChoices({ name: "Fulfilled (key delivered)", value: "fulfilled" }, { name: "Unfulfilled (no key)", value: "unfulfilled" })),
+        new SlashCommandBuilder()
           .setName("customers")
           .setDescription("View recent purchases (admin only)")
           .addIntegerOption(o => o.setName("count").setDescription("Number of recent orders to show (default: 10)").setRequired(false)),
@@ -2863,6 +2868,131 @@ if (isConfiguredValue(discordBotToken)) {
       return interaction.reply({ embeds: [{ description: `Cancelled **${count}** scheduled upload(s).`, color: 0x22c55e }], ephemeral: true });
     }
 
+    /* ── /testorder — Test order fulfillment flow without buying ── */
+    if (interaction.commandName === "testorder") {
+      if (!BOT_ADMINS.includes(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      const productSlug = interaction.options.getString("product");
+      const testType = interaction.options.getString("type") || "fulfilled";
+      const catalogItem = getCatalogItemByInventorySlug(productSlug + "-day") || getCatalogItemByInventorySlug(productSlug + "-week") || getCatalogItemByInventorySlug(productSlug + "-month");
+
+      if (!catalogItem) {
+        return interaction.editReply({ embeds: [{ description: `Product \`${productSlug}\` not found in catalog.`, color: 0xff4444 }] });
+      }
+
+      const fakeOrder = {
+        id: `TEST-${Date.now()}`,
+        user_id: null,
+        product_slug: catalogItem.variant ? `${catalogItem.product.slug}-${catalogItem.variant.slug}` : productSlug,
+      };
+      const fakeSession = { id: `TEST-SESSION-${Date.now()}`, payment_intent: null };
+
+      try {
+        if (testType === "unfulfilled") {
+          /* Override the DM to go to the command user instead */
+          const dmUser = interaction.user;
+          const catalogLabel = catalogItem?.name || productSlug;
+
+          /* Send alert webhooks */
+          if (isConfiguredValue(discordOrderWebhookUrl)) {
+            sendDiscordWebhook(discordOrderWebhookUrl, {
+              embeds: [{
+                title: "TEST - UNFULFILLED ORDER",
+                description: `**${catalogLabel}** - no key available. (This is a test)`,
+                color: 0xff0000,
+                fields: [
+                  { name: "Order ID", value: fakeOrder.id, inline: true },
+                  { name: "Triggered By", value: dmUser.tag, inline: true },
+                ],
+                timestamp: new Date().toISOString(),
+              }],
+            }).catch(() => {});
+          }
+
+          if (discordBot && discordLowStockChannelId) {
+            const ch = await discordBot.channels.fetch(discordLowStockChannelId).catch(() => null);
+            if (ch) {
+              await ch.send({
+                embeds: [{
+                  title: "TEST - UNFULFILLED ORDER - Action Required",
+                  description: `A customer paid but **no key could be delivered**.\nBoth reseller API and local stock failed. (This is a test)`,
+                  color: 0xff0000,
+                  fields: [
+                    { name: "Product", value: catalogLabel, inline: true },
+                    { name: "Order ID", value: fakeOrder.id, inline: true },
+                    { name: "Triggered By", value: dmUser.tag, inline: true },
+                  ],
+                  footer: { text: "TEST - No real order" },
+                  timestamp: new Date().toISOString(),
+                }],
+              });
+            }
+          }
+
+          /* DM the command user */
+          await dmUser.send({
+            embeds: [{
+              title: "Order Received - Key Pending",
+              description: `We received your payment for **${catalogLabel}** but your key is temporarily unavailable.\n\nPlease **open a support ticket** and you will be treated as **priority** - we'll get your key to you ASAP.`,
+              color: 0xffa500,
+              fields: [
+                { name: "Support", value: `[Open a Ticket](${baseUrl}/desk/)`, inline: true },
+                { name: "Order ID", value: fakeOrder.id, inline: true },
+              ],
+              footer: { text: "TEST - Not a real order" },
+            }],
+          });
+
+          return interaction.editReply({ embeds: [{ title: "Test Complete", description: `Sent **unfulfilled** alerts + DM to you for **${catalogLabel}**.`, color: 0x22c55e }] });
+        }
+
+        /* Fulfilled test */
+        const fakeKey = { key_value: "TEST-XXXX-XXXX-XXXX" };
+        const assignedAt = new Date().toISOString();
+        const catalogLabel = catalogItem?.name || productSlug;
+        const dmUser = interaction.user;
+
+        /* Order webhook */
+        if (isConfiguredValue(discordOrderWebhookUrl)) {
+          sendDiscordWebhook(discordOrderWebhookUrl, {
+            embeds: [{
+              title: "TEST - Order Fulfilled",
+              color: 0x00c851,
+              fields: [
+                { name: "Product", value: catalogLabel, inline: true },
+                { name: "Status", value: "Fulfilled", inline: true },
+                { name: "Buyer", value: dmUser.tag, inline: true },
+                { name: "Order ID", value: fakeOrder.id, inline: false },
+                { name: "Time", value: assignedAt, inline: false },
+              ],
+            }],
+          }).catch(() => {});
+        }
+
+        /* DM the command user the fake key */
+        await dmUser.send({
+          embeds: [{
+            title: "Order Fulfilled",
+            description: `Your key for **${catalogLabel}** is ready.`,
+            color: 0x00c851,
+            fields: [
+              { name: "License Key", value: `\`${fakeKey.key_value}\``, inline: false },
+              { name: "Setup Guide", value: `[View Instructions](${baseUrl}/instructions/)`, inline: true },
+              { name: "Your Account", value: `[View Keys](${baseUrl}/account/)`, inline: true },
+            ],
+            footer: { text: "TEST - Not a real order" },
+          }],
+        });
+
+        return interaction.editReply({ embeds: [{ title: "Test Complete", description: `Sent **fulfilled** alerts + DM to you for **${catalogLabel}**.`, color: 0x22c55e }] });
+      } catch (err) {
+        console.error("[TestOrder]", err.message);
+        return interaction.editReply({ embeds: [{ description: `Error: ${err.message}`, color: 0xff4444 }] });
+      }
+    }
+
     /* ── /schedule — Schedule a video upload for later ── */
     if (interaction.commandName === "schedule") {
       if (!BOT_ADMINS.includes(interaction.user.id)) {
@@ -3714,7 +3844,7 @@ async function handleUnfulfilledOrder(order, session) {
   console.error(`[UNFULFILLED] Order ${order.id} for ${order.product_slug} - paid but no key delivered`);
 }
 
-async function postFulfillment(order, session, keyData, assignedAt) {
+async function postFulfillment(order, session, keyData, assignedAt, opts = {}) {
   /* ── Fetch buyer info for webhook + DM ── */
   let buyerEmail = "Unknown";
   let buyerUsername = "Unknown";
@@ -3773,29 +3903,45 @@ async function postFulfillment(order, session, keyData, assignedAt) {
     }
   }
 
-  /* ── Discord: low stock alert ── */
+  /* ── Discord: low stock / low balance alert ── */
   if (discordBot && discordLowStockChannelId) {
     try {
-      const { count } = await supabaseAdmin
-        .from("license_keys")
-        .select("id", { count: "exact", head: true })
-        .eq("product_slug", order.product_slug)
-        .eq("status", "unused");
+      const channel = await discordBot.channels.fetch(discordLowStockChannelId);
+      if (channel) {
+        if (typeof opts.resellerBalanceCents === "number") {
+          /* Reseller API path: alert on low balance */
+          const balanceDollars = (opts.resellerBalanceCents / 100).toFixed(2);
+          if (opts.resellerBalanceCents <= 5000) {
+            await channel.send({
+              embeds: [{
+                title: "Low Reseller Balance",
+                description: `**$${balanceDollars} remaining**\nTop up your reseller balance to avoid failed orders.`,
+                color: opts.resellerBalanceCents <= 1000 ? 0xff0000 : 0xffa500,
+                timestamp: new Date().toISOString(),
+              }],
+            });
+          }
+        } else {
+          /* Stock path: alert on low unused keys */
+          const { count } = await supabaseAdmin
+            .from("license_keys")
+            .select("id", { count: "exact", head: true })
+            .eq("product_slug", order.product_slug)
+            .eq("status", "unused");
 
-      if (count !== null && count <= 3) {
-        const catalogItem2 = getCatalogItemByInventorySlug(order.product_slug);
-        const productLabel2 = catalogItem2?.name || order.product_slug;
-        const channel = await discordBot.channels.fetch(discordLowStockChannelId);
-        if (channel) {
-          const urgency = count === 0 ? "OUT OF STOCK" : `${count} key${count === 1 ? "" : "s"} left`;
-          await channel.send({
-            embeds: [{
-              title: `Low Stock: ${productLabel2}`,
-              description: `**${urgency}**\nRestock soon to avoid missed orders.`,
-              color: count === 0 ? 0xff0000 : 0xffa500,
-              timestamp: new Date().toISOString(),
-            }],
-          });
+          if (count !== null && count <= 3) {
+            const catalogItem2 = getCatalogItemByInventorySlug(order.product_slug);
+            const productLabel2 = catalogItem2?.name || order.product_slug;
+            const urgency = count === 0 ? "OUT OF STOCK" : `${count} key${count === 1 ? "" : "s"} left`;
+            await channel.send({
+              embeds: [{
+                title: `Low Stock: ${productLabel2}`,
+                description: `**${urgency}**\nRestock soon to avoid missed orders.`,
+                color: count === 0 ? 0xff0000 : 0xffa500,
+                timestamp: new Date().toISOString(),
+              }],
+            });
+          }
         }
       }
     } catch (err) {
@@ -3936,8 +4082,7 @@ async function syncPaidOrder(session) {
 
             if (orderUpdateError) throw orderUpdateError;
 
-            // Continue to post-fulfillment steps (webhook, DM, etc.) by setting updatedKey
-            return await postFulfillment(order, session, insertedKey, assignedAt);
+            return await postFulfillment(order, session, insertedKey, assignedAt, { resellerBalanceCents: resellerData.new_balance_cents });
           }
         } else {
           console.warn(`[Reseller API] Failed for ${order.product_slug}: ${resellerData.error || "unknown error"}`);
