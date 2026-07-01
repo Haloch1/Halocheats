@@ -47,6 +47,7 @@ const discordUnverifiedRoleId = process.env.DISCORD_UNVERIFIED_ROLE_ID || "";
 const OWNER_ID = "1327675126338293921";
 const BOT_ADMINS = [OWNER_ID, "1191199172448239639"];
 const pendingSchedules = new Map(); // id -> { timer, title, postAt }
+const resellerBuyLocks = new Set(); // inventorySlug strings currently being bought
 const nowpaymentsApiKey = process.env.NOWPAYMENTS_API_KEY || "";
 const nowpaymentsIpnKey = process.env.NOWPAYMENTS_IPN_KEY || "";
 const youtubeClientId = process.env.YOUTUBE_CLIENT_ID || "";
@@ -133,7 +134,7 @@ async function pollBufferExternalLink(apiKey, postId, platformName, retries = 3,
 const metaGraphVersion = process.env.META_GRAPH_VERSION || "v25.0";
 const metaThreadsToken = (process.env.META_THREADS_TOKEN || "").trim();
 const metaThreadsUserId = (process.env.META_THREADS_USER_ID || "").trim();
-const discordLowStockChannelId = "1517987031723282607";
+const discordLowStockChannelId = "1521919047766114424";
 const liveDeskCooldownMs = 45_000;
 const liveDeskCooldownByIp = new Map();
 const signupIpMap = new Map(); // IP -> [userId, ...]  (rolling fraud check, not persisted)
@@ -6475,6 +6476,19 @@ async function ensureKeyAvailable(inventorySlug) {
   const resellerParams = getResellerParams(inventorySlug);
   if (!resellerParams) return false;
 
+  /* Prevent concurrent buys for the same slug (spam clicks, bots, etc.) */
+  if (resellerBuyLocks.has(inventorySlug)) {
+    /* Another request is already buying this product — wait briefly then re-check stock */
+    await new Promise(r => setTimeout(r, 3000));
+    const { count: recheckStock } = await supabaseAdmin
+      .from("license_keys")
+      .select("id", { count: "exact", head: true })
+      .eq("product_slug", inventorySlug)
+      .eq("status", "unused");
+    return recheckStock && recheckStock > 0;
+  }
+
+  resellerBuyLocks.add(inventorySlug);
   try {
     const { default: fetch } = await import("node-fetch");
     const resellerRes = await fetch(resellerApiUrl, {
@@ -6520,6 +6534,8 @@ async function ensureKeyAvailable(inventorySlug) {
   } catch (err) {
     console.error(`[Reseller Pre-Buy] Error for ${inventorySlug}:`, err.message);
     return false;
+  } finally {
+    resellerBuyLocks.delete(inventorySlug);
   }
 }
 
@@ -6581,6 +6597,20 @@ app.post("/api/create-checkout-session", async (req, res) => {
       return res.status(500).json({
         error: "Supabase server auth is not configured. Add SUPABASE_SECRET_KEY in .env.",
       });
+    }
+
+    /* ── Block duplicate checkouts: same user + same product within 2 minutes ── */
+    const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const { count: recentPending } = await supabaseAdmin
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", member.id)
+      .eq("product_slug", selection.inventorySlug)
+      .eq("status", "pending")
+      .gte("created_at", twoMinAgo);
+
+    if (recentPending && recentPending > 0) {
+      return res.status(429).json({ error: "You already have a pending checkout for this product. Please complete or wait before trying again." });
     }
 
     /* ── Ensure a key is available before charging ── */
@@ -6696,6 +6726,20 @@ app.post("/api/create-crypto-checkout", async (req, res) => {
   try {
     if (!supabaseAdmin) {
       return res.status(500).json({ error: "Supabase server auth is not configured." });
+    }
+
+    /* ── Block duplicate checkouts: same user + same product within 2 minutes ── */
+    const twoMinAgoCrypto = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const { count: recentPendingCrypto } = await supabaseAdmin
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", member.id)
+      .eq("product_slug", selection.inventorySlug)
+      .eq("status", "pending")
+      .gte("created_at", twoMinAgoCrypto);
+
+    if (recentPendingCrypto && recentPendingCrypto > 0) {
+      return res.status(429).json({ error: "You already have a pending checkout for this product. Please complete or wait before trying again." });
     }
 
     /* ── Ensure a key is available before charging ── */
