@@ -119,6 +119,24 @@ const accountsMeta = {
   available: false,
 };
 
+const apexMeta = {
+  vendor: "Apex Legends",
+  game: "Apex Legends",
+  category: "Apex Legends",
+  badge: "Online",
+  featured: false,
+  available: true,
+};
+
+const eftMeta = {
+  vendor: "Escape From Tarkov",
+  game: "Escape From Tarkov",
+  category: "Escape From Tarkov",
+  badge: "Online",
+  featured: false,
+  available: true,
+};
+
 const rustMeta = {
   vendor: "Rust",
   game: "Rust",
@@ -405,6 +423,67 @@ const productCatalog = [
     ],
   },
   {
+    ...r6Meta,
+    slug: "r6-frost-lite",
+    name: "R6 Frost Lite",
+    priceDisplay: `From ${money(adjustAmount(599, r6Multiplier))}`,
+    summary:
+      "Lean version of R6 Frost focused on aim and ESP only, without misc utilities.",
+    features: ["Memory aim", "Silent aim", "Custom chams"],
+    featureGroups: [
+      { title: "Memory Aim" },
+      { title: "Silent Aim" },
+      { title: "Aimbot Smoothing" },
+      { title: "Closest Bone to Crosshair" },
+      { title: "Player ESP" },
+      { title: "World ESP" },
+      { title: "Custom Chams" },
+      { title: "Streamable" },
+    ],
+    generalInfo: [
+      "Stripped-down version of Frost with aim and ESP only, no recoil or spread tools.",
+      "Good fit if you want a lighter setup with less overhead.",
+      ...universalSetupNotes,
+    ],
+    requirements: ["Windows 10: 20H2 to 22H2", "Windows 11: 21H2 to 25H2"],
+    variants: [
+      keyVariant("r6-frost-lite", "day", "1 Day Key", adjustAmount(599, r6Multiplier)),
+      keyVariant("r6-frost-lite", "week", "1 Week Key", adjustAmount(1999, r6Multiplier)),
+      keyVariant("r6-frost-lite", "month", "1 Month Key", adjustAmount(3999, r6Multiplier)),
+    ],
+  },
+  {
+    ...r6Meta,
+    slug: "r6-unlock-all",
+    name: "R6 Unlock All",
+    priceDisplay: `From ${money(adjustAmount(2999, r6Multiplier))}`,
+    summary:
+      "Full unlock tool for Rainbow Six Siege covering operators, skins, charms, and cosmetics.",
+    features: ["Unlock all operators", "Unlock all skins", "Global compatibility"],
+    featureGroups: [
+      { title: "Unlock all operators" },
+      { title: "Unlock all skins & cosmetics" },
+      { title: "Unlock all charms" },
+      { title: "Global compatibility" },
+      { title: "Easy setup" },
+    ],
+    generalInfo: [
+      "Unlocks all in-game content globally and works with any account.",
+      "Lifetime tier includes ongoing updates.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Windows 10/11 64-bit",
+      "Rainbow Six Siege installed",
+      "Ubisoft Connect account",
+      "Internet connection",
+    ],
+    variants: [
+      keyVariant("r6-unlock-all", "month", "1 Month Key", adjustAmount(2999, r6Multiplier)),
+      keyVariant("r6-unlock-all", "lifetime", "Lifetime Key", adjustAmount(6999, r6Multiplier)),
+    ],
+  },
+  {
     ...fortniteMeta,
     slug: "fortnite-full",
     name: "Fortnite Full",
@@ -452,6 +531,220 @@ const productCatalog = [
       adjustedUnavailableVariant("fortnite-ancient", "day", "1 Day Key", 399, newProductMultiplier),
       adjustedUnavailableVariant("fortnite-ancient", "week", "7 Day Key", 1999, newProductMultiplier),
       adjustedUnavailableVariant("fortnite-ancient", "month", "30 Day Key", 3999, newProductMultiplier),
+    ],
+  },
+  {
+    ...apexMeta,
+    slug: "ignite-apex",
+    name: "Ignite - Apex Legends",
+    priceDisplay: `From ${money(799)}`,
+    summary:
+      "Precision aim assist for Apex Legends with triggerbot, full player and world ESP, and movement automation.",
+    features: ["Aimbot suite", "Triggerbot", "Movement tools"],
+    featureGroups: [
+      {
+        title: "Aimbot",
+        items: ["Enable", "Aimbot key", "Speed", "FOV", "Max distance", "Retarget time", "Detach time", "Filter team"],
+      },
+      {
+        title: "Player ESP",
+        items: ["Enemy", "Team", "Max distance", "Box", "Head dot", "Skeleton", "Weapon", "Distance"],
+      },
+      {
+        title: "World ESP",
+        items: ["Pistols", "Shotguns", "SMG", "AR", "Snipers", "Ammo", "Meds", "Optics"],
+      },
+      {
+        title: "Triggerbot",
+        items: ["Enable", "Triggerbot key", "Detection threshold", "Magnetic", "Filter team"],
+      },
+      {
+        title: "Misc",
+        items: ["BHOP", "Tap strafe", "Wall jump"],
+      },
+      {
+        title: "Config",
+        items: ["Load", "Save", "Delete", "Clear"],
+      },
+    ],
+    generalInfo: [
+      "Streamproof and Medal.tv compatible with global support.",
+      "Movement tools include BHOP, Tap Strafe, and Wall Jump automation.",
+      ...universalSetupNotes,
+    ],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: [
+      keyVariant("ignite-apex", "day", "1 Day Key", 799),
+      keyVariant("ignite-apex", "three-day", "3 Day Key", 1499),
+      keyVariant("ignite-apex", "week", "7 Day Key", 1999),
+      keyVariant("ignite-apex", "month", "30 Day Key", 3999),
+      keyVariant("ignite-apex", "lifetime", "Lifetime Key", 18000),
+    ],
+  },
+  {
+    ...apexMeta,
+    slug: "exodus-apex",
+    name: "Exodus - Apex Legends",
+    priceDisplay: `From ${money(299)}`,
+    summary:
+      "Feature-rich Apex external with configurable aimbot, weapon-specific settings, loot visuals, and rarity filtering.",
+    features: ["Weapon configs", "Loot ESP", "Smart loot"],
+    featureGroups: [
+      {
+        title: "Aimbot",
+        items: ["Static FOV in zoom", "Aim if out of FOV", "Prediction", "Visible check", "Ignore knocked", "Draw FOV", "Hitbox selection"],
+      },
+      {
+        title: "Player Visuals",
+        items: ["Box", "Name", "Health", "Shield", "Skeleton", "Weapon", "Distance", "Barrel"],
+      },
+      {
+        title: "Loot Visuals",
+        items: ["Enable", "Draw glow", "Glow material", "Draw distance", "Render distance"],
+      },
+      {
+        title: "Loot Categories",
+        items: ["Rifle", "SMG", "LMG", "Marksman", "Sniper", "Shotgun", "Pistol"],
+      },
+      {
+        title: "Misc",
+        items: ["Auto tap strafe", "Auto super glide", "BunnyHop", "Big map radar"],
+      },
+    ],
+    generalInfo: [
+      "Includes weapon-specific configurations and smart loot filtering by rarity.",
+      "Supports custom loot categories with per-item overrides.",
+      ...universalSetupNotes,
+    ],
+    requirements: ["Windows 10 / 11", "Administrator access"],
+    variants: [
+      keyVariant("exodus-apex", "day", "1 Day Key", 299),
+      keyVariant("exodus-apex", "three-day", "3 Day Key", 500),
+      keyVariant("exodus-apex", "week", "7 Day Key", 1500),
+      keyVariant("exodus-apex", "month", "30 Day Key", 2999),
+    ],
+  },
+  {
+    ...apexMeta,
+    slug: "ancient-apex",
+    name: "Ancient - Apex Legends",
+    badge: "Coming Soon",
+    available: false,
+    priceDisplay: `From ${money(200)}`,
+    summary:
+      "Apex Legends setup with aim tools, player ESP, and configuration sharing.",
+    features: ["Aim support", "Player ESP", "Config sharing"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Aim key", "Smooth", "FOV", "Target selection"] },
+      { title: "Visuals", items: ["Player ESP", "Skeleton", "Distance", "Radar"] },
+      { title: "Config", items: ["Save", "Load", "Share"] },
+    ],
+    generalInfo: [
+      "Currently being updated. Check back soon for availability.",
+      ...universalSetupNotes,
+    ],
+    requirements: ["Windows 10 / 11", "Intel or AMD CPU"],
+    variants: [
+      unavailableVariant("ancient-apex", "day", "1 Day Key", 200),
+      unavailableVariant("ancient-apex", "week", "7 Day Key", 1000),
+      unavailableVariant("ancient-apex", "month", "30 Day Key", 2000),
+    ],
+  },
+  {
+    ...eftMeta,
+    slug: "eft-coffee-chams",
+    name: "Coffee Chams - EFT",
+    priceDisplay: `From ${money(750)}`,
+    summary:
+      "Chams-focused EFT tool with loot-through-walls, recoil and stamina modifications, and FOV controls.",
+    features: ["Chams visuals", "Loot through walls", "Recoil control"],
+    featureGroups: [
+      {
+        title: "Misc",
+        items: ["Infinite stamina", "No sway", "No recoil", "Modify recoil", "No visor", "Recoil percent selector", "No pain effects", "No sprint inertia"],
+      },
+      {
+        title: "Visuals",
+        items: ["Enemy chams", "Local player chams", "Loot item chams", "Corpse chams", "Visibility check", "Zoom helper", "Normal FOV selector", "Aiming FOV selector"],
+      },
+    ],
+    generalInfo: [
+      "Chams-focused with loot through walls and recoil customization.",
+      "Built for visual clarity over feature overload.",
+      ...universalSetupNotes,
+    ],
+    requirements: ["Windows 10 / 11", "Escape From Tarkov installed"],
+    variants: [
+      keyVariant("eft-coffee-chams", "week", "7 Day Key", 750),
+      keyVariant("eft-coffee-chams", "month", "30 Day Key", 1500),
+    ],
+  },
+  {
+    ...eftMeta,
+    slug: "eft-coffee-lite",
+    name: "Coffee Lite - EFT",
+    priceDisplay: `From ${money(400)}`,
+    summary:
+      "Full-featured EFT suite with silent aimbot, deep exploits, loot and player ESP, and customizable loot filtering.",
+    features: ["Silent aimbot", "Loot ESP", "Exploit tools"],
+    featureGroups: [
+      {
+        title: "Aimbot",
+        items: ["Silent aimbot", "Aimkey selection", "Show aimline", "Crosshair", "Aim FOV", "Aimbone selection", "Modify recoil", "Grenade aim"],
+      },
+      {
+        title: "Exploits",
+        items: ["Debug camera", "Anti AFK", "Session ID spoof", "Long jump", "Keep gun steady", "Instant plant"],
+      },
+      {
+        title: "Loot ESP",
+        items: ["Top loot list", "Active quest items", "Price per slot", "Loot chams", "Loot list size", "Default distance cap"],
+      },
+      {
+        title: "Player ESP",
+        items: ["Box settings", "Skeleton", "Draw distance", "Pink chams", "Look direction ray"],
+      },
+      {
+        title: "Loot Filtering",
+        items: ["Add items by name", "Ignore distance cap", "Ignore min price", "Override name", "Override color"],
+      },
+    ],
+    generalInfo: [
+      "Full EFT suite with silent aim, loot through walls, radar, and thermal.",
+      "Deep loot filtering lets you customize exactly what shows up.",
+      ...universalSetupNotes,
+    ],
+    requirements: ["Windows 10 / 11", "Escape From Tarkov installed"],
+    variants: [
+      keyVariant("eft-coffee-lite", "day", "1 Day Key", 400),
+      keyVariant("eft-coffee-lite", "week", "7 Day Key", 2250),
+      keyVariant("eft-coffee-lite", "month", "30 Day Key", 4500),
+    ],
+  },
+  {
+    ...eftMeta,
+    slug: "ancient-eft",
+    name: "Ancient - EFT External",
+    badge: "Coming Soon",
+    available: false,
+    priceDisplay: `From ${money(300)}`,
+    summary:
+      "External EFT setup with aim tools, player ESP, and loot awareness.",
+    features: ["Aim support", "Player ESP", "Loot visuals"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Smooth", "FOV", "Bone selection"] },
+      { title: "Visuals", items: ["Players", "Loot", "Distance", "Skeleton"] },
+      { title: "Misc", items: ["Config support", "Streamproof"] },
+    ],
+    generalInfo: [
+      "Currently being updated. Check back soon for availability.",
+      ...universalSetupNotes,
+    ],
+    requirements: ["Windows 10 / 11", "Escape From Tarkov installed"],
+    variants: [
+      unavailableVariant("ancient-eft", "day", "1 Day Key", 300),
+      unavailableVariant("ancient-eft", "week", "7 Day Key", 1250),
+      unavailableVariant("ancient-eft", "month", "30 Day Key", 2500),
     ],
   },
   {
