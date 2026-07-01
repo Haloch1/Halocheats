@@ -177,8 +177,7 @@ const productCatalog = [
     ...r6Meta,
     slug: "vega-r6-external",
     name: "Vega R6 External",
-    sale: 15,
-    priceDisplay: `From ${money(Math.round(adjustAmount(699, r6Multiplier) * 0.85))}`,
+    priceDisplay: `From ${money(adjustAmount(699, r6Multiplier))}`,
     summary:
       "External R6 access focused on smooth aim control, readable visuals, and capture-friendly use.",
     features: ["External build", "Aimbot suite", "Streamproof support"],
@@ -217,10 +216,10 @@ const productCatalog = [
     ],
     requirements: ["Windows 10", "Windows 11 21H2 - 25H2", "UEFI based motherboard"],
     variants: [
-      saleVariant("vega-r6-external", "day", "1 Day Key", adjustAmount(699, r6Multiplier), 15),
-      saleVariant("vega-r6-external", "three-day", "3 Day Key", adjustAmount(1199, r6Multiplier), 15),
-      saleVariant("vega-r6-external", "week", "1 Week Key", adjustAmount(2699, r6Multiplier), 15),
-      saleVariant("vega-r6-external", "month", "1 Month Key", adjustAmount(5199, r6Multiplier), 15),
+      keyVariant("vega-r6-external", "day", "1 Day Key", adjustAmount(699, r6Multiplier)),
+      keyVariant("vega-r6-external", "three-day", "3 Day Key", adjustAmount(1199, r6Multiplier)),
+      keyVariant("vega-r6-external", "week", "1 Week Key", adjustAmount(2699, r6Multiplier)),
+      keyVariant("vega-r6-external", "month", "1 Month Key", adjustAmount(5199, r6Multiplier)),
     ],
   },
   {
@@ -258,8 +257,7 @@ const productCatalog = [
     ...r6Meta,
     slug: "r6-ancient",
     name: "R6 Ancient",
-    sale: 15,
-    priceDisplay: `From ${money(Math.round(adjustAmount(549, r6Multiplier) * 0.85))}`,
+    priceDisplay: `From ${money(adjustAmount(549, r6Multiplier))}`,
     summary:
       "Config-heavy R6 access with aim options, visual tools, and operator ability controls.",
     features: ["Aim control", "Character abilities", "Full config"],
@@ -298,10 +296,10 @@ const productCatalog = [
       "Secure Boot disabled",
     ],
     variants: [
-      saleVariant("r6-ancient", "day", "1 Day Key", adjustAmount(549, r6Multiplier), 15),
-      saleVariant("r6-ancient", "week", "7 Day Key", adjustAmount(1499, r6Multiplier), 15),
-      saleVariant("r6-ancient", "month", "30 Day Key", adjustAmount(2999, r6Multiplier), 15),
-      saleVariant("r6-ancient", "lifetime", "Lifetime Key", adjustAmount(30199, r6Multiplier), 15),
+      keyVariant("r6-ancient", "day", "1 Day Key", adjustAmount(549, r6Multiplier)),
+      keyVariant("r6-ancient", "week", "7 Day Key", adjustAmount(1499, r6Multiplier)),
+      keyVariant("r6-ancient", "month", "30 Day Key", adjustAmount(2999, r6Multiplier)),
+      keyVariant("r6-ancient", "lifetime", "Lifetime Key", adjustAmount(30199, r6Multiplier)),
     ],
   },
   {
