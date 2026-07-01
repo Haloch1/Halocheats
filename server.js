@@ -52,6 +52,8 @@ const nowpaymentsIpnKey = process.env.NOWPAYMENTS_IPN_KEY || "";
 const youtubeClientId = process.env.YOUTUBE_CLIENT_ID || "";
 const youtubeClientSecret = process.env.YOUTUBE_CLIENT_SECRET || "";
 const youtubeRefreshToken = process.env.YOUTUBE_REFRESH_TOKEN || "";
+const resellerApiKey = process.env.RESELLER_API_KEY || "";
+const resellerApiUrl = process.env.RESELLER_API_URL || "https://eagbrffgiwxqakznaahv.supabase.co/functions/v1/reseller-api-buy";
 const blueskyHandle = process.env.BLUESKY_HANDLE || "";
 const blueskyAppPassword = process.env.BLUESKY_APP_PASSWORD || "";
 const xApiKey = process.env.X_API_KEY || "";
@@ -326,6 +328,13 @@ function getCatalogItemByInventorySlug(inventorySlug) {
 
 function getVariantInventorySlug(product, variant) {
   return variant.inventorySlug || `${product.slug}-${variant.slug}`;
+}
+
+function getResellerParams(inventorySlug) {
+  const catalogItem = getCatalogItemByInventorySlug(inventorySlug);
+  if (!catalogItem?.product || !catalogItem?.variant) return null;
+  const variantLabel = catalogItem.variant.name.replace(/\s*Key$/i, "").trim();
+  return { product_slug: catalogItem.product.slug, variant_label: variantLabel };
 }
 
 function formatKeyStockLabel(count) {
@@ -3632,6 +3641,115 @@ async function sendLiveDeskDiscordAlert(thread, message, user, eventLabel = "New
   });
 }
 
+async function postFulfillment(order, session, keyData, assignedAt) {
+  /* ── Fetch buyer info for webhook + DM ── */
+  let buyerEmail = "Unknown";
+  let buyerUsername = "Unknown";
+  let buyerDiscordId = null;
+  if (order.user_id && supabaseAdmin) {
+    try {
+      const { data: buyerData } = await supabaseAdmin.auth.admin.getUserById(order.user_id);
+      buyerEmail = buyerData?.user?.email || "Unknown";
+      buyerUsername = buyerData?.user?.user_metadata?.username || buyerData?.user?.user_metadata?.discord_username || "Unknown";
+      buyerDiscordId = buyerData?.user?.user_metadata?.discord_id || null;
+    } catch {}
+  }
+
+  /* ── Discord order log ── */
+  if (isConfiguredValue(discordOrderWebhookUrl)) {
+    const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
+    sendDiscordWebhook(discordOrderWebhookUrl, {
+      embeds: [{
+        title: "Order Fulfilled",
+        color: 0x00c851,
+        fields: [
+          { name: "Product", value: catalogItem?.name || order.product_slug, inline: true },
+          { name: "Status", value: "Fulfilled", inline: true },
+          { name: "Buyer Email", value: buyerEmail, inline: true },
+          { name: "Buyer", value: buyerUsername, inline: true },
+          { name: "Order ID", value: order.id, inline: false },
+          { name: "Time", value: assignedAt, inline: false },
+        ],
+      }],
+    }).catch((err) => console.error("[Discord order log]", err.message));
+  }
+
+  /* ── Discord DM: send key to buyer ── */
+  if (discordBot && order.user_id) {
+    try {
+      if (buyerDiscordId) {
+        const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
+        const productLabel = catalogItem?.name || order.product_slug;
+        const buyerUser = await discordBot.users.fetch(buyerDiscordId);
+        await buyerUser.send({
+          embeds: [{
+            title: "Order Fulfilled",
+            description: `Your key for **${productLabel}** is ready.`,
+            color: 0x00c851,
+            fields: [
+              { name: "License Key", value: `\`${keyData.key_value}\``, inline: false },
+              { name: "Setup Guide", value: `[View Instructions](${baseUrl}/instructions/)`, inline: true },
+              { name: "Your Account", value: `[View Keys](${baseUrl}/account/)`, inline: true },
+            ],
+            footer: { text: "Halo Mods" },
+          }],
+        });
+      }
+    } catch (err) {
+      console.error("[Discord DM delivery]", err.message);
+    }
+  }
+
+  /* ── Discord: low stock alert ── */
+  if (discordBot && discordLowStockChannelId) {
+    try {
+      const { count } = await supabaseAdmin
+        .from("license_keys")
+        .select("id", { count: "exact", head: true })
+        .eq("product_slug", order.product_slug)
+        .eq("status", "unused");
+
+      if (count !== null && count <= 3) {
+        const catalogItem2 = getCatalogItemByInventorySlug(order.product_slug);
+        const productLabel2 = catalogItem2?.name || order.product_slug;
+        const channel = await discordBot.channels.fetch(discordLowStockChannelId);
+        if (channel) {
+          const urgency = count === 0 ? "OUT OF STOCK" : `${count} key${count === 1 ? "" : "s"} left`;
+          await channel.send({
+            embeds: [{
+              title: `Low Stock: ${productLabel2}`,
+              description: `**${urgency}**\nRestock soon to avoid missed orders.`,
+              color: count === 0 ? 0xff0000 : 0xffa500,
+              timestamp: new Date().toISOString(),
+            }],
+          });
+        }
+      }
+    } catch (err) {
+      console.error("[Discord low stock]", err.message);
+    }
+  }
+
+  /* ── Discord: assign Customer role ── */
+  if (discordBot && discordGuildId && discordCustomerRoleId && order.user_id) {
+    try {
+      const roleDiscordId = buyerDiscordId || (await supabaseAdmin.auth.admin.getUserById(order.user_id))?.data?.user?.user_metadata?.discord_id;
+      if (roleDiscordId) {
+        const guild = await discordBot.guilds.fetch(discordGuildId);
+        const member = await guild.members.fetch(roleDiscordId).catch(() => null);
+        if (member && !member.roles.cache.has(discordCustomerRoleId)) {
+          await member.roles.add(discordCustomerRoleId);
+          console.log(`[Discord] Assigned Customer role to ${member.user.tag}`);
+        }
+      }
+    } catch (err) {
+      console.error("[Discord role assign]", err.message);
+    }
+  }
+
+  return { keyValue: keyData.key_value };
+}
+
 async function syncPaidOrder(session) {
   if (!supabaseAdmin) {
     throw new Error("Supabase server auth is not configured.");
@@ -3702,6 +3820,62 @@ async function syncPaidOrder(session) {
     return { keyValue: alreadyAssignedKey.key_value };
   }
 
+  /* ── Try reseller API first to auto-buy a key ── */
+  if (resellerApiKey) {
+    const resellerParams = getResellerParams(order.product_slug);
+    if (resellerParams) {
+      try {
+        const { default: fetch } = await import("node-fetch");
+        const resellerRes = await fetch(resellerApiUrl, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${resellerApiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ product_slug: resellerParams.product_slug, variant_label: resellerParams.variant_label, quantity: 1 }),
+        });
+        const resellerData = await resellerRes.json();
+        if (resellerData.success && resellerData.license_key) {
+          console.log(`[Reseller API] Bought key for ${order.product_slug}: order ${resellerData.order_number}, balance ${resellerData.new_balance_cents}c`);
+          // Insert the purchased key into license_keys and assign it immediately
+          const assignedAt = new Date().toISOString();
+          const { data: insertedKey, error: insertErr } = await supabaseAdmin
+            .from("license_keys")
+            .insert({
+              product_slug: order.product_slug,
+              key_value: resellerData.license_key,
+              status: "assigned",
+              assigned_user_id: order.user_id,
+              assigned_order_id: order.id,
+              assigned_at: assignedAt,
+            })
+            .select("id, key_value")
+            .single();
+
+          if (!insertErr && insertedKey) {
+            const { error: orderUpdateError } = await supabaseAdmin
+              .from("orders")
+              .update({
+                status: "fulfilled",
+                stripe_session_id: session.id,
+                stripe_payment_intent: session.payment_intent || null,
+                fulfilled_at: assignedAt,
+                delivered_key_value: insertedKey.key_value,
+              })
+              .eq("id", order.id);
+
+            if (orderUpdateError) throw orderUpdateError;
+
+            // Continue to post-fulfillment steps (webhook, DM, etc.) by setting updatedKey
+            return await postFulfillment(order, session, insertedKey, assignedAt);
+          }
+        } else {
+          console.warn(`[Reseller API] Failed for ${order.product_slug}: ${resellerData.error || "unknown error"}`);
+        }
+      } catch (resellerErr) {
+        console.error(`[Reseller API] Error for ${order.product_slug}:`, resellerErr.message);
+      }
+    }
+  }
+
+  /* ── Fallback: check for pre-loaded keys in stock ── */
   const { data: availableKeys, error: availableKeyError } = await supabaseAdmin
     .from("license_keys")
     .select("id")
@@ -3785,127 +3959,7 @@ async function syncPaidOrder(session) {
     throw orderUpdateError;
   }
 
-  /* ── Fetch buyer info for webhook + DM ── */
-  let buyerEmail = "Unknown";
-  let buyerUsername = "Unknown";
-  let buyerDiscordId = null;
-  if (order.user_id && supabaseAdmin) {
-    try {
-      const { data: buyerData } = await supabaseAdmin.auth.admin.getUserById(order.user_id);
-      buyerEmail = buyerData?.user?.email || "Unknown";
-      buyerUsername = buyerData?.user?.user_metadata?.username || buyerData?.user?.user_metadata?.discord_username || "Unknown";
-      buyerDiscordId = buyerData?.user?.user_metadata?.discord_id || null;
-    } catch {}
-  }
-
-  /* ── Discord order log ── */
-  if (isConfiguredValue(discordOrderWebhookUrl)) {
-    const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
-    sendDiscordWebhook(discordOrderWebhookUrl, {
-      embeds: [{
-        title: "Order Fulfilled",
-        color: 0x00c851,
-        fields: [
-          { name: "Product", value: catalogItem?.name || order.product_slug, inline: true },
-          { name: "Status", value: "Fulfilled", inline: true },
-          { name: "Buyer Email", value: buyerEmail, inline: true },
-          { name: "Buyer", value: buyerUsername, inline: true },
-          { name: "Order ID", value: order.id, inline: false },
-          { name: "Time", value: assignedAt, inline: false },
-        ],
-      }],
-    }).catch((err) => console.error("[Discord order log]", err.message));
-  }
-
-  /* ── Discord DM: send key to buyer ── */
-  if (discordBot && order.user_id) {
-    try {
-      if (buyerDiscordId) {
-        const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
-        const productLabel = catalogItem?.name || order.product_slug;
-        const buyerUser = await discordBot.users.fetch(buyerDiscordId);
-        await buyerUser.send({
-          embeds: [{
-            title: "Order Fulfilled",
-            description: `Your key for **${productLabel}** is ready.`,
-            color: 0x00c851,
-            fields: [
-              { name: "License Key", value: `\`${updatedKey.key_value}\``, inline: false },
-              { name: "Setup Guide", value: `[View Instructions](${baseUrl}/instructions/)`, inline: true },
-              { name: "Your Account", value: `[View Keys](${baseUrl}/account/)`, inline: true },
-            ],
-            footer: { text: "Halo Mods" },
-          }],
-        });
-      }
-    } catch (err) {
-      console.error("[Discord DM delivery]", err.message);
-    }
-  }
-
-  /* ── Discord: low stock alert ── */
-  if (discordBot && discordLowStockChannelId) {
-    try {
-      const { count } = await supabaseAdmin
-        .from("license_keys")
-        .select("id", { count: "exact", head: true })
-        .eq("product_slug", order.product_slug)
-        .eq("status", "unused");
-
-      if (count !== null && count <= 3) {
-        const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
-        const productLabel = catalogItem?.name || order.product_slug;
-        const channel = await discordBot.channels.fetch(discordLowStockChannelId);
-        if (channel) {
-          const urgency = count === 0 ? "OUT OF STOCK" : `${count} key${count === 1 ? "" : "s"} left`;
-          await channel.send({
-            embeds: [{
-              title: `Low Stock: ${productLabel}`,
-              description: `**${urgency}**\nRestock soon to avoid missed orders.`,
-              color: count === 0 ? 0xff0000 : 0xffa500,
-              timestamp: new Date().toISOString(),
-            }],
-          });
-        }
-      }
-    } catch (err) {
-      console.error("[Discord low stock]", err.message);
-    }
-  }
-
-  /* ── Discord: assign Customer role ── */
-  if (discordBot && discordGuildId && discordCustomerRoleId && order.user_id) {
-    try {
-      const { data: roleUserData } = await supabaseAdmin.auth.admin.getUserById(order.user_id);
-      const roleDiscordId = roleUserData?.user?.user_metadata?.discord_id;
-      if (roleDiscordId) {
-        const guild = await discordBot.guilds.fetch(discordGuildId);
-        const member = await guild.members.fetch(roleDiscordId).catch(() => null);
-        if (member && !member.roles.cache.has(discordCustomerRoleId)) {
-          await member.roles.add(discordCustomerRoleId);
-          console.log(`[Discord] Assigned Customer role to ${member.user.tag}`);
-        }
-      }
-    } catch (err) {
-      console.error("[Discord role assign]", err.message);
-    }
-  }
-
-  /* ── Sandbox mode: disabled for now so stock count decreases on purchase ── */
-  // if (process.env.SANDBOX_MODE === "true") {
-  //   console.log(`[Sandbox] Resetting key ${updatedKey.id} back to unused for reuse`);
-  //   await supabaseAdmin
-  //     .from("license_keys")
-  //     .update({
-  //       status: "unused",
-  //       assigned_user_id: null,
-  //       assigned_order_id: null,
-  //       assigned_at: null,
-  //     })
-  //     .eq("id", updatedKey.id);
-  // }
-
-  return { keyValue: updatedKey.key_value };
+  return await postFulfillment(order, session, updatedKey, assignedAt);
 }
 
 app.post(
