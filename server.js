@@ -3963,7 +3963,7 @@ async function postFulfillment(order, session, keyData, assignedAt, opts = {}) {
         }
       }
     } catch (err) {
-      console.error("[Discord role assign]", err.message);
+      console.error(`[Discord role assign] Failed for user ${order.user_id}: ${err.message} (likely role hierarchy — bot role must be above target user's highest role)`);
     }
   }
 
@@ -6544,14 +6544,14 @@ app.post("/api/create-checkout-session", async (req, res) => {
     }
 
     /* ── Block duplicate checkouts: same user + same product within 2 minutes ── */
-    const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const oneMinAgo = new Date(Date.now() - 1 * 60 * 1000).toISOString();
     const { count: recentPending } = await supabaseAdmin
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("user_id", member.id)
       .eq("product_slug", selection.inventorySlug)
       .eq("status", "pending")
-      .gte("created_at", twoMinAgo);
+      .gte("created_at", oneMinAgo);
 
     if (recentPending && recentPending > 0) {
       return res.status(429).json({ error: "You already have a pending checkout for this product. Please complete or wait before trying again." });
@@ -6673,14 +6673,14 @@ app.post("/api/create-crypto-checkout", async (req, res) => {
     }
 
     /* ── Block duplicate checkouts: same user + same product within 2 minutes ── */
-    const twoMinAgoCrypto = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    const oneMinAgoCrypto = new Date(Date.now() - 1 * 60 * 1000).toISOString();
     const { count: recentPendingCrypto } = await supabaseAdmin
       .from("orders")
       .select("id", { count: "exact", head: true })
       .eq("user_id", member.id)
       .eq("product_slug", selection.inventorySlug)
       .eq("status", "pending")
-      .gte("created_at", twoMinAgoCrypto);
+      .gte("created_at", oneMinAgoCrypto);
 
     if (recentPendingCrypto && recentPendingCrypto > 0) {
       return res.status(429).json({ error: "You already have a pending checkout for this product. Please complete or wait before trying again." });
