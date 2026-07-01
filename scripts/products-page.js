@@ -144,8 +144,6 @@ function groupProducts(products) {
 }
 
 function isAllowedProduct(product) {
-  if (product.available === false) return false;
-
   const searchable = [
     product.name,
     product.vendor,

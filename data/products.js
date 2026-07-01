@@ -84,30 +84,37 @@ const fortniteMeta = {
   vendor: "Fortnite",
   game: "Fortnite",
   category: "Fortnite",
-  badge: "Online",
+  badge: "Coming Soon",
   featured: false,
-  available: true,
+  available: false,
 };
 
 const spooferMeta = {
   vendor: "Spoofer",
   game: "Spoofer",
   category: "Spoofer",
-  badge: "Online",
+  badge: "Coming Soon",
   featured: false,
-  available: true,
+  available: false,
 };
 
 const accountsMeta = {
   vendor: "Accounts",
   game: "Accounts",
   category: "Accounts",
-  badge: "Online",
+  badge: "Coming Soon",
   featured: false,
-  available: true,
+  available: false,
 };
 
-const rustMeta = categoryMeta("Rust");
+const rustMeta = {
+  vendor: "Rust",
+  game: "Rust",
+  category: "Rust",
+  badge: "Coming Soon",
+  featured: false,
+  available: false,
+};
 
 const productCatalog = [
   {
@@ -479,7 +486,7 @@ const productCatalog = [
     ],
     requirements: ["Member account", "Valid contact method", "Support ticket required"],
     variants: [
-      keyVariant("linked-nfa", "account", "1 NFA Account", adjustAmount(599, newProductMultiplier)),
+      unavailableVariant("linked-nfa", "account", "1 NFA Account", adjustAmount(599, newProductMultiplier)),
     ],
   },
   {
