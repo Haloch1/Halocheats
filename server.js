@@ -1155,6 +1155,14 @@ if (isConfiguredValue(discordBotToken)) {
           .addChannelOption(o => o.setName("channel").setDescription("Channel to post in (default: current)").setRequired(false))
           .addStringOption(o => o.setName("color").setDescription("Hex color like #ff3636 (default: red)").setRequired(false)),
         new SlashCommandBuilder()
+          .setName("invest")
+          .setDescription("Log a reseller balance deposit (owner only)")
+          .addNumberOption(o => o.setName("amount").setDescription("Amount in dollars (e.g. 50)").setRequired(true))
+          .addStringOption(o => o.setName("note").setDescription("Optional note").setRequired(false)),
+        new SlashCommandBuilder()
+          .setName("investments")
+          .setDescription("View total invested vs profit (owner only)"),
+        new SlashCommandBuilder()
           .setName("uptime")
           .setDescription("Check server health and uptime (admin only)"),
         new SlashCommandBuilder()
@@ -2786,6 +2794,93 @@ if (isConfiguredValue(discordBotToken)) {
         return interaction.reply({ embeds: [{ description: `Announcement posted in <#${channel.id}>.`, color: 0x22c55e }], ephemeral: true });
       } catch (err) {
         return interaction.reply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }], ephemeral: true });
+      }
+    }
+
+    /* ── /invest — Log a reseller balance deposit ── */
+    if (interaction.commandName === "invest") {
+      if (!BOT_ADMINS.includes(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const dollars = interaction.options.getNumber("amount");
+      const note = interaction.options.getString("note") || "";
+      const cents = Math.round(dollars * 100);
+      try {
+        await supabaseAdmin.from("reseller_investments").insert({ amount_cents: cents, note });
+        const { data: all } = await supabaseAdmin.from("reseller_investments").select("amount_cents");
+        const totalCents = (all || []).reduce((s, r) => s + r.amount_cents, 0);
+        return interaction.reply({
+          embeds: [{
+            title: "Investment Logged",
+            color: 0x00c851,
+            fields: [
+              { name: "Deposited", value: `$${dollars.toFixed(2)}`, inline: true },
+              { name: "Total Invested", value: `$${(totalCents / 100).toFixed(2)}`, inline: true },
+            ],
+            footer: note ? { text: note } : undefined,
+          }],
+          ephemeral: true,
+        });
+      } catch (err) {
+        return interaction.reply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }], ephemeral: true });
+      }
+    }
+
+    /* ── /investments — View total invested vs profit ── */
+    if (interaction.commandName === "investments") {
+      if (!BOT_ADMINS.includes(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        // Total invested
+        const { data: invRows } = await supabaseAdmin.from("reseller_investments").select("amount_cents, note, created_at").order("created_at", { ascending: true });
+        const totalInvested = (invRows || []).reduce((s, r) => s + r.amount_cents, 0);
+
+        // Total revenue & profit from all fulfilled orders
+        const { data: orders } = await supabaseAdmin.from("orders").select("product_slug, status, created_at").in("status", ["fulfilled", "paid"]);
+        let totalRevenue = 0, totalCost = 0, totalFees = 0;
+        for (const order of orders || []) {
+          const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
+          const cents = catalogItem?.variant?.amount || 0;
+          const cost = getWholesaleCostCents(order.product_slug);
+          const fees = getStripeFees(cents);
+          totalRevenue += cents;
+          totalCost += cost;
+          totalFees += fees;
+        }
+        const totalProfit = totalRevenue - totalCost - totalFees;
+        const netReturn = totalProfit - totalInvested;
+
+        const fmt = (c) => `$${(c / 100).toFixed(2)}`;
+        const fields = [
+          { name: "Total Invested", value: fmt(totalInvested), inline: true },
+          { name: "Total Revenue", value: fmt(totalRevenue), inline: true },
+          { name: "Wholesale Cost", value: fmt(totalCost), inline: true },
+          { name: "Stripe Fees", value: fmt(totalFees), inline: true },
+          { name: "Net Profit", value: fmt(totalProfit), inline: true },
+          { name: "ROI (Profit - Invested)", value: fmt(netReturn), inline: true },
+        ];
+
+        // Recent deposits
+        if (invRows && invRows.length > 0) {
+          const recent = invRows.slice(-5).reverse().map(r => {
+            const d = new Date(r.created_at).toLocaleDateString();
+            return `${d}: ${fmt(r.amount_cents)}${r.note ? ` — ${r.note}` : ""}`;
+          }).join("\n");
+          fields.push({ name: "Recent Deposits", value: recent, inline: false });
+        }
+
+        return interaction.editReply({
+          embeds: [{
+            title: "Investment Tracker",
+            color: netReturn >= 0 ? 0x00c851 : 0xff4444,
+            fields,
+            footer: { text: netReturn >= 0 ? "You're in profit!" : "Still recouping investment" },
+          }],
+        });
+      } catch (err) {
+        return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
       }
     }
 
