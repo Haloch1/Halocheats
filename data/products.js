@@ -40,7 +40,7 @@ function saleVariant(productSlug, slug, name, originalAmount, salePercent, optio
 
 function unavailableVariant(productSlug, slug, name, amount) {
   return keyVariant(productSlug, slug, name, amount, {
-    stockLabel: "0 In Stock",
+    stockLabel: "Unavailable",
     stripeEnvKey: `DISABLED_${stripeEnvKey(productSlug, slug)}`,
   });
 }
