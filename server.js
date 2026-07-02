@@ -4844,6 +4844,9 @@ app.get("/api/admin/groq-test", async (req, res) => {
     const raw = await r.text();
     let parsed = null;
     try { parsed = JSON.parse(raw); } catch {}
+    /* Also exercise the real Discord code path with the full system prompt */
+    let realReply = null;
+    try { realReply = await generateDiscordAIReply("How do I buy a product?", "diag#0"); } catch (e) { realReply = "THREW: " + e.message; }
     return res.json({
       ok: r.ok,
       status: r.status,
@@ -4851,6 +4854,7 @@ app.get("/api/admin/groq-test", async (req, res) => {
       content: parsed?.choices?.[0]?.message?.content ?? null,
       finish_reason: parsed?.choices?.[0]?.finish_reason ?? null,
       error: parsed?.error ?? null,
+      realDiscordReply: realReply,
       rawFirst500: raw.slice(0, 500),
     });
   } catch (err) {
