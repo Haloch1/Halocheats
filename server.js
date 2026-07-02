@@ -4574,8 +4574,17 @@ app.use("/api/auth/signup", authLimiter);
 app.use("/api/auth/signin", authLimiter);
 app.use("/api/auth/reset-password", authLimiter);
 
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, version: "2026-07-01-v2", crusaderDay: products.find(p => p.slug === "crusader-r6")?.variants?.[0]?.amount });
+app.get("/api/health", async (_req, res) => {
+  const fs = await import("node:fs");
+  const rawFile = fs.readFileSync(path.join(__dirname, "data", "products.js"), "utf8");
+  const match = rawFile.match(/keyVariant\("crusader-r6",\s*"day",\s*"1 Day Key",\s*(\d+)\)/);
+  res.json({
+    ok: true,
+    version: "2026-07-01-v3",
+    crusaderDay: products.find(p => p.slug === "crusader-r6")?.variants?.[0]?.amount,
+    fileOnDisk: match ? Number(match[1]) : "not found",
+    dirname: __dirname,
+  });
 });
 
 /* ── Sitemap ── */
