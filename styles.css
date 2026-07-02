@@ -736,8 +736,8 @@ a {
 }
 
 .product-status.live {
-  background: rgba(255, 255, 255, 0.08);
-  color: #f1d9d9;
+  background: rgba(48, 255, 96, 0.14);
+  color: #5fdd7f;
 }
 
 .product-status.unavailable {
