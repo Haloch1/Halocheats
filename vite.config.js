@@ -36,6 +36,7 @@ export default defineConfig({
         admin: path.resolve(__dirname, "admin/index.html"),
         reviews: path.resolve(__dirname, "reviews/index.html"),
         privacy: path.resolve(__dirname, "privacy/index.html"),
+        stripeLanding: path.resolve(__dirname, "stripe-landing/index.html"),
         notFound: path.resolve(__dirname, "404.html"),
       },
     },
