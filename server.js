@@ -1163,6 +1163,10 @@ if (isConfiguredValue(discordBotToken)) {
           .setName("investments")
           .setDescription("View total invested vs profit (owner only)"),
         new SlashCommandBuilder()
+          .setName("uninvest")
+          .setDescription("Remove an investment log entry (owner only)")
+          .addIntegerOption(o => o.setName("id").setDescription("Investment ID to remove").setRequired(true)),
+        new SlashCommandBuilder()
           .setName("uptime")
           .setDescription("Check server health and uptime (admin only)"),
         new SlashCommandBuilder()
@@ -2834,7 +2838,7 @@ if (isConfiguredValue(discordBotToken)) {
       await interaction.deferReply({ ephemeral: true });
       try {
         // Total invested
-        const { data: invRows } = await supabaseAdmin.from("reseller_investments").select("amount_cents, note, created_at").order("created_at", { ascending: true });
+        const { data: invRows } = await supabaseAdmin.from("reseller_investments").select("id, amount_cents, note, created_at").order("created_at", { ascending: true });
         const totalInvested = (invRows || []).reduce((s, r) => s + r.amount_cents, 0);
 
         // Total revenue & profit from all fulfilled orders
@@ -2866,7 +2870,7 @@ if (isConfiguredValue(discordBotToken)) {
         if (invRows && invRows.length > 0) {
           const recent = invRows.slice(-5).reverse().map(r => {
             const d = new Date(r.created_at).toLocaleDateString();
-            return `${d}: ${fmt(r.amount_cents)}${r.note ? ` — ${r.note}` : ""}`;
+            return `**#${r.id}** ${d}: ${fmt(r.amount_cents)}${r.note ? ` — ${r.note}` : ""}`;
           }).join("\n");
           fields.push({ name: "Recent Deposits", value: recent, inline: false });
         }
@@ -2881,6 +2885,32 @@ if (isConfiguredValue(discordBotToken)) {
         });
       } catch (err) {
         return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /uninvest — Remove an investment log entry ── */
+    if (interaction.commandName === "uninvest") {
+      if (!BOT_ADMINS.includes(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const entryId = interaction.options.getInteger("id");
+      try {
+        const { data: row } = await supabaseAdmin.from("reseller_investments").select("*").eq("id", entryId).single();
+        if (!row) {
+          return interaction.reply({ embeds: [{ description: `No investment with ID ${entryId}.`, color: 0xff4444 }], ephemeral: true });
+        }
+        await supabaseAdmin.from("reseller_investments").delete().eq("id", entryId);
+        const fmt = (c) => `$${(c / 100).toFixed(2)}`;
+        return interaction.reply({
+          embeds: [{
+            title: "Investment Removed",
+            color: 0xffa500,
+            description: `Deleted entry #${entryId}: ${fmt(row.amount_cents)}${row.note ? ` — ${row.note}` : ""}`,
+          }],
+          ephemeral: true,
+        });
+      } catch (err) {
+        return interaction.reply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }], ephemeral: true });
       }
     }
 
