@@ -77,6 +77,43 @@ const OWNER_ID = "1327675126338293921";
 const BOT_ADMINS = [OWNER_ID, "1191199172448239639"];
 const pendingSchedules = new Map(); // id -> { timer, title, postAt }
 const resellerBuyLocks = new Map(); // inventorySlug -> Promise that resolves when buy completes
+
+/* Store kill switch: when true, every product shows Out of Stock and checkout
+   is blocked. Auto-trips when a reseller buy fails on insufficient balance;
+   cleared manually with the /instock Discord command. Persisted in store_flags. */
+let storeSoldOut = false;
+let storeSoldOutReason = null;
+
+async function loadStoreFlags() {
+  if (!supabaseAdmin) return;
+  try {
+    const { data } = await supabaseAdmin
+      .from("store_flags")
+      .select("sold_out, reason")
+      .eq("id", 1)
+      .maybeSingle();
+    if (data) {
+      storeSoldOut = data.sold_out === true;
+      storeSoldOutReason = data.reason || null;
+    }
+  } catch (err) {
+    console.error("[store_flags] load failed:", err.message);
+  }
+}
+
+async function setStoreSoldOut(value, reason = null) {
+  storeSoldOut = Boolean(value);
+  storeSoldOutReason = value ? reason : null;
+  if (!supabaseAdmin) return;
+  try {
+    await supabaseAdmin
+      .from("store_flags")
+      .update({ sold_out: storeSoldOut, reason: storeSoldOutReason, updated_at: new Date().toISOString() })
+      .eq("id", 1);
+  } catch (err) {
+    console.error("[store_flags] save failed:", err.message);
+  }
+}
 const nowpaymentsApiKey = process.env.NOWPAYMENTS_API_KEY || "";
 const nowpaymentsIpnKey = process.env.NOWPAYMENTS_IPN_KEY || "";
 const youtubeClientId = process.env.YOUTUBE_CLIENT_ID || "";
@@ -1184,6 +1221,16 @@ if (isConfiguredValue(discordBotToken)) {
           .setName("userinfo")
           .setDescription("Look up a user by email (admin only)")
           .addStringOption(o => o.setName("email").setDescription("User email address").setRequired(true)),
+        new SlashCommandBuilder()
+          .setName("instock")
+          .setDescription("Reopen the store — mark all products in stock (admin only)"),
+        new SlashCommandBuilder()
+          .setName("soldout")
+          .setDescription("Close the store — mark all products out of stock (admin only)")
+          .addStringOption(o => o.setName("reason").setDescription("Optional reason").setRequired(false)),
+        new SlashCommandBuilder()
+          .setName("storestatus")
+          .setDescription("Check whether the store is open or closed (admin only)"),
       ].map((c) => c.toJSON());
 
       if (discordGuildId) {
@@ -3050,6 +3097,63 @@ if (isConfiguredValue(discordBotToken)) {
       }
     }
 
+    /* ── /instock — Reopen the store (clear the kill switch) ── */
+    if (interaction.commandName === "instock") {
+      if (!BOT_ADMINS.includes(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      await setStoreSoldOut(false);
+      return interaction.reply({
+        embeds: [{
+          title: "Store Reopened",
+          description: "All products are now **In Stock** and checkout is enabled.",
+          color: 0x22c55e,
+          footer: { text: "Halo Mods" },
+        }],
+        ephemeral: true,
+      });
+    }
+
+    /* ── /soldout — Close the store (trip the kill switch) ── */
+    if (interaction.commandName === "soldout") {
+      if (!BOT_ADMINS.includes(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const reason = interaction.options.getString("reason") || "Manually closed";
+      await setStoreSoldOut(true, reason);
+      return interaction.reply({
+        embeds: [{
+          title: "Store Closed",
+          description: `All products now show **Out of Stock** and checkout is blocked.\nRun \`/instock\` to reopen.`,
+          color: 0xff4444,
+          fields: [{ name: "Reason", value: reason.slice(0, 200), inline: false }],
+          footer: { text: "Halo Mods" },
+        }],
+        ephemeral: true,
+      });
+    }
+
+    /* ── /storestatus — Show whether the store is open or closed ── */
+    if (interaction.commandName === "storestatus") {
+      if (!BOT_ADMINS.includes(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      return interaction.reply({
+        embeds: [{
+          title: storeSoldOut ? "Store: CLOSED" : "Store: OPEN",
+          description: storeSoldOut
+            ? "Products show Out of Stock and checkout is blocked. Run `/instock` to reopen."
+            : "Products are In Stock and checkout is enabled.",
+          color: storeSoldOut ? 0xff4444 : 0x22c55e,
+          fields: storeSoldOut && storeSoldOutReason
+            ? [{ name: "Reason", value: String(storeSoldOutReason).slice(0, 200), inline: false }]
+            : [],
+          footer: { text: "Halo Mods" },
+        }],
+        ephemeral: true,
+      });
+    }
+
     /* ── /pendingschedules — List pending scheduled uploads ── */
     if (interaction.commandName === "pendingschedules") {
       if (!BOT_ADMINS.includes(interaction.user.id)) {
@@ -4537,6 +4641,22 @@ async function syncPaidOrder(session) {
           }
         } else {
           console.warn(`[Reseller Buy] Failed for ${order.product_slug}: ${resellerData.error || "unknown"}`);
+          /* If the reseller rejected the buy for lack of funds, trip the store
+             kill switch so no further customers can pay until balance is topped up. */
+          const errText = String(resellerData.error || "").toLowerCase();
+          const balanceCents = Number(resellerData.new_balance_cents);
+          const looksLikeBalance =
+            /insufficient|balance|funds|not enough|top ?up|no funds/.test(errText) ||
+            (Number.isFinite(balanceCents) && balanceCents <= 0);
+          if (looksLikeBalance && !storeSoldOut) {
+            await setStoreSoldOut(true, `Auto: reseller balance ran out (${resellerData.error || "insufficient funds"})`);
+            try {
+              await sendSecurityDiscordAlert("STORE AUTO-CLOSED — reseller balance ran out", [
+                { name: "Reason", value: String(resellerData.error || "insufficient funds").slice(0, 200), inline: false },
+                { name: "Action", value: "Top up your reseller balance, then run /instock to reopen.", inline: false },
+              ]);
+            } catch {}
+          }
         }
       } catch (resErr) {
         console.error(`[Reseller Buy] Error for ${order.product_slug}:`, resErr.message);
@@ -5228,7 +5348,8 @@ app.get("/api/products", async (_req, res) => {
         const hasKeys = !isDisabledVariant && (stockCount > 0 || resellerCovers);
         const isExplicitlyBlocked = Boolean(product.checkoutBlocked || variant.checkoutBlocked);
         const hasValidPrice = variant.amount > 0;
-        const checkoutReady = hasKeys && hasValidPrice && !isExplicitlyBlocked;
+        /* Store kill switch forces everything out of stock / not purchasable */
+        const checkoutReady = !storeSoldOut && hasKeys && hasValidPrice && !isExplicitlyBlocked;
         const checkoutBlocked = isExplicitlyBlocked && hasKeys;
 
         /* Apex & EFT show the exact key count; every other product just shows
@@ -5238,6 +5359,8 @@ app.get("/api/products", async (_req, res) => {
         let stockLabel;
         if (isDisabledVariant) {
           stockLabel = "Unavailable";
+        } else if (storeSoldOut) {
+          stockLabel = "Out of Stock";
         } else if (showsExactCount) {
           stockLabel = resellerCovers && stockCount === 0 ? "In Stock" : formatKeyStockLabel(stockCount);
         } else {
@@ -7064,6 +7187,11 @@ app.post("/api/create-checkout-session", async (req, res) => {
     return res.status(503).json({ error: "Purchases are temporarily unavailable. Please try again later." });
   }
 
+  /* ── Store kill switch (e.g. reseller balance ran out) ── */
+  if (storeSoldOut) {
+    return res.status(409).json({ error: "This product is temporarily out of stock. Please check back soon." });
+  }
+
   if (!stripe) {
     return res.status(500).json({
       error:
@@ -7206,6 +7334,11 @@ app.post("/api/create-checkout-session", async (req, res) => {
 app.post("/api/create-crypto-checkout", async (req, res) => {
   if (process.env.PURCHASES_DISABLED === "true") {
     return res.status(503).json({ error: "Purchases are temporarily unavailable. Please try again later." });
+  }
+
+  /* ── Store kill switch (e.g. reseller balance ran out) ── */
+  if (storeSoldOut) {
+    return res.status(409).json({ error: "This product is temporarily out of stock. Please check back soon." });
   }
 
   if (!isConfiguredValue(nowpaymentsApiKey)) {
@@ -7823,6 +7956,7 @@ async function loadLearnedFaq() {
 
 // Load on startup
 loadLearnedFaq();
+loadStoreFlags();
 
 /* ── AI: Live Desk auto-reply ── */
 
