@@ -66,10 +66,10 @@ let aiSearchResults = null; // null = use normal filter, array = AI-ranked slugs
 let aiSearchTimer = null;
 let aiSearchController = null;
 const excludedCatalogTerms = [];
-const promoCodes = {
-  HALO10: 10,
-  R6SAVE: 15,
-};
+/* Promo codes disabled — add entries like { HALO10: 10 } to re-enable.
+   Codes must also be added to PROMO_CODES in server.js or the discount
+   will not be applied to the actual charge. */
+const promoCodes = {};
 const productArtwork = {
   // R6
   "crusader-r6": productCrusaderImage,
@@ -394,7 +394,7 @@ function ensureVariantModal() {
         <p data-variant-summary></p>
         <label class="variant-label">Select option</label>
         <div class="variant-options" data-variant-options></div>
-        <form class="variant-promo-form" data-promo-form>
+        <form class="variant-promo-form" data-promo-form ${Object.keys(promoCodes).length ? "" : "hidden"}>
           <label>
             <span>Promo code</span>
             <input type="text" name="promoCode" placeholder="Enter promo code" autocomplete="off" />

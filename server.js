@@ -4693,6 +4693,45 @@ app.post("/api/nowpayments-ipn", express.json(), async (req, res) => {
     return res.status(400).send("Missing order_id.");
   }
 
+  /* ── Underpayment check: verify the invoice amount matches what the order
+     was quoted at checkout time. HMAC already proves the IPN is genuine;
+     this guards against a "finished" status on a short-paid/altered invoice. ── */
+  try {
+    const { data: orderRow } = await supabaseAdmin
+      .from("orders")
+      .select("id, amount_cents, status")
+      .eq("id", order_id)
+      .maybeSingle();
+
+    if (orderRow && Number.isInteger(orderRow.amount_cents) && orderRow.amount_cents > 0) {
+      const expectedUsd = orderRow.amount_cents / 100;
+      const paidUsd = Number(price_amount);
+      const currencyOk = String(price_currency || "").toLowerCase() === "usd";
+
+      if (!currencyOk || !Number.isFinite(paidUsd) || paidUsd < expectedUsd - 0.01) {
+        console.error(
+          `[NOWPayments IPN] Amount mismatch for order ${order_id}: expected $${expectedUsd}, IPN says ${price_amount} ${price_currency}. NOT fulfilling.`
+        );
+        try {
+          await sendSecurityDiscordAlert("Crypto payment amount mismatch — order NOT fulfilled", [
+            { name: "Order", value: String(order_id), inline: true },
+            { name: "Expected", value: `$${expectedUsd.toFixed(2)} USD`, inline: true },
+            { name: "IPN price", value: `${price_amount} ${price_currency}`, inline: true },
+            { name: "Payment ID", value: String(payment_id || "?"), inline: true },
+          ]);
+        } catch {}
+        /* 200 so NOWPayments doesn't retry forever — this mismatch is permanent.
+           The order stays unfulfilled for manual review. */
+        return res.json({ received: true, held: true });
+      }
+    }
+  } catch (checkError) {
+    /* If the check itself fails (e.g. transient DB error), fail closed with 500
+       so NOWPayments retries later rather than skipping verification. */
+    console.error("[NOWPayments IPN] Amount check error:", checkError.message);
+    return res.status(500).send("Verification failed, retry.");
+  }
+
   try {
     /* Fulfill the order using the same flow as Stripe */
     const mockSession = {
@@ -6961,9 +7000,10 @@ async function isKeyAvailableAsync(inventorySlug) {
   return isKeyAvailable(inventorySlug);
 }
 
-/* Promo codes — must match the codes shown on the products page.
-   Applied server-side so the charged amount matches the displayed discount. */
-const PROMO_CODES = { HALO10: 10, R6SAVE: 15 };
+/* Promo codes — must match `promoCodes` in scripts/products-page.js.
+   Applied server-side so the charged amount matches the displayed discount.
+   Currently disabled — add entries like { HALO10: 10 } to re-enable. */
+const PROMO_CODES = {};
 
 function applyPromo(amountCents, rawCode) {
   const code = String(rawCode || "").trim().toUpperCase();
@@ -7064,6 +7104,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
         user_id: member.id,
         product_slug: selection.inventorySlug,
         status: "pending",
+        amount_cents: checkoutAmount,
       })
       .select("id")
       .single();
@@ -7198,6 +7239,7 @@ app.post("/api/create-crypto-checkout", async (req, res) => {
         user_id: member.id,
         product_slug: selection.inventorySlug,
         status: "pending",
+        amount_cents: checkoutAmount,
       })
       .select("id")
       .single();
@@ -8635,6 +8677,7 @@ const pageRoutes = new Map([
   ["/checkout/success", "checkout/success/index.html"],
   ["/checkout/cancel", "checkout/cancel/index.html"],
   ["/reviews", "reviews/index.html"],
+  ["/stripe-landing", "stripe-landing/index.html"],
 ]);
 
 pageRoutes.forEach((relativePath, route) => {
