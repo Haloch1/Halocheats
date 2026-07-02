@@ -1316,10 +1316,7 @@ if (isConfiguredValue(discordBotToken)) {
 
     // Respond to @mentions in any channel (except review) OR any message in questions channel
     if (isMention || isQuestionsChannel) {
-      // In the questions channel, skip non-mention messages from admins (announcements)
-      // Admins can still talk to the bot by @mentioning it
-      if (isQuestionsChannel && !isMention && BOT_ADMINS.includes(message.author.id)) return;
-      if (isQuestionsChannel && !isMention && message.member && message.member.permissions.has("ManageMessages")) return;
+      // Bot responds to everyone in the questions channel, including admins
 
       try {
         // Strip the mention from the message to get the actual question
