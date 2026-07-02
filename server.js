@@ -4816,49 +4816,43 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-/* ── Diagnostic: live-test the Groq call (admin-only, temporary) ── */
-app.get("/api/admin/groq-test", async (req, res) => {
+/* ── Diagnostic: reseller API reachability/auth probe (admin-only, temporary) ──
+   Sends a deliberately fake product so a sane API rejects it WITHOUT charging. */
+app.get("/api/admin/reseller-test", async (req, res) => {
   try {
     ensureAdminAccess(req);
   } catch (e) {
     return res.status(e.status || 401).json({ error: e.message });
   }
-  if (!groqApiKey) {
-    return res.json({ ok: false, reason: "GROQ_API_KEY is not set in this environment" });
-  }
+  const out = {
+    apiKeyConfigured: Boolean(resellerApiKey),
+    apiUrlConfigured: Boolean(resellerApiUrl),
+    apiUrlHost: (() => { try { return new URL(resellerApiUrl).host; } catch { return null; } })(),
+  };
+  if (!resellerApiKey) return res.json({ ...out, note: "RESELLER_API_KEY not set" });
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const { default: fetch } = await import("node-fetch");
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 15000);
+    const r = await fetch(resellerApiUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqApiKey}` },
-      body: JSON.stringify({
-        model: groqModel,
-        messages: [{ role: "user", content: "Reply with exactly: OK" }],
-        reasoning_effort: "low",
-        max_completion_tokens: 512,
-      }),
-      signal: controller.signal,
+      headers: { Authorization: `Bearer ${resellerApiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ product_slug: "__diagnostic_probe_do_not_fulfill__", variant_label: "__diag__", quantity: 1 }),
+      signal: ctrl.signal,
     });
-    clearTimeout(timeout);
+    clearTimeout(t);
     const raw = await r.text();
-    let parsed = null;
-    try { parsed = JSON.parse(raw); } catch {}
-    /* Also exercise the real Discord code path with the full system prompt */
-    let realReply = null;
-    try { realReply = await generateDiscordAIReply("How do I buy a product?", "diag#0"); } catch (e) { realReply = "THREW: " + e.message; }
+    let parsed = null; try { parsed = JSON.parse(raw); } catch {}
     return res.json({
-      ok: r.ok,
-      status: r.status,
-      model: groqModel,
-      content: parsed?.choices?.[0]?.message?.content ?? null,
-      finish_reason: parsed?.choices?.[0]?.finish_reason ?? null,
+      ...out,
+      httpStatus: r.status,
+      success: parsed?.success ?? null,
       error: parsed?.error ?? null,
-      realDiscordReply: realReply,
-      rawFirst500: raw.slice(0, 500),
+      balanceCents: parsed?.new_balance_cents ?? parsed?.balance_cents ?? null,
+      rawFirst300: raw.slice(0, 300),
     });
   } catch (err) {
-    return res.json({ ok: false, reason: "fetch threw", message: err.message });
+    return res.json({ ...out, reachError: err.message });
   }
 });
 
