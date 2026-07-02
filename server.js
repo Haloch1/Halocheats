@@ -9,7 +9,7 @@ import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ChannelType, PermissionFlagsBits } from "discord.js";
-import { products } from "./data/products.js";
+const { products } = await import("./data/products.js?v=" + Date.now());
 import { google } from "googleapis";
 // OAuth 1.0a signing handled with native crypto
 
