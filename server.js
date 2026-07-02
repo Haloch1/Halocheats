@@ -102,16 +102,22 @@ async function loadStoreFlags() {
 }
 
 async function setStoreSoldOut(value, reason = null) {
+  const wasSoldOut = storeSoldOut;
   storeSoldOut = Boolean(value);
   storeSoldOutReason = value ? reason : null;
-  if (!supabaseAdmin) return;
-  try {
-    await supabaseAdmin
-      .from("store_flags")
-      .update({ sold_out: storeSoldOut, reason: storeSoldOutReason, updated_at: new Date().toISOString() })
-      .eq("id", 1);
-  } catch (err) {
-    console.error("[store_flags] save failed:", err.message);
+  if (supabaseAdmin) {
+    try {
+      await supabaseAdmin
+        .from("store_flags")
+        .update({ sold_out: storeSoldOut, reason: storeSoldOutReason, updated_at: new Date().toISOString() })
+        .eq("id", 1);
+    } catch (err) {
+      console.error("[store_flags] save failed:", err.message);
+    }
+  }
+  /* Store just reopened — notify everyone who asked to be told when back in stock */
+  if (wasSoldOut && !storeSoldOut) {
+    notifyRestockWaiters();
   }
 }
 const nowpaymentsApiKey = process.env.NOWPAYMENTS_API_KEY || "";
@@ -4979,6 +4985,92 @@ app.get("/api/store-status", (_req, res) => {
   res.json({ soldOut: storeSoldOut });
 });
 
+/* Public social proof — recent purchases (masked) + 24h count. Cached 60s. */
+let recentPurchasesCache = { at: 0, data: null };
+app.get("/api/recent-purchases", async (_req, res) => {
+  try {
+    const now = Date.now();
+    if (recentPurchasesCache.data && now - recentPurchasesCache.at < 60000) {
+      return res.json(recentPurchasesCache.data);
+    }
+    if (!supabaseAdmin) return res.json({ count24h: 0, recent: [] });
+
+    const since24 = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    const { count: count24h } = await supabaseAdmin
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "fulfilled")
+      .gte("fulfilled_at", since24);
+
+    const { data: rows } = await supabaseAdmin
+      .from("orders")
+      .select("product_slug, user_id, fulfilled_at")
+      .eq("status", "fulfilled")
+      .not("fulfilled_at", "is", null)
+      .order("fulfilled_at", { ascending: false })
+      .limit(12);
+
+    const recent = [];
+    const userCache = new Map();
+    for (const o of rows || []) {
+      let buyer = "A customer";
+      if (o.user_id) {
+        let u = userCache.get(o.user_id);
+        if (u === undefined) {
+          try {
+            const { data } = await supabaseAdmin.auth.admin.getUserById(o.user_id);
+            u = data?.user || null;
+          } catch { u = null; }
+          userCache.set(o.user_id, u);
+        }
+        const uname = u?.user_metadata?.username || u?.user_metadata?.discord_username;
+        buyer = uname || (u?.email ? maskEmail(u.email) : "A customer");
+      }
+      const item = getCatalogItemByInventorySlug(o.product_slug);
+      recent.push({ product: item?.name || o.product_slug, buyer, ts: o.fulfilled_at });
+    }
+
+    const payload = { count24h: count24h || 0, recent };
+    recentPurchasesCache = { at: now, data: payload };
+    res.json(payload);
+  } catch (err) {
+    console.error("[recent-purchases]", err.message);
+    res.json({ count24h: 0, recent: [] });
+  }
+});
+
+/* Request a restock notification (member must be signed in) */
+app.post("/api/notify-restock", async (req, res) => {
+  let member;
+  try {
+    member = await getAuthenticatedUser(req, res);
+  } catch (e) {
+    return res.status(e.status || 401).json({ error: "Please sign in to get notified." });
+  }
+  const productSlug = trimField(req.body?.productSlug, 80);
+  if (!productSlug) return res.status(400).json({ error: "Product is required." });
+  if (!supabaseAdmin) return res.status(500).json({ error: "Notifications are not available right now." });
+
+  const catalogItem = products.find((p) => p.slug === productSlug);
+  const productName = catalogItem?.name || productSlug;
+
+  try {
+    const { error } = await supabaseAdmin.from("restock_notifications").insert({
+      product_slug: productSlug,
+      product_name: productName,
+      user_id: member.id,
+      email: member.email || null,
+      discord_id: member.user_metadata?.discord_id || null,
+    });
+    /* Unique partial index means a duplicate pending request is a no-op, not an error */
+    if (error && !/duplicate|unique/i.test(error.message || "")) throw error;
+    return res.json({ ok: true, message: "Done — we'll notify you when it's back in stock." });
+  } catch (err) {
+    console.error("[notify-restock]", err.message);
+    return res.status(500).json({ error: "Could not set up the notification." });
+  }
+});
+
 /* ── Sitemap ── */
 app.get("/sitemap.xml", (_req, res) => {
   const base = "https://halocheats.cc";
@@ -5014,22 +5106,38 @@ app.get("/robots.txt", (_req, res) => {
 /* ── Product status from Supabase ── */
 app.get("/api/status", async (_req, res) => {
   try {
-    const { data, error } = await supabaseAdmin
-      .from("product_statuses")
-      .select("category, product_name, status")
-      .order("category")
-      .order("sort_order");
+    /* Manual overrides (admin can force e.g. "Detected"/"Updating") win over the
+       auto-derived status. Keyed by lowercased product name. */
+    const overrides = new Map();
+    try {
+      const { data: rows } = await supabaseAdmin
+        .from("product_statuses")
+        .select("product_name, status");
+      for (const r of rows || []) {
+        if (r.product_name && r.status) overrides.set(r.product_name.toLowerCase(), r.status);
+      }
+    } catch {}
 
-    if (error) throw error;
+    /* Auto-derive each product's status from the live catalog + store state. */
+    const deriveStatus = (product) => {
+      if (storeSoldOut) return "Offline";
+      if (product.available === false) return "Coming Soon";
+      if (product.checkoutBlocked) return "Updating";
+      const anyReady = (product.variants || []).some(
+        (v) => !v.checkoutBlocked && !v.stripeEnvKey?.startsWith("DISABLED_")
+      );
+      return anyReady ? "Undetected" : "Coming Soon";
+    };
 
-    // Group rows into categories
     const catMap = new Map();
-    for (const row of data) {
-      if (!catMap.has(row.category)) catMap.set(row.category, []);
-      catMap.get(row.category).push({ name: row.product_name, status: row.status });
+    for (const product of products) {
+      const category = product.category || product.game || "Other";
+      const status = overrides.get(String(product.name).toLowerCase()) || deriveStatus(product);
+      if (!catMap.has(category)) catMap.set(category, []);
+      catMap.get(category).push({ name: product.name, status });
     }
 
-    const categories = [...catMap.entries()].map(([name, products]) => ({ name, products }));
+    const categories = [...catMap.entries()].map(([name, prods]) => ({ name, products: prods }));
     res.json(categories);
   } catch (err) {
     console.error("Status fetch error:", err.message);
@@ -9028,6 +9136,58 @@ setInterval(() => {
   if (expiryRemindedSet.size > 10000) expiryRemindedSet.clear();
 }, 10 * 60 * 1000); // every 10 minutes
 
+/* ── Restock notifications: DM/email members who asked to be notified ── */
+async function notifyRestockWaiters(filterSlug = null) {
+  if (!supabaseAdmin) return;
+  try {
+    let q = supabaseAdmin
+      .from("restock_notifications")
+      .select("id, product_slug, product_name, email, discord_id")
+      .is("notified_at", null);
+    if (filterSlug) q = q.eq("product_slug", filterSlug);
+    const { data: pending } = await q.limit(500);
+    if (!pending || !pending.length) return;
+
+    const nowIso = new Date().toISOString();
+    for (const n of pending) {
+      const label = n.product_name || n.product_slug;
+      if (discordBot && n.discord_id) {
+        try {
+          const u = await discordBot.users.fetch(n.discord_id);
+          await u.send({
+            embeds: [{
+              title: "Back in Stock",
+              description: `**${label}** is available again.`,
+              color: 0x00c851,
+              fields: [{ name: "Get it", value: `[View Products](${baseUrl}/products/)`, inline: false }],
+              footer: { text: "Halo Mods" },
+            }],
+          });
+        } catch {}
+      }
+      if (resendApiKey && n.email) {
+        try {
+          const { default: fetch } = await import("node-fetch");
+          await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${resendApiKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              from: "Halo Mods <noreply@halocheats.cc>",
+              to: [n.email],
+              subject: `${label} is back in stock`,
+              html: `<p><strong>${label}</strong> is available again at <a href="${baseUrl}/products/">halocheats.cc</a>.</p>`,
+            }),
+          });
+        } catch {}
+      }
+      await supabaseAdmin.from("restock_notifications").update({ notified_at: nowIso }).eq("id", n.id);
+    }
+    console.log(`[Restock notify] Notified ${pending.length} waiter(s)${filterSlug ? ` for ${filterSlug}` : ""}`);
+  } catch (err) {
+    console.error("[Restock notify]", err.message);
+  }
+}
+
 /* ── Restock alerts ── */
 const lastStockCounts = new Map();
 let restockInitialized = false;
@@ -9072,6 +9232,9 @@ async function checkRestockAlerts() {
         } catch (sendErr) {
           console.error("[Restock] Channel send error:", sendErr.message);
         }
+
+        /* Notify members waiting on this product (map inventory slug -> catalog slug) */
+        if (catalogItem?.slug) notifyRestockWaiters(catalogItem.slug);
       }
 
       lastStockCounts.set(slug, count);

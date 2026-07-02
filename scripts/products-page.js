@@ -1,5 +1,6 @@
 import { getCurrentSession, authConfigured } from "./supabase-client.js";
 import { initReveal, renderMessage } from "./site.js";
+import { initSocialProof } from "./social-proof.js";
 import haloLogoImage from "../assets/hc-logo.png";
 import rainbowSixCategoryImage from "../assets/rainbow-six-siege-category.png";
 import fortniteCategoryImage from "../assets/fortnite-category.png";
@@ -48,6 +49,7 @@ import eftCategoryImage from "../assets/category-eft.png";
 import accountsCategoryImage from "../assets/category-accounts.png";
 
 initReveal();
+initSocialProof();
 
 const grid = document.querySelector("[data-products-grid]");
 const notice = document.querySelector("[data-products-message]");
@@ -415,7 +417,9 @@ function ensureVariantModal() {
           <button class="button button-secondary" type="button" data-variant-close>Cancel</button>
           <button class="button button-primary" type="button" data-variant-checkout>Pay with Card</button>
           <button class="button button-crypto" type="button" data-variant-crypto>Pay with Crypto</button>
+          <button class="button button-primary" type="button" data-variant-notify hidden>Notify me when back in stock</button>
         </div>
+        <p class="variant-notify-message" data-notify-message hidden></p>
         <div class="variant-trust-row">
           <span>Secure</span>
           <span>Instant</span>
@@ -505,6 +509,7 @@ function ensureVariantModal() {
     const option = event.target.closest("[data-variant-option]");
     const checkoutButton = event.target.closest("[data-variant-checkout]");
     const cryptoButton = event.target.closest("[data-variant-crypto]");
+    const notifyButton = event.target.closest("[data-variant-notify]");
 
     if (closeButton) {
       closeVariantModal();
@@ -522,6 +527,10 @@ function ensureVariantModal() {
 
     if (cryptoButton) {
       await checkoutSelectedVariantCrypto(cryptoButton);
+    }
+
+    if (notifyButton) {
+      await requestRestockNotify(notifyButton);
     }
   });
 
@@ -641,13 +650,64 @@ function updateCheckoutButtonState() {
   const modal = ensureVariantModal();
   const checkoutButton = modal.querySelector("[data-variant-checkout]");
   const cryptoButton = modal.querySelector("[data-variant-crypto]");
+  const notifyButton = modal.querySelector("[data-variant-notify]");
   const canAttempt = Boolean(activeVariant?.checkoutReady || activeVariant?.checkoutBlocked);
+  /* Out of stock (not a blocked/error variant) → offer restock notify instead */
+  const outOfStock = Boolean(activeVariant) && !canAttempt;
 
+  checkoutButton.hidden = outOfStock;
   checkoutButton.disabled = !canAttempt || !termsAccepted();
   checkoutButton.textContent = canAttempt ? "Pay with Card" : "Unavailable";
   if (cryptoButton) {
+    cryptoButton.hidden = outOfStock;
     cryptoButton.disabled = !canAttempt || !termsAccepted();
     cryptoButton.textContent = canAttempt ? "Pay with Crypto" : "Unavailable";
+  }
+  if (notifyButton) {
+    notifyButton.hidden = !outOfStock;
+    notifyButton.disabled = false;
+  }
+}
+
+async function requestRestockNotify(button) {
+  const modal = ensureVariantModal();
+  const msg = modal.querySelector("[data-notify-message]");
+  if (!activeProduct) return;
+
+  const session = await getCurrentSession();
+  if (!session) {
+    window.location.href = `/account/?next=/products/&intent=notify&product=${activeProduct.slug}`;
+    return;
+  }
+
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = "Setting up...";
+  try {
+    const res = await fetch("/api/notify-restock", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ productSlug: activeProduct.slug }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(payload.error || "Could not set up the notification.");
+    if (msg) {
+      msg.hidden = false;
+      msg.textContent = payload.message || "We'll notify you when it's back in stock.";
+      msg.className = "variant-notify-message success";
+    }
+    button.textContent = "You're on the list";
+  } catch (err) {
+    if (msg) {
+      msg.hidden = false;
+      msg.textContent = err.message;
+      msg.className = "variant-notify-message error";
+    }
+    button.textContent = original;
+    button.disabled = false;
   }
 }
 

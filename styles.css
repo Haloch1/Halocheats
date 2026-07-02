@@ -4211,3 +4211,78 @@ a {
   }
 }
 
+
+/* ── Social proof toast ── */
+.social-proof-toast {
+  position: fixed;
+  left: 20px;
+  bottom: 20px;
+  z-index: 900;
+  max-width: 320px;
+  background: var(--panel-strong);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  padding: 12px 34px 12px 14px;
+  color: var(--text);
+  font-size: 0.85rem;
+  line-height: 1.35;
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+.social-proof-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+.social-proof-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.social-proof-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: #30ff60;
+  box-shadow: 0 0 8px #30ff60;
+  flex-shrink: 0;
+}
+.social-proof-time {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+.social-proof-count {
+  display: block;
+  color: var(--accent-soft);
+  font-size: 0.72rem;
+  margin-top: 4px;
+}
+.social-proof-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.social-proof-close:hover { color: var(--text); }
+@media (max-width: 600px) {
+  .social-proof-toast { left: 12px; right: 12px; bottom: 12px; max-width: none; }
+}
+
+/* ── Restock notify message ── */
+.variant-notify-message {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+}
+.variant-notify-message.success { color: #5fdd7f; }
+.variant-notify-message.error { color: var(--accent-soft); }

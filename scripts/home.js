@@ -1,7 +1,9 @@
 import { getCurrentSession } from "./supabase-client.js";
 import { initReveal, renderMessage } from "./site.js";
+import { initSocialProof } from "./social-proof.js";
 
 initReveal();
+initSocialProof();
 
 /* Flip homepage product badges to red "Offline" when the store is closed (/soldout).
    Stays green "Online" while the store is open (/instock). */
