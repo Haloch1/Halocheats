@@ -9557,12 +9557,19 @@ pageRoutes.forEach((relativePath, route) => {
   });
 });
 
-/* ── Key expiry reminders (week & month keys) ── */
+/* ── Key expiry reminders (day, week & month keys) ── */
 const KEY_DURATIONS = {
+  day: 24 * 60 * 60 * 1000,
+  "three-day": 3 * 24 * 60 * 60 * 1000,
   week: 7 * 24 * 60 * 60 * 1000,
   month: 30 * 24 * 60 * 60 * 1000,
 };
-const EXPIRY_REMINDER_HOURS = 24; // remind 24 hours before expiry
+const EXPIRY_REMINDER_HOURS = {
+  day: 5,       // remind 5 hours before for day keys
+  "three-day": 12, // remind 12 hours before for 3-day keys
+  week: 24,     // remind 24 hours before for week keys
+  month: 24,    // remind 24 hours before for month keys
+};
 const expiryRemindedSet = new Set(); // track order IDs already reminded
 
 async function checkKeyExpiry() {
@@ -9582,15 +9589,19 @@ async function checkKeyExpiry() {
     for (const order of orders) {
       if (expiryRemindedSet.has(order.id)) continue;
 
-      // Check if this is a week or month key
-      let duration = null;
-      if (order.product_slug.endsWith("-week")) duration = KEY_DURATIONS.week;
-      else if (order.product_slug.endsWith("-month")) duration = KEY_DURATIONS.month;
+      // Check if this is a day, three-day, week, or month key
+      let durationType = null;
+      if (order.product_slug.endsWith("-day")) durationType = "day";
+      else if (order.product_slug.endsWith("-three-day")) durationType = "three-day";
+      else if (order.product_slug.endsWith("-week")) durationType = "week";
+      else if (order.product_slug.endsWith("-month")) durationType = "month";
       else continue;
 
+      const duration = KEY_DURATIONS[durationType];
+      const reminderHours = EXPIRY_REMINDER_HOURS[durationType];
       const fulfilledAt = new Date(order.fulfilled_at).getTime();
       const expiresAt = fulfilledAt + duration;
-      const reminderAt = expiresAt - EXPIRY_REMINDER_HOURS * 60 * 60 * 1000;
+      const reminderAt = expiresAt - reminderHours * 60 * 60 * 1000;
 
       if (now >= reminderAt && now < expiresAt) {
         expiryRemindedSet.add(order.id);
@@ -9623,8 +9634,8 @@ async function checkKeyExpiry() {
   }
 }
 
-// Run every 30 minutes
-setInterval(checkKeyExpiry, 30 * 60 * 1000);
+// Run every 15 minutes (day keys need tighter checks)
+setInterval(checkKeyExpiry, 15 * 60 * 1000);
 setTimeout(checkKeyExpiry, 15_000); // first check 15s after boot
 
 /* ── Memory cleanup: prune Maps/Sets that grow unbounded ── */
