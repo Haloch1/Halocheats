@@ -1217,7 +1217,6 @@ if (isConfiguredValue(discordBotToken)) {
               { name: "Bluesky", value: "bluesky" },
               { name: "X", value: "x" },
               { name: "Instagram", value: "instagram" },
-              { name: "TikTok", value: "tiktok" },
               { name: "Threads", value: "threads" },
             ).setRequired(false)),
         new SlashCommandBuilder()
@@ -3771,7 +3770,6 @@ if (isConfiguredValue(discordBotToken)) {
           const twitterCaption = (socialHashtags ? `${rawTitle} ${socialHashtags}` : rawTitle).slice(0, 280);
           const blueskyCaption = (socialHashtags ? `${rawTitle} ${socialHashtags}` : rawTitle).slice(0, 300);
           const igCaption = socialHashtags ? `${rawTitle}\n\n${socialHashtags}` : rawTitle;
-          const tiktokCaption = socialHashtags ? `${rawTitle}\n\n${socialHashtags}` : rawTitle;
 
           // Download video
           const vidDl = await fetch(videoUrl);
@@ -3948,9 +3946,6 @@ if (isConfiguredValue(discordBotToken)) {
             })());
           }
 
-          // TikTok — post manually
-          tasks.push(Promise.resolve("**TikTok:** Post manually for better reach"));
-
           // Threads via Buffer
           const bufferThreadsChannelId = process.env.BUFFER_THREADS_CHANNEL_ID || "";
           if (bufferApiKey && bufferThreadsChannelId) {
@@ -3995,7 +3990,7 @@ if (isConfiguredValue(discordBotToken)) {
                   title: "Go engage with your posts!",
                   description: `Like, comment & share your videos within 30 min for the best reach.\n\n${uploadLinks.join("\n")}`,
                   color: 0xff6b6b,
-                  footer: { text: "TikTok & Instagram especially reward early self-engagement" }
+                  footer: { text: "Instagram especially rewards early self-engagement" }
                 }] });
               } catch {}
             }, 60 * 1000);
@@ -4290,11 +4285,6 @@ if (isConfiguredValue(discordBotToken)) {
         })());
       }
 
-      // TikTok skipped — post manually for better reach
-      if (targetPlatform === "all" || targetPlatform === "tiktok") {
-        tasks.push(Promise.resolve("**TikTok:** Post manually for better reach"));
-      }
-
       // Threads via Buffer API
       const bufferThreadsChannelId = process.env.BUFFER_THREADS_CHANNEL_ID || "";
       if ((targetPlatform === "all" || targetPlatform === "threads") && bufferApiKey && bufferThreadsChannelId) {
@@ -4352,7 +4342,7 @@ if (isConfiguredValue(discordBotToken)) {
 
       // Log upload stats to Supabase
       if (supabaseAdmin) {
-        const platforms = ["YouTube", "Bluesky", "X", "Instagram", "TikTok", "Threads"];
+        const platforms = ["YouTube", "Bluesky", "X", "Instagram", "Threads"];
         const rows = results.map(r => {
           const nameMatch = r.match(/^\*\*(.+?):\*\*/);
           const platform = nameMatch ? nameMatch[1] : "Unknown";
@@ -4377,7 +4367,7 @@ if (isConfiguredValue(discordBotToken)) {
               title: "⏰ Go engage with your posts!",
               description: `Like, comment & share your videos within 30 min for the best reach.\n\n${uploadLinks.join("\n")}`,
               color: 0xff6b6b,
-              footer: { text: "TikTok & Instagram especially reward early self-engagement" }
+              footer: { text: "Instagram especially rewards early self-engagement" }
             }] });
           } catch {}
         }, 60 * 1000);
