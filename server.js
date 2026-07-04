@@ -851,10 +851,9 @@ function checkRateLimit(bucket, key, windowMs, message) {
 }
 
 function getClientIp(req) {
-  /* req.ip already honors app.set("trust proxy", 1) and uses the rightmost
-     (proxy-appended) X-Forwarded-For entry. Never read the raw header —
-     the leftmost value is client-supplied and trivially spoofable. */
-  return req.ip || req.socket?.remoteAddress || "unknown";
+  /* Cloudflare sets CF-Connecting-IP to the real client IP — prefer it.
+     Fall back to req.ip (which honors trust proxy) for non-CF requests. */
+  return req.headers["cf-connecting-ip"] || req.ip || req.socket?.remoteAddress || "unknown";
 }
 
 function trimField(value, maxLength = 500) {
