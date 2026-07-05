@@ -2286,7 +2286,7 @@ if (isConfiguredValue(discordBotToken)) {
       try {
         const { data } = await supabaseAdmin
           .from("orders")
-          .select("product_slug, status, created_at")
+          .select("product_slug, status, amount_cents, created_at")
           .in("status", ["fulfilled", "paid"]);
 
         const now = new Date();
@@ -2294,11 +2294,18 @@ if (isConfiguredValue(discordBotToken)) {
         const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
         const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
 
+        /* Use the stored amount_cents (what Stripe actually charged) when available;
+           fall back to catalog price for older orders that predate the column. */
+        const orderCents = (o) => {
+          if (Number.isFinite(o.amount_cents) && o.amount_cents > 0) return o.amount_cents;
+          const item = getCatalogItemByInventorySlug(o.product_slug);
+          return item?.variant?.amount || 0;
+        };
+
         let today = 0, week = 0, month = 0, allTime = 0, orderCount = 0;
         let pToday = 0, pWeek = 0, pMonth = 0, pAll = 0;
         for (const order of data || []) {
-          const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
-          const cents = catalogItem?.variant?.amount || 0;
+          const cents = orderCents(order);
           const cost = getWholesaleCostCents(order.product_slug);
           const fees = getStripeFees(cents);
           const profit = cents - cost - fees;
@@ -3260,11 +3267,15 @@ if (isConfiguredValue(discordBotToken)) {
         const totalInvested = (invRows || []).reduce((s, r) => s + r.amount_cents, 0);
 
         // Total revenue & profit from all fulfilled orders
-        const { data: orders } = await supabaseAdmin.from("orders").select("product_slug, status, created_at").in("status", ["fulfilled", "paid"]);
+        const { data: orders } = await supabaseAdmin.from("orders").select("product_slug, status, amount_cents, created_at").in("status", ["fulfilled", "paid"]);
+        const orderCentsInv = (o) => {
+          if (Number.isFinite(o.amount_cents) && o.amount_cents > 0) return o.amount_cents;
+          const item = getCatalogItemByInventorySlug(o.product_slug);
+          return item?.variant?.amount || 0;
+        };
         let totalRevenue = 0, totalCost = 0, totalFees = 0;
         for (const order of orders || []) {
-          const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
-          const cents = catalogItem?.variant?.amount || 0;
+          const cents = orderCentsInv(order);
           const cost = getWholesaleCostCents(order.product_slug);
           const fees = getStripeFees(cents);
           totalRevenue += cents;
@@ -7554,7 +7565,7 @@ app.get("/api/admin/revenue", async (req, res) => {
   try {
     const { data, error } = await supabaseAdmin
       .from("orders")
-      .select("product_slug, status, created_at")
+      .select("product_slug, status, amount_cents, created_at")
       .in("status", ["fulfilled", "paid"])
       .order("created_at", { ascending: false });
 
@@ -7565,6 +7576,14 @@ app.get("/api/admin/revenue", async (req, res) => {
     const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
     const monthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
 
+    /* Use stored amount_cents (actual Stripe charge) when available;
+       fall back to catalog price for older orders. */
+    const orderCents = (o) => {
+      if (Number.isFinite(o.amount_cents) && o.amount_cents > 0) return o.amount_cents;
+      const item = getCatalogItemByInventorySlug(o.product_slug);
+      return item?.variant?.amount || 0;
+    };
+
     let today = 0, week = 0, month = 0, allTime = 0;
     let profitToday = 0, profitWeek = 0, profitMonth = 0, profitAllTime = 0;
     let costAllTime = 0, feesAllTime = 0;
@@ -7572,7 +7591,7 @@ app.get("/api/admin/revenue", async (req, res) => {
 
     for (const order of data || []) {
       const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
-      const priceCents = catalogItem?.variant?.amount || 0;
+      const priceCents = orderCents(order);
       const costCents = getWholesaleCostCents(order.product_slug);
       const stripeFees = getStripeFees(priceCents);
       const orderProfit = priceCents - costCents - stripeFees;
