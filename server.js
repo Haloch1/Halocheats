@@ -5003,6 +5003,33 @@ async function handleUnfulfilledOrder(order, session) {
     }
   }
 
+  /* ── Public proof-of-purchase post (even unfulfilled orders are real purchases) ── */
+  if (discordBot && discordProofChannelId && order.user_id && supabaseAdmin) {
+    try {
+      const { data: buyerData } = await supabaseAdmin.auth.admin.getUserById(order.user_id);
+      const buyerEmail = buyerData?.user?.email || "Unknown";
+      const buyerUsername = buyerData?.user?.user_metadata?.username || buyerData?.user?.user_metadata?.discord_username || "Unknown";
+      const proofChannel = await discordBot.channels.fetch(discordProofChannelId);
+      if (proofChannel) {
+        await proofChannel.send({
+          embeds: [{
+            title: "New Purchase",
+            color: 0x00c851,
+            fields: [
+              { name: "Product", value: productLabel, inline: true },
+              { name: "Buyer", value: buyerUsername, inline: true },
+              { name: "Email", value: maskEmail(buyerEmail), inline: true },
+              { name: "Time", value: `<t:${Math.floor(Date.now() / 1000)}:f>`, inline: false },
+            ],
+            footer: { text: "Halo Mods — Verified Purchase" },
+          }],
+        });
+      }
+    } catch (err) {
+      console.error("[Discord proof post unfulfilled]", err.message);
+    }
+  }
+
   console.error(`[UNFULFILLED] Order ${order.id} for ${order.product_slug} - paid but no key delivered`);
 }
 
