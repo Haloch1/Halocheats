@@ -69,6 +69,9 @@ const googleClientId = process.env.GOOGLE_CLIENT_ID || "";
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET || "";
 const discordGuildId = process.env.DISCORD_GUILD_ID || "";
 const discordCustomerRoleId = process.env.DISCORD_CUSTOMER_ROLE_ID || "";
+if (!discordCustomerRoleId) {
+  console.warn("[Discord] DISCORD_CUSTOMER_ROLE_ID is not set — the Customer role cannot be assigned until you add it to the environment.");
+}
 const discordRestockChannelId = process.env.DISCORD_RESTOCK_CHANNEL_ID || "";
 const discordReviewChannelId = process.env.DISCORD_REVIEW_CHANNEL_ID || "1517988360956809297";
 const discordVerifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || "";
@@ -3721,6 +3724,11 @@ if (isConfiguredValue(discordBotToken)) {
           .select("product_slug, status, assigned_at")
           .eq("assigned_user_id", siteUser.id)
           .limit(10);
+
+        /* Self-heal: ensure a paying customer has the Customer role. */
+        if (discordCustomerRoleId && (orders || []).some((o) => o.status === "fulfilled" || o.status === "paid")) {
+          await assignDiscordCustomerRole({ user_id: siteUser.id }, interaction.user.id);
+        }
 
         const fields = [];
         const fulfilled = (orders || []).filter((o) => o.status === "fulfilled").length;
@@ -8865,6 +8873,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
        so this is the copy every lookup trusts (see discordIdOf). */
     const discordAppMeta = { discord_id: discordUser.id, discord_username: discordUser.username };
 
+    let linkedUserId = (mode === "link" || mode === "verify") ? (userId || null) : null;
     if ((mode === "link" || mode === "verify") && userId) {
       /* ── Link/verify mode: attach Discord to existing Supabase user ── */
       const { data: existingUserData } = await supabaseAdmin.auth.admin.getUserById(userId);
@@ -8926,6 +8935,8 @@ app.get("/api/auth/discord/callback", async (req, res) => {
           existingUser.email = updatePayload.email;
         }
       }
+
+      linkedUserId = existingUser.id;
 
       // Create session via magic link (avoids overwriting user's password)
       if (supabaseAuth) {
@@ -8990,6 +9001,24 @@ app.get("/api/auth/discord/callback", async (req, res) => {
         }
       } catch (roleErr) {
         console.error("[Discord] Role assignment failed:", roleErr.message);
+      }
+    }
+
+    /* Backfill the Customer role — covers members who bought before linking Discord
+       (the purchase-time grant needs a linked Discord ID, which they now have). */
+    if (discordCustomerRoleId && linkedUserId && supabaseAdmin) {
+      try {
+        const { data: paidOrders } = await supabaseAdmin
+          .from("orders")
+          .select("id")
+          .eq("user_id", linkedUserId)
+          .in("status", ["fulfilled", "paid"])
+          .limit(1);
+        if (paidOrders && paidOrders.length > 0) {
+          await assignDiscordCustomerRole({ user_id: linkedUserId }, discordUser.id);
+        }
+      } catch (custErr) {
+        console.error("[Discord] Customer role backfill failed:", custErr.message);
       }
     }
 
