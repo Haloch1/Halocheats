@@ -1070,6 +1070,10 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
               Analytics
             </button>
+            <button class="admin-nav-item" data-panel="demand">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+              Demand
+            </button>
             <button class="admin-nav-item" data-panel="support">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
               Support
@@ -1235,6 +1239,28 @@
               <table class="admin-table visitor-log">
                 <thead><tr><th>Page</th><th>IP</th><th>Referrer</th><th>Visitor</th><th>User</th><th>Time</th></tr></thead>
                 <tbody id="analyticsActivity"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- DEMAND -->
+          <div class="admin-panel" id="panel-demand">
+            <div class="admin-panel-header">
+              <h2>Demand</h2>
+              <p>What's selling and what's getting attention, to help you decide which keys to stock.</p>
+            </div>
+            <div class="panel-section-title">Most Bought</div>
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead><tr><th>Product</th><th>Orders (30d)</th><th>Orders (all)</th><th>Revenue</th></tr></thead>
+                <tbody id="demandBought"></tbody>
+              </table>
+            </div>
+            <div class="panel-section-title">Most Viewed</div>
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead><tr><th>Product</th><th>Views (30d)</th><th>Views (all)</th></tr></thead>
+                <tbody id="demandViewed"></tbody>
               </table>
             </div>
           </div>

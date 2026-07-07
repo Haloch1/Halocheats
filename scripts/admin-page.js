@@ -126,6 +126,7 @@ function loadPanel(name) {
     reviews: loadAdminReviews,
     products: loadProducts,
     transcripts: loadTranscripts,
+    demand: loadDemand,
   };
   if (loaders[name]) loaders[name]();
 }
@@ -480,6 +481,35 @@ async function loadAnalytics() {
     startAnalyticsRefresh();
   } catch (err) {
     console.error("Analytics load error:", err);
+  }
+}
+
+// ── Demand ──
+
+async function loadDemand() {
+  try {
+    const data = await apiFetch("/api/admin/product-stats");
+
+    const boughtEl = document.getElementById("demandBought");
+    const bought = data.mostBought || [];
+    boughtEl.innerHTML = bought.length
+      ? bought
+          .map(
+            (p) =>
+              `<tr><td>${esc(p.name)}</td><td>${p.orders30}</td><td>${p.orders}</td><td style="color:#6fdc8c;">${esc(p.revenue)}</td></tr>`
+          )
+          .join("")
+      : '<tr><td colspan="4" class="empty-state">No sales yet.</td></tr>';
+
+    const viewedEl = document.getElementById("demandViewed");
+    const viewed = data.mostViewed || [];
+    viewedEl.innerHTML = viewed.length
+      ? viewed
+          .map((p) => `<tr><td>${esc(p.name)}</td><td>${p.views30}</td><td>${p.views}</td></tr>`)
+          .join("")
+      : '<tr><td colspan="3" class="empty-state">No views logged yet.</td></tr>';
+  } catch (err) {
+    console.error("Demand load error:", err);
   }
 }
 

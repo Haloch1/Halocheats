@@ -701,6 +701,20 @@ async function requestRestockNotify(button) {
   }
 }
 
+const viewedProductSlugs = new Set();
+function logProductView(slug) {
+  if (!slug || viewedProductSlugs.has(slug)) return;
+  viewedProductSlugs.add(slug);
+  try {
+    fetch("/api/product-view", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {}
+}
+
 function openVariantModal(product) {
   if (!product) {
     renderMessage(notice, "That product could not be loaded. Refresh and try again.", "error");
@@ -708,6 +722,7 @@ function openVariantModal(product) {
   }
 
   activeProduct = product;
+  logProductView(product.slug);
   activeVariant =
     product.variants?.find((variant) => variant.checkoutReady || variant.checkoutBlocked) ||
     product.variants?.[0] ||

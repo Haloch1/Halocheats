@@ -5897,6 +5897,23 @@ app.get("/api/recent-purchases", async (_req, res) => {
   }
 });
 
+/* Log a product view (fired when a product is opened on the storefront). */
+app.post("/api/product-view", async (req, res) => {
+  try {
+    const slug = trimField(req.body?.slug, 80);
+    if (!slug || !products.some((p) => p.slug === slug)) return res.json({ ok: false });
+    if (supabaseAdmin) {
+      supabaseAdmin
+        .from("product_views")
+        .insert({ product_slug: slug })
+        .then(({ error }) => { if (error) console.error("[product-view]", error.message); });
+    }
+    return res.json({ ok: true });
+  } catch {
+    return res.json({ ok: false });
+  }
+});
+
 /* Request a restock notification (member must be signed in) */
 app.post("/api/notify-restock", async (req, res) => {
   let member;
@@ -7813,6 +7830,59 @@ app.get("/api/admin/revenue", async (req, res) => {
   } catch (error) {
     console.error("[Admin] Revenue error:", error);
     res.status(500).json({ error: "Unable to load revenue." });
+  }
+});
+
+/* Product demand — most bought (from orders) and most viewed (from product_views). */
+app.get("/api/admin/product-stats", async (req, res) => {
+  try {
+    await ensureRoleAccess(req, res, "admin");
+  } catch (e) {
+    return res.status(e.status || 401).json({ error: e.message });
+  }
+
+  try {
+    const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    /* Most bought — grouped by product (fulfilled + paid orders). */
+    const { data: orders } = await supabaseAdmin
+      .from("orders")
+      .select("product_slug, status, amount_cents, created_at")
+      .in("status", ["fulfilled", "paid"]);
+    const boughtByName = {};
+    for (const o of orders || []) {
+      const item = getCatalogItemByInventorySlug(o.product_slug);
+      const name = item?.name || o.product_slug;
+      if (!boughtByName[name]) boughtByName[name] = { name, orders: 0, orders30: 0, revenueCents: 0 };
+      boughtByName[name].orders += 1;
+      if (new Date(o.created_at) >= since30) boughtByName[name].orders30 += 1;
+      const cents = (Number.isFinite(o.amount_cents) && o.amount_cents > 0) ? o.amount_cents : (item?.variant?.amount || 0);
+      boughtByName[name].revenueCents += cents;
+    }
+    const mostBought = Object.values(boughtByName)
+      .sort((a, b) => b.orders - a.orders)
+      .map((d) => ({ name: d.name, orders: d.orders, orders30: d.orders30, revenue: `$${(d.revenueCents / 100).toFixed(2)}` }));
+
+    /* Most viewed — grouped by product slug (from the product_views log). */
+    const { data: views } = await supabaseAdmin
+      .from("product_views")
+      .select("product_slug, viewed_at");
+    const viewsBySlug = {};
+    for (const v of views || []) {
+      const item = products.find((p) => p.slug === v.product_slug);
+      const name = item?.name || v.product_slug;
+      if (!viewsBySlug[v.product_slug]) viewsBySlug[v.product_slug] = { name, views: 0, views30: 0 };
+      viewsBySlug[v.product_slug].views += 1;
+      if (new Date(v.viewed_at) >= since30) viewsBySlug[v.product_slug].views30 += 1;
+    }
+    const mostViewed = Object.values(viewsBySlug)
+      .sort((a, b) => b.views - a.views)
+      .map((d) => ({ name: d.name, views: d.views, views30: d.views30 }));
+
+    res.json({ mostBought, mostViewed });
+  } catch (error) {
+    console.error("[Admin] Product stats error:", error);
+    res.status(500).json({ error: "Unable to load product stats." });
   }
 });
 
