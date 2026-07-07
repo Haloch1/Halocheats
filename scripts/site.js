@@ -19,13 +19,51 @@ export function initReveal() {
       });
     },
     {
-      threshold: 0.16,
-      rootMargin: "0px 0px -10% 0px",
+      threshold: 0.12,
+      rootMargin: "0px 0px -6% 0px",
     }
   );
 
   revealItems.forEach((item) => observer.observe(item));
 }
+
+/* ── Highlight the current page in the nav ── */
+function initCurrentNav() {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+
+  document.querySelectorAll(".nav a").forEach((link) => {
+    if (link.origin !== window.location.origin) {
+      return;
+    }
+
+    const linkPath = link.pathname.replace(/\/+$/, "") || "/";
+
+    if (linkPath === path) {
+      link.classList.add("is-current");
+      link.setAttribute("aria-current", "page");
+    }
+  });
+}
+
+initCurrentNav();
+
+/* ── Compact topbar once the page scrolls ── */
+function initTopbarScroll() {
+  const topbar = document.querySelector(".topbar");
+
+  if (!topbar) {
+    return;
+  }
+
+  const update = () => {
+    topbar.classList.toggle("is-scrolled", window.scrollY > 24);
+  };
+
+  update();
+  window.addEventListener("scroll", update, { passive: true });
+}
+
+initTopbarScroll();
 
 export function renderMessage(target, message, tone = "info") {
   if (!target) {
