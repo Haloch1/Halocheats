@@ -1931,6 +1931,11 @@ a {
   opacity: 0.95;
 }
 
+.product-card.is-tilting:hover::after,
+.catalog-category-card.is-tilting:hover::after {
+  opacity: 0.95;
+}
+
 .product-card:hover::after,
 .catalog-category-card:hover::after {
   opacity: 0.68;

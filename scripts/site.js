@@ -111,34 +111,9 @@ function initCardTilt() {
   }
 
   const selector = ".product-card, .catalog-category-card";
-  const maxTilt = 13;
-  const maxShift = 7;
+  const maxTilt = 14;
+  const maxShift = 8;
   let activeCard = null;
-  let lastEvent = null;
-  let frame = 0;
-  let resetFrame = 0;
-  const current = { tiltX: 0, tiltY: 0, shiftX: 0, shiftY: 0, glareX: 50, glareY: 50 };
-  const target = { tiltX: 0, tiltY: 0, shiftX: 0, shiftY: 0, glareX: 50, glareY: 50 };
-
-  const setCardVars = (card, values) => {
-    card.style.setProperty("--tilt-x", `${values.tiltX.toFixed(2)}deg`);
-    card.style.setProperty("--tilt-y", `${values.tiltY.toFixed(2)}deg`);
-    card.style.setProperty("--content-shift-x", `${values.shiftX.toFixed(2)}px`);
-    card.style.setProperty("--content-shift-y", `${values.shiftY.toFixed(2)}px`);
-    card.style.setProperty("--glare-x", `${values.glareX.toFixed(1)}%`);
-    card.style.setProperty("--glare-y", `${values.glareY.toFixed(1)}%`);
-  };
-
-  const isSettled = () => {
-    return (
-      Math.abs(target.tiltX - current.tiltX) < 0.02 &&
-      Math.abs(target.tiltY - current.tiltY) < 0.02 &&
-      Math.abs(target.shiftX - current.shiftX) < 0.02 &&
-      Math.abs(target.shiftY - current.shiftY) < 0.02 &&
-      Math.abs(target.glareX - current.glareX) < 0.15 &&
-      Math.abs(target.glareY - current.glareY) < 0.15
-    );
-  };
 
   const clearCardVars = (card) => {
     card.style.removeProperty("--tilt-x");
@@ -150,128 +125,73 @@ function initCardTilt() {
   };
 
   const resetCard = (card) => {
-    card.classList.remove("is-tilting");
-    target.tiltX = 0;
-    target.tiltY = 0;
-    target.shiftX = 0;
-    target.shiftY = 0;
-    target.glareX = 50;
-    target.glareY = 50;
-
-    if (resetFrame) {
-      cancelAnimationFrame(resetFrame);
-    }
-
-    resetFrame = window.requestAnimationFrame(() => {
-      clearCardVars(card);
-      resetFrame = 0;
-    });
-  };
-
-  const applyTilt = () => {
-    frame = 0;
-
-    if (!activeCard || !lastEvent) {
+    if (!card) {
       return;
     }
 
-    const rect = activeCard.getBoundingClientRect();
+    card.classList.remove("is-tilting");
+    clearCardVars(card);
+  };
+
+  const updateCard = (card, event) => {
+    const rect = card.getBoundingClientRect();
 
     if (!rect.width || !rect.height) {
       return;
     }
 
-    const x = Math.min(Math.max((lastEvent.clientX - rect.left) / rect.width, 0), 1);
-    const y = Math.min(Math.max((lastEvent.clientY - rect.top) / rect.height, 0), 1);
+    const x = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1);
+    const y = Math.min(Math.max((event.clientY - rect.top) / rect.height, 0), 1);
+    const tiltX = (0.5 - y) * maxTilt;
+    const tiltY = (x - 0.5) * maxTilt;
+    const shiftX = (0.5 - x) * maxShift;
+    const shiftY = (0.5 - y) * maxShift;
 
-    target.tiltX = (0.5 - y) * maxTilt;
-    target.tiltY = (x - 0.5) * maxTilt;
-    target.shiftX = (0.5 - x) * maxShift;
-    target.shiftY = (0.5 - y) * maxShift;
-    target.glareX = x * 100;
-    target.glareY = y * 100;
-
-    current.tiltX += (target.tiltX - current.tiltX) * 0.28;
-    current.tiltY += (target.tiltY - current.tiltY) * 0.28;
-    current.shiftX += (target.shiftX - current.shiftX) * 0.3;
-    current.shiftY += (target.shiftY - current.shiftY) * 0.3;
-    current.glareX = target.glareX;
-    current.glareY = target.glareY;
-
-    setCardVars(activeCard, current);
-
-    if (activeCard && !isSettled()) {
-      frame = requestAnimationFrame(applyTilt);
-    }
-  };
-
-  const activateCard = (card, event) => {
-    if (!card || card === activeCard) {
-      return;
-    }
-
-    if (activeCard) {
-      resetCard(activeCard);
-    }
-
-    activeCard = card;
-    current.tiltX = 0;
-    current.tiltY = 0;
-    current.shiftX = 0;
-    current.shiftY = 0;
-    current.glareX = 50;
-    current.glareY = 50;
-    lastEvent = event;
+    card.style.setProperty("--tilt-x", `${tiltX.toFixed(2)}deg`);
+    card.style.setProperty("--tilt-y", `${tiltY.toFixed(2)}deg`);
+    card.style.setProperty("--content-shift-x", `${shiftX.toFixed(2)}px`);
+    card.style.setProperty("--content-shift-y", `${shiftY.toFixed(2)}px`);
+    card.style.setProperty("--glare-x", `${(x * 100).toFixed(1)}%`);
+    card.style.setProperty("--glare-y", `${(y * 100).toFixed(1)}%`);
     card.classList.add("is-tilting");
-
-    if (!frame) {
-      frame = requestAnimationFrame(applyTilt);
-    }
   };
 
-  document.addEventListener("pointerover", (event) => {
-    if (event.pointerType === "touch") {
-      return;
-    }
-
-    activateCard(event.target.closest?.(selector), event);
-  });
-
-  document.addEventListener("pointerout", (event) => {
-    if (!activeCard || activeCard.contains(event.relatedTarget)) {
-      return;
-    }
-
-    if (!activeCard.contains(event.target)) {
-      return;
-    }
-
-    resetCard(activeCard);
-    activeCard = null;
-    lastEvent = null;
-  });
-
-  document.addEventListener("pointermove", (event) => {
+  const handleCardMove = (event) => {
     if (event.pointerType === "touch") {
       return;
     }
 
     const card = event.target.closest?.(selector);
 
-    if (card && card !== activeCard) {
-      activateCard(card, event);
-    }
-
-    if (!activeCard) {
+    if (!card) {
+      if (activeCard) {
+        resetCard(activeCard);
+        activeCard = null;
+      }
       return;
     }
 
-    lastEvent = event;
-
-    if (!frame) {
-      frame = requestAnimationFrame(applyTilt);
+    if (activeCard && activeCard !== card) {
+      resetCard(activeCard);
     }
-  });
+
+    activeCard = card;
+    updateCard(card, event);
+  };
+
+  const handleCardOut = (event) => {
+    if (!activeCard || activeCard.contains(event.relatedTarget)) {
+      return;
+    }
+
+    resetCard(activeCard);
+    activeCard = null;
+  };
+
+  document.addEventListener("mousemove", handleCardMove, true);
+  document.addEventListener("pointermove", handleCardMove, true);
+  document.addEventListener("mouseout", handleCardOut, true);
+  document.addEventListener("pointerout", handleCardOut, true);
 }
 
 initCardTilt();
