@@ -1864,38 +1864,39 @@ a {
 }
 
 .product-card:hover:not(.is-tilting) {
-  transform: translate3d(0, -16px, 0) scale(1.025);
+  transform: translate3d(0, -7px, 0) scale(1.012);
   border-color: rgba(255, 105, 105, 0.42);
   box-shadow:
-    0 42px 100px rgba(255, 20, 20, 0.2),
-    0 18px 45px rgba(0, 0, 0, 0.42);
+    0 28px 72px rgba(255, 20, 20, 0.16),
+    0 14px 34px rgba(0, 0, 0, 0.38);
 }
 
 .catalog-category-card:hover:not(.is-tilting) {
-  transform: translate3d(0, -16px, 0) scale(1.025);
+  transform: translate3d(0, -7px, 0) scale(1.012);
   border-color: rgba(255, 105, 105, 0.42);
   box-shadow:
-    0 42px 100px rgba(255, 20, 20, 0.2),
-    0 18px 45px rgba(0, 0, 0, 0.42);
+    0 28px 72px rgba(255, 20, 20, 0.16),
+    0 14px 34px rgba(0, 0, 0, 0.38);
 }
 
 .product-card.is-tilting,
 .catalog-category-card.is-tilting {
+  transform-origin: center center;
   transform:
     perspective(900px)
-    translate3d(0, -14px, 34px)
+    translate3d(0, -6px, 18px)
     rotateX(var(--tilt-x, 0deg))
     rotateY(var(--tilt-y, 0deg));
   transition: border-color 260ms ease, box-shadow 260ms ease;
   will-change: transform;
   border-color: rgba(255, 105, 105, 0.42);
   box-shadow:
-    0 46px 110px rgba(255, 20, 20, 0.2),
-    0 20px 45px rgba(0, 0, 0, 0.42);
+    0 30px 78px rgba(255, 20, 20, 0.16),
+    0 16px 36px rgba(0, 0, 0, 0.38);
 }
 
 .product-card.is-tilting > * {
-  transform: translate3d(var(--content-shift-x, 0px), var(--content-shift-y, 0px), 28px);
+  transform: translate3d(var(--content-shift-x, 0px), var(--content-shift-y, 0px), 18px);
 }
 
 .catalog-category-card {
@@ -1904,7 +1905,7 @@ a {
 
 .catalog-category-card.is-tilting .category-card-body,
 .catalog-category-card.is-tilting .category-card-art strong {
-  transform: translate3d(var(--content-shift-x, 0px), var(--content-shift-y, 0px), 30px);
+  transform: translate3d(var(--content-shift-x, 0px), var(--content-shift-y, 0px), 18px);
 }
 
 .product-card::after,

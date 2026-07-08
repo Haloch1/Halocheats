@@ -107,8 +107,10 @@ function initCardTilt() {
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const selector = ".product-card, .catalog-category-card";
-  const maxTilt = 14;
-  const maxShift = 8;
+  const tiltScale = reducedMotion ? 0.65 : 1;
+  const shiftScale = reducedMotion ? 0 : 1;
+  const maxTilt = 18;
+  const maxShift = 5;
   let activeCard = null;
 
   const clearCardVars = (card) => {
@@ -138,10 +140,10 @@ function initCardTilt() {
 
     const x = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1);
     const y = Math.min(Math.max((event.clientY - rect.top) / rect.height, 0), 1);
-    const tiltX = reducedMotion ? 0 : (0.5 - y) * maxTilt;
-    const tiltY = reducedMotion ? 0 : (x - 0.5) * maxTilt;
-    const shiftX = reducedMotion ? 0 : (0.5 - x) * maxShift;
-    const shiftY = reducedMotion ? 0 : (0.5 - y) * maxShift;
+    const tiltX = (0.5 - y) * maxTilt * tiltScale;
+    const tiltY = (x - 0.5) * maxTilt * tiltScale;
+    const shiftX = (0.5 - x) * maxShift * shiftScale;
+    const shiftY = (0.5 - y) * maxShift * shiftScale;
 
     card.style.setProperty("--tilt-x", `${tiltX.toFixed(2)}deg`);
     card.style.setProperty("--tilt-y", `${tiltY.toFixed(2)}deg`);
