@@ -334,6 +334,7 @@ function renderProductCard(product, index) {
     product.featured ? " featured" : ""
   }`;
   item.dataset.delay = String(30 + (index % 4) * 35);
+  const hasReadyVariant = (product.variants || []).some((variant) => variant.checkoutReady);
   item.innerHTML = `
     <div class="product-top">
       <span class="product-status ${product.sale ? "sale" : product.featured ? "pulse" : statusClass}">${product.sale ? `${product.sale}% OFF` : escapeHtml(product.badge)}</span>
@@ -351,6 +352,7 @@ function renderProductCard(product, index) {
         View
       </button>
     </div>
+    ${hasReadyVariant ? `<button class="button button-secondary add-cart-button" data-add-cart-slug="${escapeHtml(product.slug)}"><span class="add-cart-ico" aria-hidden="true"></span>Add to Cart</button>` : ""}
   `;
 
   return item;
@@ -1187,6 +1189,13 @@ grid?.addEventListener("click", async (event) => {
     return;
   }
 
+  const addCartBtn = event.target.closest(".add-cart-button");
+  if (addCartBtn) {
+    const cartProduct = catalogProducts.find((item) => item.slug === addCartBtn.dataset.addCartSlug);
+    addProductDefaultToCart(cartProduct, addCartBtn);
+    return;
+  }
+
   const button = event.target.closest(".pay-button");
 
   if (!button) {
@@ -1196,6 +1205,46 @@ grid?.addEventListener("click", async (event) => {
   const product = catalogProducts.find((item) => item.slug === button.dataset.productSlug);
   openVariantModal(product);
 });
+
+/* Add a product's default (first purchasable) variant straight to the cart. */
+function addProductDefaultToCart(product, button) {
+  if (!product) {
+    return;
+  }
+
+  const variant =
+    (product.variants || []).find((v) => v.checkoutReady) ||
+    (product.variants || [])[0] ||
+    null;
+
+  if (!variant || !variant.checkoutReady) {
+    renderMessage(notice, "This product is out of stock right now.", "warn");
+    return;
+  }
+
+  if (!window.haloCart?.add) {
+    renderMessage(notice, "Cart is unavailable right now.", "error");
+    return;
+  }
+
+  const dollars = parseMoney(variant.priceDisplay);
+  window.haloCart.add({
+    productSlug: product.slug,
+    variantSlug: variant.slug,
+    productName: product.name,
+    variantName: variant.name,
+    priceCents: dollars ? Math.round(dollars * 100) : 0,
+    qty: 1,
+  });
+
+  const original = button.innerHTML;
+  button.innerHTML = "Added to cart";
+  button.disabled = true;
+  window.setTimeout(() => {
+    button.innerHTML = original;
+    button.disabled = false;
+  }, 1300);
+}
 
 productSearch?.addEventListener("input", (event) => {
   searchQuery = event.target.value.trim().toLowerCase();
