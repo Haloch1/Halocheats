@@ -399,13 +399,14 @@ function ensureVariantModal() {
         <label class="variant-terms">
           <input type="checkbox" data-terms-check />
           <span>
-            I understand all sales are final. I have read and agree to the
+            This is a weekly subscription: your card is billed automatically every
+            7 days until you cancel from your account page. I have read and agree to the
             <a href="/terms/" target="_blank" rel="noreferrer">Terms of Service</a>.
           </span>
         </label>
         <div class="variant-actions">
           <button class="button button-secondary" type="button" data-variant-close>Cancel</button>
-          <button class="button button-primary" type="button" data-variant-checkout>Pay with Card</button>
+          <button class="button button-primary" type="button" data-variant-checkout>Subscribe Weekly</button>
           <button class="button button-crypto" type="button" data-variant-crypto>Pay with Crypto</button>
           <button class="button button-primary" type="button" data-variant-notify hidden>Notify me when back in stock</button>
         </div>
@@ -647,7 +648,7 @@ function updateCheckoutButtonState() {
 
   checkoutButton.hidden = outOfStock;
   checkoutButton.disabled = !canAttempt || !termsAccepted();
-  checkoutButton.textContent = canAttempt ? "Pay with Card" : "Unavailable";
+  checkoutButton.textContent = canAttempt ? "Subscribe Weekly" : "Unavailable";
   if (cryptoButton) {
     cryptoButton.hidden = outOfStock;
     cryptoButton.disabled = !canAttempt || !termsAccepted();
@@ -942,7 +943,7 @@ async function checkoutSelectedVariant(button) {
   } catch (error) {
     renderMessage(notice, error.message, "error");
     button.disabled = false;
-    button.textContent = "Pay with Card";
+    button.textContent = "Subscribe Weekly";
   }
 }
 
