@@ -2193,17 +2193,14 @@ a {
     order: 2;
   }
 
+  /* Hide the decorative HC hero card on phones. */
   .hero-visual {
-    order: 1;
+    display: none;
   }
 
   .hero h1 {
     max-width: none;
     font-size: clamp(2.35rem, 14vw, 3.55rem);
-  }
-
-  .hero-visual {
-    min-height: 340px;
   }
 
   .stats-grid,
