@@ -1965,6 +1965,36 @@ a {
   opacity: 0.68;
 }
 
+@media (hover: none), (pointer: coarse) {
+  .product-grid,
+  .catalog-category-grid {
+    perspective: none;
+  }
+
+  .product-card:hover:not(.is-tilting),
+  .catalog-category-card:hover:not(.is-tilting),
+  .product-card.is-tilting,
+  .catalog-category-card.is-tilting {
+    transform: none;
+    box-shadow: var(--shadow);
+  }
+
+  .product-card.is-tilting > *,
+  .catalog-category-card.is-tilting .category-card-body,
+  .catalog-category-card.is-tilting .category-card-art strong {
+    transform: none;
+  }
+
+  .product-card::after,
+  .catalog-category-card::after,
+  .product-card:hover::after,
+  .catalog-category-card:hover::after,
+  .product-card.is-tilting::after,
+  .catalog-category-card.is-tilting::after {
+    opacity: 0;
+  }
+}
+
 @keyframes orbit-spin {
   from {
     transform: rotate(0deg);

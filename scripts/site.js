@@ -135,7 +135,12 @@ initScrollProgress();
 
 /* ── Interactive tilt for product & category cards ── */
 function initCardTilt() {
+  const supportsCursorHover = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  if (!supportsCursorHover) {
+    return;
+  }
 
   const selector = ".product-card, .catalog-category-card";
   const tiltScale = reducedMotion ? 0.65 : 1;
