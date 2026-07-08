@@ -1,6 +1,5 @@
 export function initReveal() {
   const revealItems = [...document.querySelectorAll(".reveal:not(.is-visible)")];
-  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   if (!revealItems.length) {
     return;
@@ -20,22 +19,15 @@ export function initReveal() {
     window.setTimeout(() => {
       item.classList.add("reveal-complete");
       item.style.removeProperty("--reveal-delay");
-    }, (Number(delay) || 0) + 1050);
+    }, (Number(delay) || 0) + 1350);
   };
-
-  if (reducedMotion) {
-    revealItems.forEach((item) => {
-      item.classList.add("is-visible", "reveal-complete");
-    });
-    return;
-  }
 
   const remainingItems = new Set(revealItems);
   let scrollFrame = 0;
 
   const revealVisibleItems = () => {
     scrollFrame = 0;
-    const triggerY = window.innerHeight * 0.85;
+    const triggerY = window.innerHeight * 0.78;
 
     remainingItems.forEach((item) => {
       const rect = item.getBoundingClientRect();
@@ -71,8 +63,8 @@ export function initReveal() {
       });
     },
     {
-      threshold: 0.15,
-      rootMargin: "0px 0px -12% 0px",
+      threshold: 0.18,
+      rootMargin: "0px 0px -18% 0px",
     }
   );
 
