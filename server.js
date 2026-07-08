@@ -56,6 +56,9 @@ const discordSignupWebhookUrl = process.env.DISCORD_SIGNUP_WEBHOOK_URL || "";
 const discordSecurityWebhookUrl =
   process.env.DISCORD_SECURITY_WEBHOOK_URL || discordSignupWebhookUrl;
 const discordOrderWebhookUrl = process.env.DISCORD_ORDER_WEBHOOK_URL || "";
+/* Webhook for the "alerts" channel — new-visitor pings. Create a webhook in your
+   alerts channel and set DISCORD_ALERTS_WEBHOOK_URL on Render. */
+const discordAlertsWebhookUrl = process.env.DISCORD_ALERTS_WEBHOOK_URL || "";
 const adminAccessKey = process.env.ADMIN_ACCESS_KEY || "";
 const ownerRequestsKey = process.env.OWNER_REQUESTS_KEY || "";
 const groqApiKey = process.env.GROQ_API_KEY || "";
@@ -360,6 +363,9 @@ const visitorPageViewCooldownMs = 1000 * 60 * 10;
 const visitorViewLogLimit = 120;
 const visitorSessions = new Map();
 const recentVisitorViews = [];
+/* Throttle new-visitor Discord alerts: at most one per visitor per 30 min. */
+const visitorAlertedAt = new Map();
+const visitorAlertCooldownMs = 1000 * 60 * 30;
 
 function isConfiguredValue(value) {
   return Boolean(value && !/(replace_me|your_supabase|your-project|your_)/i.test(value));
@@ -6352,6 +6358,37 @@ app.post("/api/visitors/heartbeat", async (req, res) => {
       ipAddress: getClientIp(req),
       now,
     });
+  }
+
+  /* New visitor → ping the alerts channel (throttled per visitor). */
+  if (!existing && isConfiguredValue(discordAlertsWebhookUrl)) {
+    const lastAlerted = visitorAlertedAt.get(visitorId) || 0;
+    if (now - lastAlerted > visitorAlertCooldownMs) {
+      visitorAlertedAt.set(visitorId, now);
+      /* Opportunistic cleanup so the throttle map stays small. */
+      if (visitorAlertedAt.size > 500) {
+        for (const [id, ts] of visitorAlertedAt.entries()) {
+          if (now - ts > visitorAlertCooldownMs) visitorAlertedAt.delete(id);
+        }
+      }
+      let referrer = "";
+      try {
+        referrer = new URL(req.body?.referrer).hostname;
+      } catch {}
+      sendDiscordWebhook(discordAlertsWebhookUrl, {
+        embeds: [{
+          title: "New site visitor",
+          color: 0xff2a2a,
+          fields: [
+            { name: "Landed on", value: (pagePath || "/").slice(0, 200), inline: true },
+            { name: "Came from", value: referrer || "Direct / unknown", inline: true },
+            { name: "Member", value: userLabel || "Guest", inline: true },
+          ],
+          timestamp: new Date().toISOString(),
+          footer: { text: "halocheats.cc" },
+        }],
+      }).catch((err) => console.error("[Visitor alert]", err.message));
+    }
   }
 
   visitorSessions.set(visitorId, {
