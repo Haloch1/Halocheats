@@ -17,6 +17,7 @@ const guestView = document.querySelector("[data-guest-view]");
 const memberView = document.querySelector("[data-member-view]");
 const sessionUsername = document.querySelector("[data-session-username]");
 const sessionEmail = document.querySelector("[data-session-email]");
+const sessionRole = document.querySelector("[data-session-role]");
 const signUpForm = document.querySelector("[data-signup-form]");
 const signInForm = document.querySelector("[data-signin-form]");
 const resetRequestForm = document.querySelector("[data-reset-request-form]");
@@ -24,6 +25,11 @@ const passwordUpdateForm = document.querySelector("[data-password-update-form]")
 const signOutButton = document.querySelector("[data-signout]");
 const ordersList = document.querySelector("[data-orders-list]");
 const keysList = document.querySelector("[data-keys-list]");
+const adminPerksPanel = document.querySelector("[data-admin-perks]");
+const adminPerksTitle = document.querySelector("[data-admin-perks-title]");
+const adminPerksCopy = document.querySelector("[data-admin-perks-copy]");
+const adminPerksBadges = document.querySelector("[data-admin-perks-badges]");
+const adminPerksActions = document.querySelector("[data-admin-perks-actions]");
 const authSwitchButtons = document.querySelectorAll("[data-auth-tab]");
 const authPanes = document.querySelectorAll("[data-auth-pane]");
 const passwordToggleButtons = document.querySelectorAll("[data-password-toggle]");
@@ -33,6 +39,90 @@ const passwordToggleButtons = document.querySelectorAll("[data-password-toggle]"
 const rawNextPath = new URLSearchParams(window.location.search).get("next");
 const nextPath = rawNextPath && /^\/(?!\/)/.test(rawNextPath) ? rawNextPath : null;
 let isPasswordRecovery = false;
+
+function fetchRoleLabel(role) {
+  if (role === "admin") {
+    return "Admin access";
+  }
+
+  if (role === "staff") {
+    return "Staff access";
+  }
+
+  return "";
+}
+
+function renderAdminPerks(role) {
+  if (!adminPerksPanel || !adminPerksTitle || !adminPerksCopy || !adminPerksBadges || !adminPerksActions) {
+    return;
+  }
+
+  if (role !== "admin" && role !== "staff") {
+    adminPerksPanel.hidden = true;
+    adminPerksBadges.innerHTML = "";
+    adminPerksActions.innerHTML = "";
+    return;
+  }
+
+  const configs = {
+    admin: {
+      title: "Admin tools unlocked",
+      copy:
+        "This account can manage live desk traffic, open the full store panel, and review staff flow without leaving the member dashboard.",
+      badges: ["Full admin panel", "Desk moderation", "Analytics access", "Staff approvals"],
+      actions: [
+        { href: "/admin/", label: "Open Admin Panel", tone: "button-primary" },
+        { href: "/desk-admin/", label: "Open Desk Admin", tone: "button-secondary" },
+        { href: "/analytics/", label: "View Analytics", tone: "button-secondary" },
+        { href: "/requests/", label: "Staff Requests", tone: "button-secondary" },
+      ],
+    },
+    staff: {
+      title: "Staff tools unlocked",
+      copy:
+        "This account can work the member queue, reply from the hidden desk inbox, and keep active tickets moving faster.",
+      badges: ["Desk inbox", "Reply access", "Ticket workflow", "Member queue"],
+      actions: [
+        { href: "/desk-admin/", label: "Open Desk Admin", tone: "button-primary" },
+        { href: "/desk/", label: "Member Inbox", tone: "button-secondary" },
+        { href: "/products/", label: "Check Products", tone: "button-secondary" },
+      ],
+    },
+  };
+
+  const config = configs[role];
+  adminPerksTitle.textContent = config.title;
+  adminPerksCopy.textContent = config.copy;
+  adminPerksBadges.innerHTML = config.badges
+    .map((badge) => `<span class="admin-perk-badge">${escapeHtml(badge)}</span>`)
+    .join("");
+  adminPerksActions.innerHTML = config.actions
+    .map(
+      (action) =>
+        `<a class="button ${action.tone}" href="${escapeHtml(action.href)}">${escapeHtml(action.label)}</a>`
+    )
+    .join("");
+  adminPerksPanel.hidden = false;
+}
+
+async function fetchAccountRole(session) {
+  if (!session?.access_token) {
+    return null;
+  }
+
+  try {
+    const response = await fetch("/api/auth/role", {
+      credentials: "same-origin",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+    const payload = await response.json();
+    return payload.role || null;
+  } catch {
+    return null;
+  }
+}
 
 function showStatusMessage(message, tone = "info") {
   [statusBox, cardStatusBox].forEach((target) => {
@@ -228,9 +318,29 @@ function setView(session) {
     sessionUsername.textContent = `Username: ${username}`;
   }
 
+  if (sessionRole) {
+    sessionRole.hidden = true;
+    sessionRole.textContent = "";
+    sessionRole.classList.remove("is-admin", "is-staff");
+  }
+
+  renderAdminPerks(null);
+
   if (!session) {
     clearMemberData();
   }
+}
+
+function setRoleView(role) {
+  if (sessionRole) {
+    const label = fetchRoleLabel(role);
+    sessionRole.hidden = !label;
+    sessionRole.textContent = label;
+    sessionRole.classList.toggle("is-admin", role === "admin");
+    sessionRole.classList.toggle("is-staff", role === "staff");
+  }
+
+  renderAdminPerks(role);
 }
 
 async function loadAccountData(session) {
@@ -264,6 +374,9 @@ async function refreshSession() {
     return;
   }
 
+  const role = await fetchAccountRole(session);
+  setRoleView(role);
+
   try {
     await loadAccountData(session);
   } catch (error) {
@@ -283,6 +396,8 @@ async function finishAuth(message, session = null) {
 
   if (session) {
     setView(session);
+    const role = await fetchAccountRole(session);
+    setRoleView(role);
     showStatusMessage(message, "success");
 
     try {

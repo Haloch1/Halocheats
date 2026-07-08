@@ -219,6 +219,7 @@
           <div class="auth-card auth-card-dashboard reveal" data-delay="120" data-member-view hidden>
             <p class="eyebrow">Signed in</p>
             <h3>Member session active</h3>
+            <p class="dashboard-role" data-session-role hidden></p>
             <p class="dashboard-username" data-session-username></p>
             <p class="dashboard-email" data-session-email></p>
             <p>
@@ -247,6 +248,18 @@
               <a class="button button-secondary" href="/desk/">Desk Inbox</a>
               <button class="button button-secondary" type="button" data-signout>Sign Out</button>
             </div>
+
+            <section class="member-panel admin-perks-panel" data-admin-perks hidden>
+              <div class="member-panel-heading">
+                <p class="eyebrow">Admin perks</p>
+                <h4 data-admin-perks-title>Privileged tools unlocked</h4>
+              </div>
+              <p class="admin-perks-copy" data-admin-perks-copy>
+                Staff tools are available on this account.
+              </p>
+              <div class="admin-perks-badges" data-admin-perks-badges></div>
+              <div class="dashboard-actions admin-perks-actions" data-admin-perks-actions></div>
+            </section>
 
             <section class="balance-panel" data-topup-panel>
               <div class="balance-panel-head">

@@ -440,6 +440,32 @@ async function haloFetchBalance() {
   }
 }
 
+async function haloFetchRole() {
+  try {
+    const session = await getCurrentSession();
+
+    if (!session?.access_token) {
+      return null;
+    }
+
+    const response = await fetch("/api/auth/role", {
+      credentials: "same-origin",
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = await response.json();
+    return payload.role || null;
+  } catch {
+    return null;
+  }
+}
+
 function initWallet() {
   const shell = document.querySelector(".topbar-shell");
   if (!shell || shell.querySelector(".topbar-wallet")) {
@@ -474,6 +500,26 @@ function initWallet() {
 
   wrap.appendChild(balancePill);
   wrap.appendChild(cartBtn);
+
+  haloFetchRole().then((role) => {
+    if (role !== "admin" && role !== "staff") {
+      return;
+    }
+
+    if (wrap.querySelector(".staff-pill")) {
+      return;
+    }
+
+    const staffLink = document.createElement("a");
+    staffLink.className = `staff-pill ${role === "admin" ? "is-admin" : "is-staff"}`;
+    staffLink.href = role === "admin" ? "/admin/" : "/desk-admin/";
+    staffLink.textContent = role === "admin" ? "Admin" : "Staff";
+    staffLink.setAttribute(
+      "aria-label",
+      role === "admin" ? "Open admin panel" : "Open staff desk"
+    );
+    wrap.prepend(staffLink);
+  });
 
   /* Move the account button into the wallet group so balance + cart + account
      sit together, tightly spaced, on the right side of the topbar. */
