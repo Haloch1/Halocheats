@@ -9837,14 +9837,44 @@ async function generateAILiveDeskReply(thread, userMessage, userContext) {
     }
   }
 
+  /* Conversation memory: pull the recent messages in this thread so the AI can
+     see what has already been said and won't repeat itself. */
+  let historyTurns = [];
+  if (supabaseAdmin && thread?.id) {
+    try {
+      const { data: msgs } = await supabaseAdmin
+        .from("support_messages")
+        .select("sender_type, body, created_at")
+        .eq("thread_id", thread.id)
+        .order("created_at", { ascending: true })
+        .limit(16);
+      historyTurns = (msgs || [])
+        .filter((m) => m.body)
+        .map((m) => ({
+          role: m.sender_type === "user" ? "user" : "assistant",
+          content: String(m.body).slice(0, 1500),
+        }));
+    } catch (err) {
+      console.error("[AI Live Desk] History lookup error:", err.message);
+    }
+  }
+
   const systemPrompt = `You are the AI support bot for Halo Mods. Keep replies SHORT (1-3 sentences). Be casual and helpful.
+
+CURRENT TICKET SUBJECT: ${thread?.subject || "General support"}
+
+CONVERSATION MEMORY:
+- You can see the full conversation so far in this thread. Use it.
+- Do NOT repeat greetings, links, or information you already gave earlier in this thread. Only add new, relevant info.
+- If the user just says thanks / ok / got it / nvm, reply with a short one-line acknowledgement and nothing else.
+- If you already answered their question and they re-ask, answer differently or ask a clarifying question — don't paste the same reply again.
+- If the conversation is clearly resolved, keep it to a brief closing line.
 
 SITE PAGES (always use full URLs):
 - Browse/buy products: halocheats.cc/products
 - Setup guides (per-product): halocheats.cc/instructions
 - Account (sign in, orders, keys, Discord link): halocheats.cc/account
 - Support inbox: halocheats.cc/desk
-- Product status (online/offline): halocheats.cc/status
 - Terms of service: halocheats.cc/terms
 - Discord: discord.gg/qHnjHFWwBv
 - Homepage: halocheats.cc
@@ -9914,8 +9944,8 @@ TROUBLESHOOTING:
 - "Injector crashed" -> Restart PC, disable antivirus, try again. If still failing, open a ticket
 - "Crypto payment pending" -> Crypto confirmations take 10-30 min. Wait for blockchain confirmation
 - "Didn't receive key" -> Check halocheats.cc/account under "Your Keys". Also check email and Discord DMs
-- "Product detected/offline" -> Check halocheats.cc/status. If status shows offline, wait for an update
-- "Game updated and mod stopped working" -> Game updates sometimes break mods temporarily. Check halocheats.cc/status and Discord for update announcements
+- "Product detected/offline" -> Check our Discord (discord.gg/qHnjHFWwBv). If status shows offline, wait for an update
+- "Game updated and mod stopped working" -> Game updates sometimes break mods temporarily. Check our Discord (discord.gg/qHnjHFWwBv) and Discord for update announcements
 - "Can I use on multiple PCs?" -> Keys are tied to one HWID. Contact support for HWID reset if switching PCs
 - "Can I stream with this?" -> Products marked "Streamproof" are safe for streaming. Others may show on screen capture
 - "NVIDIA only?" -> Invision Chams requires an NVIDIA GPU. Other products work on both AMD and NVIDIA
@@ -9937,12 +9967,12 @@ COMMON QUESTIONS:
 - "Where is my order?" -> halocheats.cc/account, check "Your Orders" section
 - "I need a HWID reset" -> open a ticket at halocheats.cc/desk or wait for Human/Rienzars to handle it
 - "Can I get a refund?" -> all sales are final, no refunds (halocheats.cc/terms)
-- "Is [product] working?" -> check halocheats.cc/status for live detection status
+- "Is [product] working?" -> check our Discord (discord.gg/qHnjHFWwBv) for live detection status
 - "How do I link Discord?" -> go to halocheats.cc/account, scroll to Discord section
 - Password reset -> click "Forgot password?" on the sign-in tab at halocheats.cc/account
 - "What's the best R6 mod?" -> ask what they're after (aim, visuals, safety, budget), then point them to the Summary and Features in the PRODUCT CATALOG and halocheats.cc/products. Don't invent rankings or claims that aren't in the catalog
 - "Do you have [game] mods?" -> if not R6, say it's coming soon and they can check halocheats.cc/products for updates
-- "Is it safe?" -> no mod is 100% safe but external products are lower risk. Check halocheats.cc/status for current detection status
+- "Is it safe?" -> no mod is 100% safe but external products are lower risk. Check our Discord (discord.gg/qHnjHFWwBv) for current detection status
 - "Do you have lifetime keys?" -> some products offer lifetime (like R6 Unlock All). Check the product page for available durations
 - "How long does setup take?" -> usually 5-10 minutes if you follow the guide at halocheats.cc/instructions
 - "Can I use multiple mods at once?" -> generally no, don't run two mods at the same time as they can conflict
@@ -9978,10 +10008,17 @@ SECURITY:
       body: JSON.stringify({
         model: groqModel,
         reasoning_effort: "low",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Support topic: ${thread.subject}\n\nUser message: ${userMessage}` },
-        ],
+        messages: (() => {
+          const convo = [{ role: "system", content: systemPrompt }, ...historyTurns];
+          const last = historyTurns[historyTurns.length - 1];
+          const currentContent = String(userMessage).slice(0, 1500);
+          /* Only append the latest user message if it isn't already the last
+             turn in the fetched history (avoids a duplicated user turn). */
+          if (!last || last.role !== "user" || last.content !== currentContent) {
+            convo.push({ role: "user", content: currentContent });
+          }
+          return convo;
+        })(),
         temperature: 0.4,
         max_tokens: 512,
       }),
@@ -10015,7 +10052,7 @@ SITE PAGES (IMPORTANT: always wrap URLs in < > so Discord makes them clickable):
 - Setup guides: <https://halocheats.cc/instructions>
 - Account/orders/keys: <https://halocheats.cc/account>
 - Support tickets: <https://halocheats.cc/desk>
-- Product status: <https://halocheats.cc/status>
+- Product status: our Discord (discord.gg/qHnjHFWwBv)
 - Terms: <https://halocheats.cc/terms>
 - Discord invite: <https://discord.gg/qHnjHFWwBv>
 
@@ -10056,7 +10093,7 @@ TROUBLESHOOTING:
 - Key not working -> copy full key from <https://halocheats.cc/account>
 - Crypto pending -> wait 10-30 min for blockchain confirmation
 - Didn't get key -> check <https://halocheats.cc/account> under "Your Keys", also check email/Discord DMs
-- Product offline -> check <https://halocheats.cc/status>, game updates sometimes break mods temporarily
+- Product offline -> check our Discord (discord.gg/qHnjHFWwBv), game updates sometimes break mods temporarily
 - Injector crash -> restart PC, disable antivirus, try again. Open ticket in <#1517988579303751843> if still broken
 - Multiple PCs -> keys are tied to one HWID. Need a reset? Open ticket in <#1517988579303751843>
 - Streaming -> products marked "Streamproof" are safe. Others may show on screen capture
@@ -10248,7 +10285,7 @@ SITE PAGES:
 - Setup: halocheats.cc/instructions
 - Account/keys: halocheats.cc/account
 - Support: halocheats.cc/desk
-- Status: halocheats.cc/status
+- Status: our Discord (discord.gg/qHnjHFWwBv)
 - Terms: halocheats.cc/terms
 
 EXISTING FAQ (don't duplicate these):
