@@ -94,6 +94,45 @@ function initCurrentNav() {
 
 initCurrentNav();
 
+/* Page scroll progress rail */
+function initScrollProgress() {
+  const existingBar = document.querySelector(".scroll-progress");
+  const progressBar = existingBar || document.createElement("div");
+  let progressFrame = 0;
+
+  if (!existingBar) {
+    progressBar.className = "scroll-progress";
+    progressBar.setAttribute("aria-hidden", "true");
+    document.body.prepend(progressBar);
+  }
+
+  const updateProgress = () => {
+    progressFrame = 0;
+
+    const doc = document.documentElement;
+    const scrollTop = window.scrollY || doc.scrollTop || 0;
+    const scrollHeight = Math.max(doc.scrollHeight, document.body.scrollHeight);
+    const maxScroll = Math.max(scrollHeight - window.innerHeight, 0);
+    const progress = maxScroll > 0 ? Math.min(Math.max(scrollTop / maxScroll, 0), 1) : 1;
+
+    progressBar.style.setProperty("--scroll-progress", progress.toFixed(4));
+    progressBar.classList.toggle("is-complete", progress >= 0.995);
+  };
+
+  const requestProgressUpdate = () => {
+    if (!progressFrame) {
+      progressFrame = window.requestAnimationFrame(updateProgress);
+    }
+  };
+
+  window.addEventListener("scroll", requestProgressUpdate, { passive: true });
+  window.addEventListener("resize", requestProgressUpdate);
+  window.addEventListener("load", requestProgressUpdate, { once: true });
+  requestProgressUpdate();
+}
+
+initScrollProgress();
+
 /* ── Interactive tilt for product & category cards ── */
 function initCardTilt() {
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
