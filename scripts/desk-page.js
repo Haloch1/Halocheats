@@ -182,11 +182,14 @@ function renderThreads(threads) {
       osc.stop(ctx.currentTime + 0.45);
       osc.onended = () => ctx.close().catch(() => {});
     } catch {}
-    // Fallback: use system notification if available
-    if (Notification.permission === "granted") {
-      new Notification("Halo Cheats Support", { body: "You have a new reply from support.", icon: "/assets/hc-logo.png" });
-    } else if (Notification.permission === "default") {
-      Notification.requestPermission();
+    // Fallback: use system notification if available (not on iOS Safari, where
+    // window.Notification is undefined — guard to avoid a ReferenceError)
+    if (typeof Notification !== "undefined") {
+      if (Notification.permission === "granted") {
+        new Notification("Halo Cheats Support", { body: "You have a new reply from support.", icon: "/assets/hc-logo.png" });
+      } else if (Notification.permission === "default") {
+        Notification.requestPermission();
+      }
     }
   }
   previousUnreadCount = unreadTotal;

@@ -503,7 +503,8 @@ function initWallet() {
           <strong data-cart-total>$0.00</strong>
         </div>
         <p class="cart-message" data-cart-message hidden></p>
-        <button type="button" class="button button-primary cart-checkout" data-cart-checkout>Checkout with Balance</button>
+        <button type="button" class="button button-balance cart-checkout" data-cart-checkout>Checkout with Balance</button>
+        <button type="button" class="button button-primary cart-checkout" data-cart-stripe>Checkout with Card (Stripe)</button>
         <a class="button button-secondary cart-topup" href="/account/">Add Funds</a>
       </div>
     </aside>
@@ -676,6 +677,52 @@ function initWallet() {
       showCartMessage(err instanceof Error ? err.message : "Checkout failed.", "error");
       checkoutBtn.disabled = false;
       checkoutBtn.textContent = original;
+    }
+  });
+
+  const stripeBtn = drawer.querySelector("[data-cart-stripe]");
+  stripeBtn?.addEventListener("click", async () => {
+    const items = haloReadCart();
+    if (!items.length) {
+      return;
+    }
+    const session = await getCurrentSession();
+    if (!session?.access_token) {
+      showCartMessage("Sign in first, then check out.", "warn");
+      window.setTimeout(() => {
+        window.location.href = `/account/?next=${encodeURIComponent(window.location.pathname)}`;
+      }, 800);
+      return;
+    }
+
+    stripeBtn.disabled = true;
+    const original = stripeBtn.textContent;
+    stripeBtn.textContent = "Redirecting...";
+
+    try {
+      const res = await fetch("/api/cart/create-stripe-session", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          items: items.map((it) => ({
+            productSlug: it.productSlug,
+            variantSlug: it.variantSlug,
+            quantity: it.qty,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || "Unable to start checkout.");
+      }
+      window.location.href = data.url;
+    } catch (err) {
+      showCartMessage(err instanceof Error ? err.message : "Checkout failed.", "error");
+      stripeBtn.disabled = false;
+      stripeBtn.textContent = original;
     }
   });
 

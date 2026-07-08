@@ -2107,23 +2107,32 @@ a {
   }
 
   .brand {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
-    gap: 10px;
+    gap: 8px;
   }
 
   .brand img {
-    width: 42px;
-    height: 42px;
-    border-radius: 13px;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
   }
 
   .brand strong {
-    font-size: 0.78rem;
+    font-size: 0.76rem;
+    white-space: nowrap;
   }
 
+  /* Hide the "Authorized Cheats" subtitle on phones to keep the wallet group
+     on the same row as the logo. */
   .brand span {
-    font-size: 0.72rem;
+    display: none;
+  }
+
+  .topbar-wallet {
+    flex: 0 0 auto;
+    margin-left: auto;
+    gap: 6px;
   }
 
   .nav {
@@ -4925,6 +4934,71 @@ a {
   box-shadow: 0 0 12px rgba(255, 42, 42, 0.6);
 }
 
+/* ── Add-to-cart variation / price picker popover ── */
+.cart-variant-pop {
+  position: fixed;
+  z-index: 130;
+  width: min(280px, calc(100vw - 24px));
+  padding: 8px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 110, 110, 0.2);
+  background:
+    linear-gradient(180deg, rgba(24, 16, 16, 0.98), rgba(10, 10, 12, 0.99));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  animation: cartPopIn 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes cartPopIn {
+  from { transform: translateY(6px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.cvp-head {
+  padding: 8px 10px 10px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.cvp-list {
+  display: grid;
+  gap: 6px;
+}
+
+.cvp-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.cvp-opt:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 100, 100, 0.34);
+  background: rgba(255, 47, 47, 0.1);
+}
+
+.cvp-name {
+  font-weight: 600;
+}
+
+.cvp-price {
+  font-family: "Oxanium", sans-serif;
+  font-weight: 800;
+  color: var(--accent-soft);
+  white-space: nowrap;
+}
+
 .cart-drawer {
   position: fixed;
   inset: 0;
@@ -5153,15 +5227,49 @@ body.cart-open {
   }
 
   .balance-pill {
-    height: 42px;
-    padding: 0 12px;
-    font-size: 0.85rem;
+    height: 40px;
+    padding: 0 10px;
+    gap: 6px;
+    font-size: 0.82rem;
   }
 
   .cart-button,
   .nav-cta.nav-cta-icon {
-    width: 42px;
-    height: 42px;
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (max-width: 400px) {
+  .balance-pill .balance-ico {
+    display: none;
+  }
+
+  .balance-pill {
+    padding: 0 9px;
+  }
+}
+
+@media (max-width: 560px) {
+  .balance-panel {
+    padding: 20px;
+  }
+
+  .balance-panel-head {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .balance-panel-note {
+    align-self: flex-start;
+  }
+
+  .topup-actions {
+    flex-direction: column;
+  }
+
+  .topup-actions .button {
+    width: 100%;
   }
 }
 

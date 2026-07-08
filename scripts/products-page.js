@@ -51,14 +51,24 @@ const notice = document.querySelector("[data-products-message]");
 const accountLink = document.querySelector("[data-account-link]");
 const categoryStrip = document.querySelector("[data-category-strip]");
 const productSearch = document.querySelector("[data-product-search]");
+const productSort = document.querySelector("[data-product-sort]");
+const productAvailability = document.querySelector("[data-product-availability]");
+const productStockOnly = document.querySelector("[data-product-stock-only]");
+const productSaleOnly = document.querySelector("[data-product-sale-only]");
 const gamesStat = document.querySelector("[data-catalog-games]");
 const productsStat = document.querySelector("[data-catalog-products]");
+const visibleStat = document.querySelector("[data-catalog-visible]");
+const resultsLabel = document.querySelector("[data-catalog-results-label]");
 let catalogProducts = [];
 let activeProduct = null;
 let activeVariant = null;
 let activePromo = null;
 let activeCategory = "all";
 let searchQuery = "";
+let sortMode = "recommended";
+let availabilityMode = "all";
+let stockOnly = false;
+let saleOnly = false;
 let aiSearchResults = null; // null = use normal filter, array = AI-ranked slugs
 let aiSearchTimer = null;
 let aiSearchController = null;
@@ -195,6 +205,22 @@ function stockBadgeHtml(product) {
     return `<span class="card-stock in-stock">In Stock</span>`;
   }
   return `<span class="card-stock out-of-stock">Out of Stock</span>`;
+}
+
+function hasResellerStock(product) {
+  return (product.variants || []).some((variant) => variant.stockLabel === "In Stock");
+}
+
+function isStockedProduct(product) {
+  return getTotalStock(product) > 0 || hasResellerStock(product);
+}
+
+function isReadyProduct(product) {
+  return (product.variants || []).some((variant) => variant.checkoutReady);
+}
+
+function isComingSoonProduct(product) {
+  return !product.available || /coming soon/i.test(String(product.badge || ""));
 }
 
 function renderCategoryStrip(groups) {
@@ -358,6 +384,116 @@ function renderProductCard(product, index) {
   return item;
 }
 
+function buildResultsLabel(products) {
+  const pieces = [];
+
+  if (activeCategory !== "all") {
+    pieces.push(activeCategory);
+  }
+
+  if (searchQuery) {
+    pieces.push(`search: "${searchQuery}"`);
+  }
+
+  if (availabilityMode === "ready") {
+    pieces.push("ready now");
+  } else if (availabilityMode === "stocked") {
+    pieces.push("in stock");
+  } else if (availabilityMode === "coming-soon") {
+    pieces.push("coming soon");
+  }
+
+  if (stockOnly) {
+    pieces.push("stock only");
+  }
+
+  if (saleOnly) {
+    pieces.push("deals");
+  }
+
+  if (!pieces.length) {
+    return `Showing ${products.length} ${products.length === 1 ? "listing" : "listings"} across the full catalog.`;
+  }
+
+  return `Showing ${products.length} ${products.length === 1 ? "listing" : "listings"} for ${pieces.join(" · ")}.`;
+}
+
+function sortProducts(products) {
+  const nextProducts = [...products];
+
+  if (sortMode === "recommended" && aiSearchResults !== null && searchQuery) {
+    nextProducts.sort((a, b) => {
+      const aIdx = aiSearchResults.indexOf(a.slug);
+      const bIdx = aiSearchResults.indexOf(b.slug);
+      if (aIdx === -1 && bIdx === -1) return 0;
+      if (aIdx === -1) return 1;
+      if (bIdx === -1) return -1;
+      return aIdx - bIdx;
+    });
+    return nextProducts;
+  }
+
+  switch (sortMode) {
+    case "price-asc":
+      nextProducts.sort((a, b) => getStartingPrice(a) - getStartingPrice(b));
+      break;
+    case "price-desc":
+      nextProducts.sort((a, b) => getStartingPrice(b) - getStartingPrice(a));
+      break;
+    case "stock-desc":
+      nextProducts.sort((a, b) => getTotalStock(b) - getTotalStock(a) || getStartingPrice(a) - getStartingPrice(b));
+      break;
+    case "name-asc":
+      nextProducts.sort((a, b) => a.name.localeCompare(b.name));
+      break;
+    default:
+      nextProducts.sort((a, b) => {
+        const featuredDelta = Number(Boolean(b.featured)) - Number(Boolean(a.featured));
+        if (featuredDelta) return featuredDelta;
+        const saleDelta = Number(Boolean(b.sale)) - Number(Boolean(a.sale));
+        if (saleDelta) return saleDelta;
+        const readyDelta = Number(isReadyProduct(b)) - Number(isReadyProduct(a));
+        if (readyDelta) return readyDelta;
+        return 0;
+      });
+      break;
+  }
+
+  return nextProducts;
+}
+
+function applyCatalogFilters(products) {
+  const filtered = products.filter((product) => {
+    if (!productMatchesSearch(product)) {
+      return false;
+    }
+
+    if (availabilityMode === "ready" && !isReadyProduct(product)) {
+      return false;
+    }
+
+    if (availabilityMode === "stocked" && !isStockedProduct(product)) {
+      return false;
+    }
+
+    if (availabilityMode === "coming-soon" && !isComingSoonProduct(product)) {
+      return false;
+    }
+
+    if (stockOnly && !isStockedProduct(product)) {
+      return false;
+    }
+
+    if (saleOnly && !product.sale) {
+      return false;
+    }
+
+    return true;
+  });
+
+  return sortProducts(filtered);
+}
+
 function ensureVariantModal() {
   let modal = document.querySelector("[data-variant-modal]");
 
@@ -412,6 +548,31 @@ function ensureVariantModal() {
           <button class="button button-primary" type="button" data-variant-notify hidden>Notify me when back in stock</button>
         </div>
         <p class="variant-notify-message" data-notify-message hidden></p>
+        <section class="variant-confidence">
+          <div class="variant-confidence-head">
+            <span class="variant-confidence-label">Checkout confidence</span>
+            <strong>What happens after payment</strong>
+          </div>
+          <div class="variant-confidence-grid">
+            <article>
+              <strong>Secure checkout</strong>
+              <p>Card payments run through Stripe with account-linked order tracking.</p>
+            </article>
+            <article>
+              <strong>Instant member delivery</strong>
+              <p>Successful orders appear in your account dashboard with key status and history.</p>
+            </article>
+            <article>
+              <strong>Discord follow-up</strong>
+              <p>Link Discord on your account if you want delivery updates and help there too.</p>
+            </article>
+            <article>
+              <strong>Support after payment</strong>
+              <p>If delivery stalls or stock changes, open the desk and we can pick up the order fast.</p>
+            </article>
+          </div>
+          <p class="variant-confidence-note" data-variant-confidence-note></p>
+        </section>
         <div class="variant-trust-row">
           <span>Secure</span>
           <span>Instant</span>
@@ -758,6 +919,8 @@ function openVariantModal(product) {
   modal.querySelector("[data-variant-status]").textContent = product.badge;
   modal.querySelector("[data-variant-summary]").textContent = product.summary;
   modal.querySelector("[data-detail-about]").textContent = product.summary;
+  modal.querySelector("[data-variant-confidence-note]").textContent =
+    "Pay with card for Stripe checkout, use balance for instant member fulfillment, and keep your account dashboard open for delivery tracking.";
   modal.querySelector("[data-detail-features]").innerHTML = renderFeatureGroups(product);
   modal.querySelector("[data-detail-info]").innerHTML = renderInfoList(
     product.generalInfo,
@@ -869,21 +1032,25 @@ function renderCatalogView() {
   const baseProducts = catalogProducts.filter((product) => {
     return activeCategory === "all" || (product.category || product.game) === activeCategory;
   });
-  let matchingProducts = baseProducts.filter(productMatchesSearch);
+  const matchingProducts = applyCatalogFilters(baseProducts);
 
-  // If AI search returned results, sort by AI relevance ranking
-  if (aiSearchResults !== null && searchQuery) {
-    matchingProducts.sort((a, b) => {
-      const aIdx = aiSearchResults.indexOf(a.slug);
-      const bIdx = aiSearchResults.indexOf(b.slug);
-      if (aIdx === -1 && bIdx === -1) return 0;
-      if (aIdx === -1) return 1;
-      if (bIdx === -1) return -1;
-      return aIdx - bIdx;
-    });
+  if (visibleStat) {
+    visibleStat.textContent = matchingProducts.length;
   }
 
-  if (activeCategory === "all" && !searchQuery) {
+  if (resultsLabel) {
+    resultsLabel.textContent = buildResultsLabel(matchingProducts);
+  }
+
+  const usingDefaultCatalogView =
+    activeCategory === "all" &&
+    !searchQuery &&
+    sortMode === "recommended" &&
+    availabilityMode === "all" &&
+    !stockOnly &&
+    !saleOnly;
+
+  if (usingDefaultCatalogView) {
     renderCategoryCards(catalogProducts);
     return;
   }
@@ -1206,18 +1373,16 @@ grid?.addEventListener("click", async (event) => {
   openVariantModal(product);
 });
 
-/* Add a product's default (first purchasable) variant straight to the cart. */
+/* Add-to-cart from a product card. One purchasable variant → add directly;
+   several → open a variation + price picker anchored to the button. */
 function addProductDefaultToCart(product, button) {
   if (!product) {
     return;
   }
 
-  const variant =
-    (product.variants || []).find((v) => v.checkoutReady) ||
-    (product.variants || [])[0] ||
-    null;
+  const selectable = (product.variants || []).filter((v) => v.checkoutReady);
 
-  if (!variant || !variant.checkoutReady) {
+  if (!selectable.length) {
     renderMessage(notice, "This product is out of stock right now.", "warn");
     return;
   }
@@ -1227,6 +1392,15 @@ function addProductDefaultToCart(product, button) {
     return;
   }
 
+  if (selectable.length === 1) {
+    addVariantToCart(product, selectable[0], button);
+    return;
+  }
+
+  openCartVariantPicker(product, button, selectable);
+}
+
+function addVariantToCart(product, variant, button) {
   const dollars = parseMoney(variant.priceDisplay);
   window.haloCart.add({
     productSlug: product.slug,
@@ -1237,13 +1411,90 @@ function addProductDefaultToCart(product, button) {
     qty: 1,
   });
 
-  const original = button.innerHTML;
-  button.innerHTML = "Added to cart";
-  button.disabled = true;
+  if (button) {
+    const original = button.innerHTML;
+    button.innerHTML = "Added to cart";
+    button.disabled = true;
+    window.setTimeout(() => {
+      button.innerHTML = original;
+      button.disabled = false;
+    }, 1300);
+  }
+}
+
+let openCartPop = null;
+
+function closeCartPop() {
+  if (!openCartPop) {
+    return;
+  }
+  openCartPop.remove();
+  openCartPop = null;
+  document.removeEventListener("click", onDocClickCartPop, true);
+  window.removeEventListener("scroll", closeCartPop, true);
+  window.removeEventListener("resize", closeCartPop);
+}
+
+function onDocClickCartPop(event) {
+  if (!openCartPop) {
+    return;
+  }
+  if (!openCartPop.contains(event.target) && !event.target.closest(".add-cart-button")) {
+    closeCartPop();
+  }
+}
+
+function openCartVariantPicker(product, button, variants) {
+  closeCartPop();
+
+  const pop = document.createElement("div");
+  pop.className = "cart-variant-pop";
+  pop.innerHTML = `
+    <div class="cvp-head">Choose an option</div>
+    <div class="cvp-list">
+      ${variants
+        .map(
+          (v) => `
+        <button type="button" class="cvp-opt" data-variant-slug="${escapeHtml(v.slug)}">
+          <span class="cvp-name">${escapeHtml(v.name)}</span>
+          <span class="cvp-price">${escapeHtml(v.priceDisplay || "")}</span>
+        </button>
+      `
+        )
+        .join("")}
+    </div>
+  `;
+  document.body.appendChild(pop);
+  openCartPop = pop;
+
+  const rect = button.getBoundingClientRect();
+  const popRect = pop.getBoundingClientRect();
+  let top = rect.top - popRect.height - 8;
+  if (top < 8) {
+    top = rect.bottom + 8;
+  }
+  let left = rect.left + rect.width / 2 - popRect.width / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - popRect.width - 8));
+  pop.style.top = `${top}px`;
+  pop.style.left = `${left}px`;
+
+  pop.addEventListener("click", (event) => {
+    const opt = event.target.closest(".cvp-opt");
+    if (!opt) {
+      return;
+    }
+    const variant = variants.find((v) => v.slug === opt.dataset.variantSlug);
+    if (variant) {
+      addVariantToCart(product, variant, button);
+    }
+    closeCartPop();
+  });
+
   window.setTimeout(() => {
-    button.innerHTML = original;
-    button.disabled = false;
-  }, 1300);
+    document.addEventListener("click", onDocClickCartPop, true);
+    window.addEventListener("scroll", closeCartPop, true);
+    window.addEventListener("resize", closeCartPop);
+  }, 0);
 }
 
 productSearch?.addEventListener("input", (event) => {
@@ -1289,6 +1540,26 @@ productSearch?.addEventListener("input", (event) => {
   } else {
     productSearch.classList.remove("searching");
   }
+});
+
+productSort?.addEventListener("change", (event) => {
+  sortMode = event.target.value || "recommended";
+  renderCatalogView();
+});
+
+productAvailability?.addEventListener("change", (event) => {
+  availabilityMode = event.target.value || "all";
+  renderCatalogView();
+});
+
+productStockOnly?.addEventListener("change", (event) => {
+  stockOnly = Boolean(event.target.checked);
+  renderCatalogView();
+});
+
+productSaleOnly?.addEventListener("change", (event) => {
+  saleOnly = Boolean(event.target.checked);
+  renderCatalogView();
 });
 
 document.addEventListener("keydown", (event) => {

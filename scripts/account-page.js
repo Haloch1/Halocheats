@@ -94,6 +94,21 @@ function renderListEmpty(target, message) {
   target.innerHTML = `<div class="member-empty">${message}</div>`;
 }
 
+function actionDeskHref(record) {
+  const params = new URLSearchParams();
+
+  if (record?.orderId) {
+    params.set("order", record.orderId);
+  }
+
+  if (record?.baseProductSlug) {
+    params.set("product", record.baseProductSlug);
+  }
+
+  const query = params.toString();
+  return query ? `/desk/?${query}` : "/desk/";
+}
+
 function renderOrders(orders) {
   if (!ordersList) {
     return;
@@ -116,7 +131,13 @@ function renderOrders(orders) {
             <span class="member-chip member-chip-${escapeHtml(order.status)}">${escapeHtml(order.status)}</span>
           </div>
           <p>${escapeHtml(order.priceDisplay)}</p>
-          <small>Opened ${formatTimestamp(order.createdAt)}</small>
+          <small>Opened ${formatTimestamp(order.createdAt)}${order.fulfilledAt ? ` · Delivered ${formatTimestamp(order.fulfilledAt)}` : ""}</small>
+          <div class="member-item-actions">
+            <a class="button button-secondary button-small" href="${escapeHtml(order.instructionHref || "/instructions/")}">Setup Guide</a>
+            <a class="button button-secondary button-small" href="${escapeHtml(actionDeskHref(order))}">Open Help</a>
+            <a class="button button-secondary button-small" href="/reviews/">Leave Review</a>
+            <button class="button button-secondary button-small" type="button" data-copy-value="${escapeHtml(order.id)}" data-copy-label="Order ID">Copy Order ID</button>
+          </div>
         </article>
       `
     )
@@ -164,6 +185,13 @@ function setView(session) {
 
   guestView.hidden = !showGuestView;
   memberView.hidden = !showMemberView;
+
+  /* The "Create your member account" heading is a signup prompt — hide it once
+     the visitor is signed in. */
+  const accountHeading = document.querySelector("[data-account-heading]");
+  if (accountHeading) {
+    accountHeading.hidden = showMemberView;
+  }
 
   if (showGuestView) {
     guestView.classList.add("is-visible");

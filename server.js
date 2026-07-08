@@ -652,8 +652,10 @@ function normalizeOrder(order) {
   return {
     id: order.id,
     productSlug: order.product_slug,
+    baseProductSlug: catalogItem?.product?.slug || order.product_slug,
     productName: catalogItem?.name || order.product_slug,
     priceDisplay: catalogItem?.priceDisplay || "N/A",
+    instructionHref: catalogItem?.product?.instructionHref || "/instructions/",
     status: order.status,
     createdAt: order.created_at,
     fulfilledAt: order.fulfilled_at,
@@ -5765,6 +5767,40 @@ async function fulfillFromBalance(member, selection, amountCents, note) {
   return { orderId: order.id, keyValue: result.keyValue, balanceCents: newBalance };
 }
 
+/* Fulfill a whole cart paid via Stripe. The session carries its pending order
+   IDs in chunked metadata (orderIds0, orderIds1, ...); deliver a key for each
+   through the same pipeline. syncPaidOrder is idempotent, so webhook retries are safe. */
+async function fulfillCartStripe(session) {
+  if (!supabaseAdmin) {
+    throw new Error("Supabase server auth is not configured.");
+  }
+
+  const chunkCount = Number(session.metadata?.orderIdsCount) || 0;
+  let orderIds = [];
+  for (let i = 0; i < chunkCount; i += 1) {
+    const part = session.metadata?.[`orderIds${i}`];
+    if (part) {
+      orderIds = orderIds.concat(part.split(","));
+    }
+  }
+  orderIds = orderIds.filter(Boolean);
+
+  for (const orderId of orderIds) {
+    const syntheticSession = {
+      id: `${session.id}:${orderId}`,
+      payment_intent: session.payment_intent || null,
+      metadata: { orderId },
+    };
+    try {
+      await syncPaidOrder(syntheticSession);
+    } catch (error) {
+      console.error(`[cart stripe] Order ${orderId} fulfillment error:`, error.message);
+    }
+  }
+
+  console.log(`[cart stripe] Fulfilled ${orderIds.length} order(s) for session ${session.id}.`);
+}
+
 app.post(
   "/api/stripe-webhook",
   express.raw({ type: "application/json" }),
@@ -5792,6 +5828,8 @@ app.post(
         const completedSession = event.data.object;
         if (completedSession.metadata?.type === "balance_topup") {
           await creditTopupFromStripe(completedSession);
+        } else if (completedSession.metadata?.type === "cart") {
+          await fulfillCartStripe(completedSession);
         } else {
           await syncPaidOrder(completedSession);
         }
@@ -8157,7 +8195,9 @@ app.get("/api/account", async (req, res) => {
       return {
         id: licenseKey.id,
         productSlug: licenseKey.product_slug,
+        baseProductSlug: catalogItem?.product?.slug || licenseKey.product_slug,
         productName: catalogItem?.name || licenseKey.product_slug,
+        instructionHref: catalogItem?.product?.instructionHref || "/instructions/",
         keyValue: licenseKey.key_value,
         assignedAt: licenseKey.assigned_at,
         status: licenseKey.status,
@@ -8175,7 +8215,9 @@ app.get("/api/account", async (req, res) => {
         return {
           id: o.id,
           productSlug: o.product_slug,
+          baseProductSlug: catalogItem?.product?.slug || o.product_slug,
           productName: catalogItem?.name || o.product_slug,
+          instructionHref: catalogItem?.product?.instructionHref || "/instructions/",
           keyValue: o.delivered_key_value,
           assignedAt: o.fulfilled_at,
           status: "assigned",
@@ -9043,6 +9085,127 @@ app.post("/api/cart/checkout", async (req, res) => {
   }
 
   return res.json({ ok: true, delivered, balanceCents: await getUserBalanceCents(member.id) });
+});
+
+/* ── Wallet: check out a whole cart with Stripe (card) ── */
+app.post("/api/cart/create-stripe-session", async (req, res) => {
+  if (process.env.PURCHASES_DISABLED === "true") {
+    return res.status(503).json({ error: "Purchases are temporarily unavailable. Please try again later." });
+  }
+
+  if (storeSoldOut) {
+    return res.status(409).json({ error: "The store is temporarily out of stock. Please check back soon." });
+  }
+
+  if (!stripe) {
+    return res.status(500).json({ error: "Stripe is not configured yet." });
+  }
+
+  let member;
+  try {
+    member = await getAuthenticatedUser(req, res);
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to verify your member session.",
+    });
+  }
+
+  if (!supabaseAdmin) {
+    return res.status(500).json({ error: "Supabase server auth is not configured." });
+  }
+
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (!items.length) {
+    return res.status(400).json({ error: "Your cart is empty." });
+  }
+
+  const lineItems = [];
+  const units = [];
+
+  for (const item of items) {
+    const selection = getProductSelection(item?.productSlug, item?.variantSlug);
+    if (!selection) {
+      return res.status(404).json({ error: "A product in your cart is no longer available." });
+    }
+    if (
+      selection.product.available === false ||
+      selection.product.checkoutBlocked ||
+      selection.variant.checkoutBlocked
+    ) {
+      return res.status(409).json({ error: `${selection.product.name} is currently unavailable.` });
+    }
+    const amount = selection.variant.amount;
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: `Invalid price for ${selection.product.name}.` });
+    }
+    const quantity = Math.min(Math.max(parseInt(item?.quantity, 10) || 1, 1), 10);
+    lineItems.push({
+      price_data: {
+        currency: "usd",
+        unit_amount: amount,
+        product_data: { name: `${selection.product.name} - ${selection.variant.name}` },
+      },
+      quantity,
+    });
+    for (let i = 0; i < quantity; i += 1) {
+      units.push({ inventorySlug: selection.inventorySlug, amount });
+    }
+  }
+
+  if (units.length > 20) {
+    return res.status(400).json({ error: "Too many items in your cart (max 20)." });
+  }
+
+  try {
+    /* Pre-create a pending order per unit; the webhook delivers a key for each. */
+    const { data: orders, error: orderError } = await supabaseAdmin
+      .from("orders")
+      .insert(units.map((u) => ({
+        user_id: member.id,
+        product_slug: u.inventorySlug,
+        status: "pending",
+        amount_cents: u.amount,
+      })))
+      .select("id");
+
+    if (orderError) {
+      throw orderError;
+    }
+
+    /* Stripe metadata values cap at 500 chars, so chunk the order-id list. */
+    const allIds = orders.map((o) => o.id).join(",");
+    const chunks = [];
+    let remaining = allIds;
+    while (remaining.length > 480) {
+      let cut = remaining.lastIndexOf(",", 480);
+      if (cut <= 0) cut = 480;
+      chunks.push(remaining.slice(0, cut));
+      remaining = remaining.slice(cut + 1);
+    }
+    if (remaining) chunks.push(remaining);
+
+    const metadata = { type: "cart", userId: member.id, orderIdsCount: String(chunks.length) };
+    chunks.forEach((chunk, i) => {
+      metadata[`orderIds${i}`] = chunk;
+    });
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      line_items: lineItems,
+      customer_email: member.email || undefined,
+      payment_intent_data: {
+        receipt_email: member.email || undefined,
+      },
+      success_url: `${baseUrl}/checkout/success/?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/checkout/cancel/`,
+      metadata,
+    });
+
+    return res.json({ url: session.url });
+  } catch (error) {
+    console.error("[cart stripe session]", error.message);
+    return res.status(500).json({ error: "Unable to start cart checkout." });
+  }
 });
 
 /* ── AI Natural Language Product Search ── */
