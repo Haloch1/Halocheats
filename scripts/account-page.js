@@ -516,4 +516,110 @@ signOutButton?.addEventListener("click", async () => {
   setView(null);
   showStatusMessage("Signed out.", "info");
 });
+
+/* ── Balance top-up panel ── */
+const topupPanel = document.querySelector("[data-topup-panel]");
+if (topupPanel) {
+  const balanceAmountEl = topupPanel.querySelector("[data-balance-amount]");
+  const presetWrap = topupPanel.querySelector("[data-topup-presets]");
+  const amountInput = topupPanel.querySelector("[data-topup-input]");
+  const cardBtn = topupPanel.querySelector("[data-topup-card]");
+  const cryptoBtn = topupPanel.querySelector("[data-topup-crypto]");
+  const topupMessage = topupPanel.querySelector("[data-topup-message]");
+
+  const money = (cents) => `$${((Number(cents) || 0) / 100).toFixed(2)}`;
+
+  async function loadBalance() {
+    const session = await getCurrentSession();
+    if (!session?.access_token) {
+      return;
+    }
+    try {
+      const res = await fetch("/api/balance", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) {
+        return;
+      }
+      const data = await res.json();
+      if (balanceAmountEl) {
+        balanceAmountEl.textContent = money(data.balanceCents);
+      }
+      window.haloCart?.refreshBalance?.();
+    } catch {}
+  }
+
+  presetWrap?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-amount]");
+    if (!button) {
+      return;
+    }
+    presetWrap.querySelectorAll(".topup-preset").forEach((b) => b.classList.remove("is-active"));
+    button.classList.add("is-active");
+    amountInput.value = (Number(button.dataset.amount) / 100).toString();
+  });
+
+  amountInput?.addEventListener("input", () => {
+    presetWrap?.querySelectorAll(".topup-preset").forEach((b) => b.classList.remove("is-active"));
+  });
+
+  function readAmountCents() {
+    const cents = Math.round(parseFloat(amountInput.value) * 100);
+    if (!Number.isFinite(cents) || cents < 100 || cents > 50000) {
+      return null;
+    }
+    return cents;
+  }
+
+  async function startTopup(endpoint, button) {
+    const amountCents = readAmountCents();
+    if (!amountCents) {
+      renderMessage(topupMessage, "Enter an amount between $1 and $500.", "warn");
+      return;
+    }
+    const session = await getCurrentSession();
+    if (!session?.access_token) {
+      renderMessage(topupMessage, "Sign in first to add funds.", "warn");
+      return;
+    }
+    button.disabled = true;
+    const original = button.textContent;
+    button.textContent = "Redirecting...";
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ amountCents }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || "Unable to start the top-up.");
+      }
+      window.location.href = data.url;
+    } catch (err) {
+      renderMessage(topupMessage, err instanceof Error ? err.message : "Unable to start the top-up.", "error");
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+
+  cardBtn?.addEventListener("click", () => startTopup("/api/balance/create-topup-session", cardBtn));
+  cryptoBtn?.addEventListener("click", () => startTopup("/api/balance/create-topup-crypto", cryptoBtn));
+
+  const topupParam = new URLSearchParams(window.location.search).get("topup");
+  if (topupParam === "success") {
+    renderMessage(topupMessage, "Payment received. Your balance updates within a moment.", "success");
+    window.setTimeout(loadBalance, 1500);
+    window.setTimeout(loadBalance, 4500);
+    window.history.replaceState({}, "", window.location.pathname);
+  } else if (topupParam === "cancel") {
+    renderMessage(topupMessage, "Top-up canceled.", "warn");
+    window.history.replaceState({}, "", window.location.pathname);
+  }
+
+  loadBalance();
+}
  

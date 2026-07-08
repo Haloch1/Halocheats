@@ -1,3 +1,5 @@
+import { getCurrentSession } from "./supabase-client.js";
+
 export function initReveal() {
   const revealItems = [...document.querySelectorAll(".reveal:not(.is-visible)")];
 
@@ -385,3 +387,323 @@ async function initSiteBanner() {
 }
 
 initSiteBanner();
+
+/* ── Wallet balance pill + cart (shared across all pages via site.js) ── */
+const HALO_CART_KEY = "hc_cart";
+let haloBalanceCents = 0;
+
+function haloReadCart() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(HALO_CART_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function haloWriteCart(items) {
+  try {
+    window.localStorage.setItem(HALO_CART_KEY, JSON.stringify(items));
+  } catch {}
+}
+
+function haloCartCount(items = haloReadCart()) {
+  return items.reduce((sum, it) => sum + (Number(it.qty) || 1), 0);
+}
+
+function haloCartTotalCents(items = haloReadCart()) {
+  return items.reduce((sum, it) => sum + (Number(it.priceCents) || 0) * (Number(it.qty) || 1), 0);
+}
+
+function haloMoney(cents) {
+  return `$${((Number(cents) || 0) / 100).toFixed(2)}`;
+}
+
+function haloEscape(value) {
+  return String(value || "").replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+async function haloFetchBalance() {
+  try {
+    const session = await getCurrentSession();
+    if (!session?.access_token) return null;
+    const res = await fetch("/api/balance", {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return Number(data.balanceCents) || 0;
+  } catch {
+    return null;
+  }
+}
+
+function initWallet() {
+  const shell = document.querySelector(".topbar-shell");
+  if (!shell || shell.querySelector(".topbar-wallet")) {
+    return;
+  }
+
+  const accountCta = shell.querySelector(".nav-cta");
+
+  const wrap = document.createElement("div");
+  wrap.className = "topbar-wallet";
+
+  const balancePill = document.createElement("a");
+  balancePill.className = "balance-pill";
+  balancePill.href = "/account/";
+  balancePill.hidden = true;
+  balancePill.setAttribute("aria-label", "Your balance");
+  balancePill.innerHTML = `<span class="balance-ico" aria-hidden="true"></span><span class="balance-amount">$0.00</span>`;
+
+  const cartBtn = document.createElement("button");
+  cartBtn.type = "button";
+  cartBtn.className = "cart-button";
+  cartBtn.setAttribute("aria-label", "Open cart");
+  cartBtn.innerHTML = `<span class="cart-ico" aria-hidden="true"></span><span class="cart-count" hidden>0</span>`;
+
+  wrap.appendChild(balancePill);
+  wrap.appendChild(cartBtn);
+
+  if (accountCta) {
+    shell.insertBefore(wrap, accountCta);
+  } else {
+    shell.appendChild(wrap);
+  }
+
+  const drawer = document.createElement("div");
+  drawer.className = "cart-drawer";
+  drawer.hidden = true;
+  drawer.innerHTML = `
+    <div class="cart-drawer-backdrop" data-cart-close></div>
+    <aside class="cart-panel" role="dialog" aria-label="Shopping cart">
+      <div class="cart-panel-head">
+        <strong>Your Cart</strong>
+        <button type="button" class="cart-close" data-cart-close aria-label="Close cart">&times;</button>
+      </div>
+      <div class="cart-items" data-cart-items></div>
+      <div class="cart-foot">
+        <div class="cart-summary-row">
+          <span>Balance</span>
+          <strong data-cart-balance>$0.00</strong>
+        </div>
+        <div class="cart-summary-row cart-total-row">
+          <span>Total</span>
+          <strong data-cart-total>$0.00</strong>
+        </div>
+        <p class="cart-message" data-cart-message hidden></p>
+        <button type="button" class="button button-primary cart-checkout" data-cart-checkout>Checkout with Balance</button>
+        <a class="button button-secondary cart-topup" href="/account/">Add Funds</a>
+      </div>
+    </aside>
+  `;
+  document.body.appendChild(drawer);
+
+  const cartCountEl = cartBtn.querySelector(".cart-count");
+  const itemsEl = drawer.querySelector("[data-cart-items]");
+  const totalEl = drawer.querySelector("[data-cart-total]");
+  const balanceEl = drawer.querySelector("[data-cart-balance]");
+  const messageEl = drawer.querySelector("[data-cart-message]");
+  const checkoutBtn = drawer.querySelector("[data-cart-checkout]");
+
+  function updateBalancePill() {
+    balancePill.querySelector(".balance-amount").textContent = haloMoney(haloBalanceCents);
+  }
+
+  function renderBadge() {
+    const count = haloCartCount();
+    cartCountEl.textContent = String(count);
+    cartCountEl.hidden = count === 0;
+  }
+
+  function renderDrawer() {
+    const items = haloReadCart();
+    if (!items.length) {
+      itemsEl.innerHTML = `<p class="cart-empty">Your cart is empty.</p>`;
+    } else {
+      itemsEl.innerHTML = items
+        .map((it, i) => `
+          <div class="cart-item">
+            <div class="cart-item-info">
+              <strong>${haloEscape(it.productName)}</strong>
+              <span>${haloEscape(it.variantName || "")}</span>
+            </div>
+            <div class="cart-item-controls">
+              <button type="button" class="cart-qty-btn" data-cart-dec="${i}" aria-label="Decrease">-</button>
+              <span class="cart-qty">${Number(it.qty) || 1}</span>
+              <button type="button" class="cart-qty-btn" data-cart-inc="${i}" aria-label="Increase">+</button>
+            </div>
+            <div class="cart-item-price">${haloMoney((Number(it.priceCents) || 0) * (Number(it.qty) || 1))}</div>
+            <button type="button" class="cart-remove" data-cart-remove="${i}" aria-label="Remove">&times;</button>
+          </div>
+        `)
+        .join("");
+    }
+    totalEl.textContent = haloMoney(haloCartTotalCents(items));
+    balanceEl.textContent = haloMoney(haloBalanceCents);
+    checkoutBtn.disabled = !items.length;
+  }
+
+  function showCartMessage(msg, tone) {
+    if (!messageEl) return;
+    messageEl.hidden = false;
+    messageEl.textContent = msg;
+    messageEl.className = `cart-message ${tone}`;
+  }
+
+  function openDrawer() {
+    renderDrawer();
+    drawer.hidden = false;
+    document.body.classList.add("cart-open");
+    haloFetchBalance().then((b) => {
+      if (b !== null) {
+        haloBalanceCents = b;
+        updateBalancePill();
+        balanceEl.textContent = haloMoney(b);
+      }
+    });
+  }
+
+  function closeDrawer() {
+    drawer.hidden = true;
+    document.body.classList.remove("cart-open");
+    if (messageEl) messageEl.hidden = true;
+  }
+
+  cartBtn.addEventListener("click", openDrawer);
+
+  drawer.addEventListener("click", (event) => {
+    if (event.target.closest("[data-cart-close]")) {
+      closeDrawer();
+      return;
+    }
+    const inc = event.target.closest("[data-cart-inc]");
+    const dec = event.target.closest("[data-cart-dec]");
+    const rem = event.target.closest("[data-cart-remove]");
+    if (!inc && !dec && !rem) {
+      return;
+    }
+    const items = haloReadCart();
+    if (inc) {
+      const i = Number(inc.dataset.cartInc);
+      items[i].qty = (Number(items[i].qty) || 1) + 1;
+    } else if (dec) {
+      const i = Number(dec.dataset.cartDec);
+      items[i].qty = (Number(items[i].qty) || 1) - 1;
+      if (items[i].qty < 1) items.splice(i, 1);
+    } else if (rem) {
+      items.splice(Number(rem.dataset.cartRemove), 1);
+    }
+    haloWriteCart(items);
+    renderBadge();
+    renderDrawer();
+  });
+
+  checkoutBtn.addEventListener("click", async () => {
+    const items = haloReadCart();
+    if (!items.length) {
+      return;
+    }
+    const session = await getCurrentSession();
+    if (!session?.access_token) {
+      showCartMessage("Sign in first, then check out.", "warn");
+      window.setTimeout(() => {
+        window.location.href = `/account/?next=${encodeURIComponent(window.location.pathname)}`;
+      }, 800);
+      return;
+    }
+
+    checkoutBtn.disabled = true;
+    const original = checkoutBtn.textContent;
+    checkoutBtn.textContent = "Processing...";
+
+    try {
+      const res = await fetch("/api/cart/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          items: items.map((it) => ({
+            productSlug: it.productSlug,
+            variantSlug: it.variantSlug,
+            quantity: it.qty,
+          })),
+        }),
+      });
+      const data = await res.json();
+
+      if (res.status === 402) {
+        haloBalanceCents = Number(data.balanceCents) || haloBalanceCents;
+        updateBalancePill();
+        balanceEl.textContent = haloMoney(haloBalanceCents);
+        showCartMessage("Not enough balance. Add funds to your account first.", "error");
+        checkoutBtn.disabled = false;
+        checkoutBtn.textContent = original;
+        return;
+      }
+
+      if (!res.ok && res.status !== 207) {
+        throw new Error(data.error || "Checkout failed.");
+      }
+
+      haloWriteCart([]);
+      renderBadge();
+      renderDrawer();
+      haloBalanceCents = Number(data.balanceCents) || 0;
+      updateBalancePill();
+      balanceEl.textContent = haloMoney(haloBalanceCents);
+      const count = (data.delivered || []).length;
+      showCartMessage(`${count} key${count === 1 ? "" : "s"} delivered — view them on your account page.`, "success");
+      checkoutBtn.textContent = original;
+    } catch (err) {
+      showCartMessage(err instanceof Error ? err.message : "Checkout failed.", "error");
+      checkoutBtn.disabled = false;
+      checkoutBtn.textContent = original;
+    }
+  });
+
+  /* Public API used by the products page (add-to-cart, pay-with-balance refresh). */
+  window.haloCart = {
+    add(item) {
+      const items = haloReadCart();
+      const idx = items.findIndex(
+        (it) => it.productSlug === item.productSlug && it.variantSlug === item.variantSlug
+      );
+      if (idx >= 0) {
+        items[idx].qty = (Number(items[idx].qty) || 1) + (Number(item.qty) || 1);
+      } else {
+        items.push({ ...item, qty: Number(item.qty) || 1 });
+      }
+      haloWriteCart(items);
+      renderBadge();
+      renderDrawer();
+    },
+    open: openDrawer,
+    count: haloCartCount,
+    async refreshBalance() {
+      const b = await haloFetchBalance();
+      if (b !== null) {
+        haloBalanceCents = b;
+        updateBalancePill();
+        balanceEl.textContent = haloMoney(b);
+      }
+      return b;
+    },
+  };
+
+  renderBadge();
+
+  haloFetchBalance().then((b) => {
+    if (b !== null) {
+      haloBalanceCents = b;
+      updateBalancePill();
+      balancePill.hidden = false;
+    }
+  });
+}
+
+initWallet();

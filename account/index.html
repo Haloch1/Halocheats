@@ -248,6 +248,36 @@
               <button class="button button-secondary" type="button" data-signout>Sign Out</button>
             </div>
 
+            <section class="balance-panel" data-topup-panel>
+              <div class="balance-panel-head">
+                <div>
+                  <p class="eyebrow">Store balance</p>
+                  <strong class="balance-panel-amount" data-balance-amount>$0.00</strong>
+                </div>
+                <span class="balance-panel-note">Store credit &middot; non-refundable</span>
+              </div>
+              <p class="balance-panel-sub">Add funds, then buy any product instantly from your balance.</p>
+
+              <div class="topup-presets" data-topup-presets>
+                <button type="button" class="topup-preset" data-amount="500">$5</button>
+                <button type="button" class="topup-preset" data-amount="1000">$10</button>
+                <button type="button" class="topup-preset" data-amount="2500">$25</button>
+                <button type="button" class="topup-preset" data-amount="5000">$50</button>
+              </div>
+
+              <label class="topup-custom">
+                <span>Custom amount (USD)</span>
+                <input type="number" min="1" max="500" step="1" inputmode="decimal" placeholder="Enter an amount" data-topup-input />
+              </label>
+
+              <div class="topup-actions">
+                <button type="button" class="button button-primary" data-topup-card>Add Funds with Card</button>
+                <button type="button" class="button button-crypto" data-topup-crypto>Add with Crypto</button>
+              </div>
+
+              <p class="inline-message info topup-message" data-topup-message hidden></p>
+            </section>
+
             <div class="member-grid">
               <section class="member-panel">
                 <div class="member-panel-heading">

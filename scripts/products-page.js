@@ -406,7 +406,9 @@ function ensureVariantModal() {
         <div class="variant-actions">
           <button class="button button-secondary" type="button" data-variant-close>Cancel</button>
           <button class="button button-primary" type="button" data-variant-checkout>Pay with Card</button>
+          <button class="button button-balance" type="button" data-variant-balance>Pay with Balance</button>
           <button class="button button-crypto" type="button" data-variant-crypto>Pay with Crypto</button>
+          <button class="button button-secondary" type="button" data-variant-cart>Add to Cart</button>
           <button class="button button-primary" type="button" data-variant-notify hidden>Notify me when back in stock</button>
         </div>
         <p class="variant-notify-message" data-notify-message hidden></p>
@@ -498,6 +500,8 @@ function ensureVariantModal() {
     const closeButton = event.target.closest("[data-variant-close]");
     const option = event.target.closest("[data-variant-option]");
     const checkoutButton = event.target.closest("[data-variant-checkout]");
+    const balanceButton = event.target.closest("[data-variant-balance]");
+    const cartButton = event.target.closest("[data-variant-cart]");
     const cryptoButton = event.target.closest("[data-variant-crypto]");
     const notifyButton = event.target.closest("[data-variant-notify]");
 
@@ -513,6 +517,14 @@ function ensureVariantModal() {
 
     if (checkoutButton) {
       await checkoutSelectedVariant(checkoutButton);
+    }
+
+    if (balanceButton) {
+      await checkoutSelectedVariantBalance(balanceButton);
+    }
+
+    if (cartButton) {
+      addActiveVariantToCart(cartButton);
     }
 
     if (cryptoButton) {
@@ -639,6 +651,8 @@ function updateVariantPricing() {
 function updateCheckoutButtonState() {
   const modal = ensureVariantModal();
   const checkoutButton = modal.querySelector("[data-variant-checkout]");
+  const balanceButton = modal.querySelector("[data-variant-balance]");
+  const cartButton = modal.querySelector("[data-variant-cart]");
   const cryptoButton = modal.querySelector("[data-variant-crypto]");
   const notifyButton = modal.querySelector("[data-variant-notify]");
   const canAttempt = Boolean(activeVariant?.checkoutReady || activeVariant?.checkoutBlocked);
@@ -648,6 +662,16 @@ function updateCheckoutButtonState() {
   checkoutButton.hidden = outOfStock;
   checkoutButton.disabled = !canAttempt || !termsAccepted();
   checkoutButton.textContent = canAttempt ? "Pay with Card" : "Unavailable";
+  if (balanceButton) {
+    balanceButton.hidden = outOfStock;
+    balanceButton.disabled = !canAttempt || !termsAccepted();
+    balanceButton.textContent = canAttempt ? "Pay with Balance" : "Unavailable";
+  }
+  if (cartButton) {
+    /* Adding to cart doesn't require terms acceptance; only needs a valid, ready variant. */
+    cartButton.hidden = outOfStock;
+    cartButton.disabled = !activeVariant?.checkoutReady;
+  }
   if (cryptoButton) {
     cryptoButton.hidden = outOfStock;
     cryptoButton.disabled = !canAttempt || !termsAccepted();
@@ -943,6 +967,119 @@ async function checkoutSelectedVariant(button) {
     renderMessage(notice, error.message, "error");
     button.disabled = false;
     button.textContent = "Pay with Card";
+  }
+}
+
+function activeVariantPriceCents() {
+  const dollars = parseMoney(activeVariant?.priceDisplay);
+  return dollars ? Math.round(dollars * 100) : 0;
+}
+
+function addActiveVariantToCart(button) {
+  if (!activeProduct || !activeVariant) {
+    renderMessage(notice, "Pick a variant first.", "warn");
+    return;
+  }
+
+  if (!activeVariant.checkoutReady) {
+    renderMessage(notice, "This variant is unavailable.", "warn");
+    return;
+  }
+
+  if (!window.haloCart?.add) {
+    renderMessage(notice, "Cart is unavailable right now.", "error");
+    return;
+  }
+
+  window.haloCart.add({
+    productSlug: activeProduct.slug,
+    variantSlug: activeVariant.slug,
+    productName: activeProduct.name,
+    variantName: activeVariant.name,
+    priceCents: activeVariantPriceCents(),
+    qty: 1,
+  });
+
+  const original = button.textContent;
+  button.textContent = "Added";
+  button.disabled = true;
+  window.setTimeout(() => {
+    button.textContent = original;
+    button.disabled = false;
+  }, 1200);
+}
+
+async function checkoutSelectedVariantBalance(button) {
+  if (!activeProduct || !activeVariant) {
+    renderMessage(notice, "Pick a variant before checkout.", "warn");
+    return;
+  }
+
+  if (!termsAccepted()) {
+    renderMessage(notice, "Agree to the Terms of Service before continuing.", "warn");
+    return;
+  }
+
+  if (!activeVariant.checkoutReady) {
+    renderMessage(notice, "This variant is unavailable.", "warn");
+    return;
+  }
+
+  const session = await getCurrentSession();
+  if (!session) {
+    window.location.href = `/account/?next=/products/&intent=checkout&product=${activeProduct.slug}&variant=${activeVariant.slug}`;
+    return;
+  }
+
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = "Processing...";
+
+  try {
+    const response = await fetch("/api/purchase-with-balance", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        productSlug: activeProduct.slug,
+        variantSlug: activeVariant.slug,
+        promoCode: activePromo?.code || undefined,
+      }),
+    });
+
+    const payload = await response.json();
+
+    if (response.status === 402) {
+      renderMessage(
+        notice,
+        "Not enough balance. Add funds on your account page, then try again.",
+        "warn"
+      );
+      button.disabled = false;
+      button.textContent = original;
+      return;
+    }
+
+    if (!response.ok) {
+      throw new Error(payload.error || "Unable to complete the purchase.");
+    }
+
+    window.haloCart?.refreshBalance?.();
+    renderMessage(
+      notice,
+      "Purchased with balance. Your key is on your account page and Discord DM.",
+      "success"
+    );
+    button.textContent = "Purchased";
+    window.setTimeout(() => {
+      window.location.href = "/account/";
+    }, 1400);
+  } catch (error) {
+    renderMessage(notice, error instanceof Error ? error.message : "Purchase failed.", "error");
+    button.disabled = false;
+    button.textContent = original;
   }
 }
 

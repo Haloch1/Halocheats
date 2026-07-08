@@ -5654,6 +5654,117 @@ async function syncPaidOrder(session) {
   return;
 }
 
+/* ── Wallet / store-credit balance helpers ── */
+
+/* Clamp a top-up to a sane range: $1 min, $500 max. Returns integer cents or null. */
+function normalizeTopupAmount(raw) {
+  const cents = Math.round(Number(raw));
+  if (!Number.isFinite(cents) || cents < 100 || cents > 50000) {
+    return null;
+  }
+  return cents;
+}
+
+async function getUserBalanceCents(userId) {
+  if (!supabaseAdmin || !userId) return 0;
+  const { data } = await supabaseAdmin
+    .from("user_balances")
+    .select("balance_cents")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data?.balance_cents || 0;
+}
+
+/* Credit a completed Stripe top-up into the buyer's balance (idempotent by session id). */
+async function creditTopupFromStripe(session) {
+  const userId = session.metadata?.userId || null;
+  const amountCents = Number(session.metadata?.amountCents) || session.amount_total || 0;
+
+  if (!userId || amountCents <= 0) {
+    console.warn(`[Topup] Session ${session.id} missing metadata; cannot credit.`);
+    return;
+  }
+
+  const { error } = await supabaseAdmin.rpc("credit_balance", {
+    p_user_id: userId,
+    p_amount_cents: amountCents,
+    p_type: "topup",
+    p_stripe_session_id: session.id,
+    p_note: "card top-up",
+  });
+
+  if (error) throw error;
+  console.log(`[Topup] Credited ${amountCents}c to ${userId} (session ${session.id}).`);
+}
+
+/* Spend balance on one product selection and deliver its key through the existing
+   fulfillment pipeline. Atomic debit; refunds automatically if delivery fails. */
+async function fulfillFromBalance(member, selection, amountCents, note) {
+  const { data: order, error: orderError } = await supabaseAdmin
+    .from("orders")
+    .insert({
+      user_id: member.id,
+      product_slug: selection.inventorySlug,
+      status: "pending",
+      amount_cents: amountCents,
+    })
+    .select("id, user_id, product_slug, status, fulfilled_at")
+    .single();
+
+  if (orderError) throw orderError;
+
+  const { data: newBalance, error: spendError } = await supabaseAdmin.rpc("spend_balance", {
+    p_user_id: member.id,
+    p_amount_cents: amountCents,
+    p_order_id: order.id,
+    p_note: note || selection.product.name,
+  });
+
+  if (spendError) {
+    await supabaseAdmin.from("orders").update({ status: "canceled" }).eq("id", order.id);
+    const insufficient = String(spendError.message || "").includes("insufficient_balance");
+    const err = new Error(insufficient ? "insufficient_balance" : "balance_error");
+    err.code = insufficient ? "insufficient_balance" : "balance_error";
+    throw err;
+  }
+
+  const syntheticSession = {
+    id: `balance_${order.id}`,
+    payment_intent: null,
+    metadata: { orderId: order.id },
+  };
+
+  let result;
+  try {
+    result = await syncPaidOrder(syntheticSession);
+  } catch (deliverError) {
+    await supabaseAdmin.rpc("credit_balance", {
+      p_user_id: member.id,
+      p_amount_cents: amountCents,
+      p_type: "refund",
+      p_stripe_session_id: null,
+      p_note: `refund: delivery error order ${order.id}`,
+    });
+    throw deliverError;
+  }
+
+  if (!result?.keyValue) {
+    /* No key was delivered (out of stock) — refund so we never keep money with no product. */
+    await supabaseAdmin.rpc("credit_balance", {
+      p_user_id: member.id,
+      p_amount_cents: amountCents,
+      p_type: "refund",
+      p_stripe_session_id: null,
+      p_note: `refund: no stock order ${order.id}`,
+    });
+    const err = new Error("out_of_stock");
+    err.code = "out_of_stock";
+    throw err;
+  }
+
+  return { orderId: order.id, keyValue: result.keyValue, balanceCents: newBalance };
+}
+
 app.post(
   "/api/stripe-webhook",
   express.raw({ type: "application/json" }),
@@ -5678,8 +5789,13 @@ app.post(
 
     try {
       if (event.type === "checkout.session.completed") {
-        await syncPaidOrder(event.data.object);
-        console.log("Checkout completed:", event.data.object.id);
+        const completedSession = event.data.object;
+        if (completedSession.metadata?.type === "balance_topup") {
+          await creditTopupFromStripe(completedSession);
+        } else {
+          await syncPaidOrder(completedSession);
+        }
+        console.log("Checkout completed:", completedSession.id);
       }
 
       return res.json({ received: true });
@@ -5728,6 +5844,43 @@ app.post("/api/nowpayments-ipn", express.json(), async (req, res) => {
   if (!order_id) {
     console.error("[NOWPayments IPN] No order_id in IPN body, cannot fulfill");
     return res.status(400).send("Missing order_id.");
+  }
+
+  /* ── Balance top-up (order_id encoded as "topup:<userId>:<amountCents>") ──
+     Handled before the product-order amount check below, since a top-up has no
+     row in the orders table. The HMAC signature above already proves the IPN is
+     genuine and the order_id was set server-side, so userId can't be forged. */
+  if (String(order_id).startsWith("topup:")) {
+    const [, topupUserId, topupAmountRaw] = String(order_id).split(":");
+    const topupAmountCents = parseInt(topupAmountRaw, 10);
+    const paidUsd = Number(price_amount);
+    const currencyOk = String(price_currency || "").toLowerCase() === "usd";
+
+    if (!topupUserId || !Number.isInteger(topupAmountCents) || topupAmountCents <= 0) {
+      console.error(`[NOWPayments IPN] Malformed top-up order_id: ${order_id}`);
+      return res.json({ received: true });
+    }
+
+    if (!currencyOk || !Number.isFinite(paidUsd) || paidUsd < topupAmountCents / 100 - 0.01) {
+      console.error(`[NOWPayments IPN] Top-up underpaid for ${topupUserId}: expected $${topupAmountCents / 100}, IPN says ${price_amount} ${price_currency}. Not crediting.`);
+      return res.json({ received: true, held: true });
+    }
+
+    try {
+      const { error: creditError } = await supabaseAdmin.rpc("credit_balance", {
+        p_user_id: topupUserId,
+        p_amount_cents: topupAmountCents,
+        p_type: "topup",
+        p_stripe_session_id: `crypto_${payment_id}`,
+        p_note: "crypto top-up",
+      });
+      if (creditError) throw creditError;
+      console.log(`[NOWPayments IPN] Top-up credited ${topupAmountCents}c to ${topupUserId}.`);
+      return res.json({ received: true });
+    } catch (creditErr) {
+      console.error("[NOWPayments IPN] Top-up credit error:", creditErr.message);
+      return res.status(500).send("Top-up credit failed.");
+    }
   }
 
   /* ── Underpayment check: verify the invoice amount matches what the order
@@ -8616,6 +8769,280 @@ app.post("/api/create-crypto-checkout", async (req, res) => {
     console.error("[Crypto checkout]", error.message);
     return res.status(500).json({ error: "Unable to create crypto checkout." });
   }
+});
+
+/* ── Wallet: current balance ── */
+app.get("/api/balance", async (req, res) => {
+  let member;
+  try {
+    member = await getAuthenticatedUser(req, res);
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to verify your member session.",
+    });
+  }
+
+  try {
+    const balanceCents = await getUserBalanceCents(member.id);
+    return res.json({ balanceCents });
+  } catch (error) {
+    return res.status(500).json({ error: "Unable to load your balance." });
+  }
+});
+
+/* ── Wallet: add funds via Stripe card ── */
+app.post("/api/balance/create-topup-session", async (req, res) => {
+  if (!stripe) {
+    return res.status(500).json({ error: "Stripe is not configured yet." });
+  }
+
+  let member;
+  try {
+    member = await getAuthenticatedUser(req, res);
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to verify your member session.",
+    });
+  }
+
+  const amountCents = normalizeTopupAmount(req.body?.amountCents);
+  if (!amountCents) {
+    return res.status(400).json({ error: "Enter an amount between $1 and $500." });
+  }
+
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      line_items: [{
+        price_data: {
+          currency: "usd",
+          unit_amount: amountCents,
+          product_data: { name: "Halo Cheats balance top-up" },
+        },
+        quantity: 1,
+      }],
+      customer_email: member.email || undefined,
+      payment_intent_data: {
+        receipt_email: member.email || undefined,
+      },
+      success_url: `${baseUrl}/account/?topup=success`,
+      cancel_url: `${baseUrl}/account/?topup=cancel`,
+      metadata: {
+        type: "balance_topup",
+        userId: member.id,
+        amountCents: String(amountCents),
+      },
+    });
+
+    return res.json({ url: session.url });
+  } catch (error) {
+    return res.status(500).json({ error: "Unable to start the top-up." });
+  }
+});
+
+/* ── Wallet: add funds via crypto (NOWPayments) ── */
+app.post("/api/balance/create-topup-crypto", async (req, res) => {
+  if (!isConfiguredValue(nowpaymentsApiKey)) {
+    return res.status(500).json({ error: "Crypto payments are not configured yet." });
+  }
+
+  let member;
+  try {
+    member = await getAuthenticatedUser(req, res);
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to verify your member session.",
+    });
+  }
+
+  const amountCents = normalizeTopupAmount(req.body?.amountCents);
+  if (!amountCents) {
+    return res.status(400).json({ error: "Enter an amount between $1 and $500." });
+  }
+
+  try {
+    const invoiceRes = await fetch("https://api.nowpayments.io/v1/invoice", {
+      method: "POST",
+      headers: {
+        "x-api-key": nowpaymentsApiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        price_amount: amountCents / 100,
+        price_currency: "usd",
+        order_id: `topup:${member.id}:${amountCents}`,
+        order_description: "Halo Cheats balance top-up",
+        ipn_callback_url: `${baseUrl}/api/nowpayments-ipn`,
+        success_url: `${baseUrl}/account/?topup=success`,
+        cancel_url: `${baseUrl}/account/?topup=cancel`,
+      }),
+    });
+
+    const invoiceData = await invoiceRes.json();
+    if (!invoiceRes.ok || !invoiceData.invoice_url) {
+      console.error("[Topup crypto] Invoice creation failed:", invoiceData);
+      throw new Error("Failed to create crypto top-up.");
+    }
+
+    return res.json({ url: invoiceData.invoice_url });
+  } catch (error) {
+    return res.status(500).json({ error: "Unable to start the crypto top-up." });
+  }
+});
+
+/* ── Wallet: buy a single product with balance ── */
+app.post("/api/purchase-with-balance", async (req, res) => {
+  if (process.env.PURCHASES_DISABLED === "true") {
+    return res.status(503).json({ error: "Purchases are temporarily unavailable. Please try again later." });
+  }
+
+  if (storeSoldOut) {
+    return res.status(409).json({ error: "This product is temporarily out of stock. Please check back soon." });
+  }
+
+  let member;
+  try {
+    member = await getAuthenticatedUser(req, res);
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to verify your member session.",
+    });
+  }
+
+  const { productSlug, variantSlug, promoCode } = req.body ?? {};
+  const selection = getProductSelection(productSlug, variantSlug);
+
+  if (!selection) {
+    return res.status(404).json({ error: "Product variant not found." });
+  }
+
+  if (selection.product.available === false) {
+    return res.status(409).json({ error: "This product is currently unavailable." });
+  }
+
+  if (selection.product.checkoutBlocked || selection.variant.checkoutBlocked) {
+    return res.status(409).json({
+      error:
+        selection.variant.checkoutError ||
+        selection.product.checkoutError ||
+        "Error occurred. Please open a ticket in Discord so support can help you with this item.",
+    });
+  }
+
+  const baseAmount = selection.variant.amount;
+  if (!baseAmount || baseAmount <= 0) {
+    return res.status(400).json({ error: "Invalid price for this variant." });
+  }
+
+  const promo = await applyPromoAsync(baseAmount, promoCode);
+  const amountCents = promo.amount;
+
+  const keyAvailable = await isKeyAvailableAsync(selection.inventorySlug);
+  if (!keyAvailable) {
+    return res.status(409).json({ error: "This product is temporarily out of stock. Your balance was not charged." });
+  }
+
+  try {
+    const result = await fulfillFromBalance(
+      member,
+      selection,
+      amountCents,
+      promo.code ? `${selection.product.name} (${promo.code})` : selection.product.name
+    );
+    if (promo.code) consumePromo(promo.code, promo.source);
+    return res.json({ ok: true, keyValue: result.keyValue, balanceCents: result.balanceCents });
+  } catch (error) {
+    if (error.code === "insufficient_balance") {
+      const balanceCents = await getUserBalanceCents(member.id);
+      return res.status(402).json({ error: "Not enough balance. Add funds first.", code: "insufficient_balance", balanceCents });
+    }
+    if (error.code === "out_of_stock") {
+      return res.status(409).json({ error: "This product is out of stock. Your balance was not charged." });
+    }
+    console.error("[purchase-with-balance]", error.message);
+    return res.status(500).json({ error: "Unable to complete the purchase." });
+  }
+});
+
+/* ── Wallet: check out a whole cart with balance ── */
+app.post("/api/cart/checkout", async (req, res) => {
+  if (process.env.PURCHASES_DISABLED === "true") {
+    return res.status(503).json({ error: "Purchases are temporarily unavailable. Please try again later." });
+  }
+
+  if (storeSoldOut) {
+    return res.status(409).json({ error: "The store is temporarily out of stock. Please check back soon." });
+  }
+
+  let member;
+  try {
+    member = await getAuthenticatedUser(req, res);
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to verify your member session.",
+    });
+  }
+
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (!items.length) {
+    return res.status(400).json({ error: "Your cart is empty." });
+  }
+
+  const selections = [];
+  let totalCents = 0;
+
+  for (const item of items) {
+    const selection = getProductSelection(item?.productSlug, item?.variantSlug);
+    if (!selection) {
+      return res.status(404).json({ error: "A product in your cart is no longer available." });
+    }
+    if (
+      selection.product.available === false ||
+      selection.product.checkoutBlocked ||
+      selection.variant.checkoutBlocked
+    ) {
+      return res.status(409).json({ error: `${selection.product.name} is currently unavailable.` });
+    }
+    const quantity = Math.min(Math.max(parseInt(item?.quantity, 10) || 1, 1), 10);
+    for (let i = 0; i < quantity; i += 1) {
+      selections.push(selection);
+      totalCents += selection.variant.amount;
+    }
+  }
+
+  if (selections.length > 20) {
+    return res.status(400).json({ error: "Too many items in your cart (max 20)." });
+  }
+
+  const balanceCents = await getUserBalanceCents(member.id);
+  if (balanceCents < totalCents) {
+    return res.status(402).json({
+      error: "Not enough balance for your cart. Add funds first.",
+      code: "insufficient_balance",
+      needCents: totalCents,
+      balanceCents,
+    });
+  }
+
+  const delivered = [];
+  try {
+    for (const selection of selections) {
+      const result = await fulfillFromBalance(member, selection, selection.variant.amount, selection.product.name);
+      delivered.push({ product: selection.product.name, keyValue: result.keyValue });
+    }
+  } catch (error) {
+    const currentBalance = await getUserBalanceCents(member.id);
+    if (error.code === "insufficient_balance") {
+      return res.status(402).json({ error: "Your balance ran out during checkout.", delivered, balanceCents: currentBalance });
+    }
+    if (error.code === "out_of_stock") {
+      return res.status(207).json({ error: "Some items were out of stock and were not charged.", delivered, balanceCents: currentBalance });
+    }
+    console.error("[cart checkout]", error.message);
+    return res.status(500).json({ error: "Checkout error.", delivered, balanceCents: currentBalance });
+  }
+
+  return res.json({ ok: true, delivered, balanceCents: await getUserBalanceCents(member.id) });
 });
 
 /* ── AI Natural Language Product Search ── */
