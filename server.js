@@ -1566,7 +1566,32 @@ if (isConfiguredValue(discordBotToken)) {
           supabaseAdmin.from("ai_questions_log").insert({ source: "discord", question: cleanMessage }).then(() => {}).catch(() => {});
         }
 
-        const aiReply = await generateDiscordAIReply(cleanMessage, message.author.tag);
+        /* Pull recent channel messages so the bot remembers the conversation
+           and won't repeat itself. */
+        let aiHistory = [];
+        try {
+          const fetched = await message.channel.messages.fetch({ limit: 12 });
+          const chronological = [...fetched.values()].reverse();
+          const botId = discordBot.user?.id;
+          for (const m of chronological) {
+            if (m.id === message.id) continue; // current message added separately
+            if (m._filtered) continue;
+            const isBotMsg = botId && m.author.id === botId;
+            if (m.author.bot && !isBotMsg) continue; // ignore other bots
+            let text = String(m.content || "");
+            if (botId) {
+              text = text.replace(new RegExp(`<@!?${botId}>`, "g"), "");
+            }
+            text = text.replace(/^<@!?\d+>\s*/, "").trim(); // strip leading mention
+            if (!text) continue;
+            aiHistory.push({ role: isBotMsg ? "assistant" : "user", content: text.slice(0, 1200) });
+          }
+          aiHistory = aiHistory.slice(-8);
+        } catch (histErr) {
+          console.error("[Discord AI] History fetch error:", histErr.message);
+        }
+
+        const aiReply = await generateDiscordAIReply(cleanMessage, message.author.tag, aiHistory);
         const mention = `<@${message.author.id}>`;
 
         if (aiReply) {
@@ -10042,10 +10067,21 @@ SECURITY:
 
 /* ── AI: Discord bot reply ── */
 
-async function generateDiscordAIReply(userMessage, authorTag) {
+async function generateDiscordAIReply(userMessage, authorTag, history = []) {
   if (!groqApiKey) return null;
 
   const systemPrompt = `You are the AI bot for Halo Mods. Answer questions in Discord. Be casual and chill.
+
+CONVERSATION MEMORY (read this first):
+- The recent messages in this channel are provided as chat history. READ them and stay on topic.
+- Do NOT repeat the same reply. If you already told them something (a link, a step, "open a ticket"), do NOT say it again — move the conversation forward or ask a clarifying question.
+- If they say the last thing didn't work ("still not there", "not working", "??"), give a DIFFERENT next step, don't paste the same answer.
+- If they just say thanks/ok/nvm, reply with a short one-liner and stop.
+
+ANSWER, DON'T DEFLECT:
+- For questions about keys, orders, account, setup, buying, or payments, you DO know the answer — help them using SITE PAGES and TROUBLESHOOTING below. Never say "not sure about that" for these.
+- Example: "i can't find my key" -> "Your keys are on your account page: <https://halocheats.cc/account> under Your Keys. If it's not there, link your Discord in account settings so keys DM to you, or open a ticket."
+- Only fall back to "open a ticket" when it's genuinely something you can't resolve (billing dispute, HWID reset, a bug).
 
 SITE PAGES (IMPORTANT: always wrap URLs in < > so Discord makes them clickable):
 - Buy products: <https://halocheats.cc/products>
@@ -10142,10 +10178,18 @@ SECURITY:
         body: JSON.stringify({
           model: groqModel,
           reasoning_effort: "low",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userMessage },
-          ],
+          messages: (() => {
+            const convo = [
+              { role: "system", content: systemPrompt },
+              ...(Array.isArray(history) ? history : []),
+            ];
+            const last = convo[convo.length - 1];
+            const current = String(userMessage).slice(0, 1500);
+            if (!last || last.role !== "user" || last.content !== current) {
+              convo.push({ role: "user", content: current });
+            }
+            return convo;
+          })(),
           temperature: 0.5,
           max_tokens: 512,
         }),
