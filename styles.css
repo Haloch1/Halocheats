@@ -1986,9 +1986,6 @@ a {
 
 .catalog-category-card.is-tilting .category-card-art img,
 .catalog-category-card.is-returning .category-card-art img {
-  transform:
-    scale(1.08)
-    translate3d(var(--image-shift-x, 0px), var(--image-shift-y, 0px), 0);
   filter: saturate(1.04) contrast(1.02);
 }
 
@@ -2733,7 +2730,6 @@ a {
 }
 
 .catalog-category-card:hover:not(.is-tilting):not(.is-returning) .category-card-art img {
-  transform: scale(1.05);
   filter: saturate(1.04) contrast(1.02);
 }
 
