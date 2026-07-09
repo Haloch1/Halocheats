@@ -65,6 +65,16 @@ const groqApiKey = process.env.GROQ_API_KEY || "";
 /* Groq model. llama-3.1-8b-instant was deprecated by Groq on 2026-06-17;
    openai/gpt-oss-20b is the recommended replacement. Override via env if needed. */
 const groqModel = process.env.GROQ_MODEL || "openai/gpt-oss-20b";
+/* Vision model for Discord image moderation (graphic content + scams).
+   Llama 4 Scout accepts image input on Groq. Override via env if needed. */
+const groqVisionModel = process.env.GROQ_VISION_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct";
+/* Optional: restrict image moderation to specific channel IDs (comma-separated).
+   Empty = moderate images posted in every text channel. */
+const imageModerationChannels = (process.env.DISCORD_IMAGE_MODERATION_CHANNELS || "")
+  .split(",").map((s) => s.trim()).filter(Boolean);
+/* Optional: channel IDs to skip for image moderation (e.g. staff-only channels). */
+const imageModerationExcludeChannels = (process.env.DISCORD_IMAGE_MODERATION_EXCLUDE || "")
+  .split(",").map((s) => s.trim()).filter(Boolean);
 const discordBotToken = process.env.DISCORD_BOT_TOKEN || "";
 const discordClientId = process.env.DISCORD_CLIENT_ID || "";
 const discordClientSecret = process.env.DISCORD_CLIENT_SECRET || "";
@@ -1765,6 +1775,78 @@ if (isConfiguredValue(discordBotToken)) {
       }
     } catch (err) {
       console.error("[Discord review moderation]", err.message);
+    }
+  });
+
+  /* ── Discord image moderation: graphic/NSFW content + scam/phishing imagery ──
+     Scans images posted by non-staff members. Flagged posts are deleted and a
+     notice is sent to the security channel. Fails open (never deletes on error). */
+  discordBot.on("messageCreate", async (message) => {
+    try {
+      if (!groqApiKey) return;
+      if (message.author?.bot || message._filtered) return;
+      if (!message.guild) return; // ignore DMs
+      if (BOT_ADMINS.includes(message.author.id)) return; // staff post freely
+
+      const channelId = message.channel?.id;
+      if (imageModerationExcludeChannels.includes(channelId)) return;
+      if (imageModerationChannels.length && !imageModerationChannels.includes(channelId)) return;
+
+      /* Collect image URLs from attachments (uploaded images) and image embeds. */
+      const imageUrls = [];
+      message.attachments?.forEach((att) => {
+        const ct = att.contentType || "";
+        const looksImage = ct.startsWith("image/") ||
+          /\.(png|jpe?g|gif|webp|bmp)(\?|$)/i.test(att.name || att.url || "");
+        /* Groq caps URL image input at 20MB — skip larger (fail open). */
+        if (looksImage && (!att.size || att.size <= 19 * 1024 * 1024)) {
+          imageUrls.push(att.url);
+        }
+      });
+      (message.embeds || []).forEach((emb) => {
+        const url = emb.image?.url || emb.thumbnail?.url;
+        if (url) imageUrls.push(url);
+      });
+
+      if (!imageUrls.length) return;
+
+      /* Cross-instance dedupe (namespaced so it won't collide with the AI-reply
+         claim on the same message id). If the claim fails, another instance is
+         handling this message during a deploy overlap — skip. */
+      if (supabaseAdmin) {
+        const { error: claimError } = await supabaseAdmin
+          .from("processed_discord_messages")
+          .insert({ message_id: `imgmod:${message.id}` });
+        if (claimError) return;
+      }
+
+      for (const url of imageUrls.slice(0, 4)) {
+        const result = await moderateImage(url);
+        if (!result.flagged) continue;
+
+        const username = message.author.displayName || message.author.username;
+        const channelName = message.channel?.name ? `#${message.channel.name}` : channelId;
+        const snippet = (message.content || "").slice(0, 300) || "(no text)";
+        const categoryLabel = result.category === "scam"
+          ? "Scam / phishing"
+          : result.category === "graphic"
+            ? "Graphic / NSFW"
+            : (result.category || "flagged");
+
+        try { await message.delete(); } catch {}
+
+        await sendSecurityDiscordAlert("🚫 Image auto-removed by AI moderation", [
+          { name: "User", value: `${username} (<@${message.author.id}>)`, inline: false },
+          { name: "Channel", value: String(channelName), inline: true },
+          { name: "Category", value: categoryLabel, inline: true },
+          { name: "Reason", value: (result.reason || "Flagged by classifier").slice(0, 500), inline: false },
+          { name: "Message text", value: snippet, inline: false },
+          { name: "Image (from deleted message)", value: url.slice(0, 900), inline: false },
+        ]);
+        return; // one flagged image is enough
+      }
+    } catch (err) {
+      console.error("[Discord image moderation]", err.message);
     }
   });
 
@@ -10564,6 +10646,81 @@ async function moderateReviewWithAI(reviewText, productName, rating) {
 }
 
 /* ── Reviews: AI moderate + rate (for Discord channel reviews) ── */
+
+/* Vision moderation for Discord images. Flags graphic/NSFW content AND scam
+   imagery (fake crypto/casino giveaways, celebrity/brand impersonation promos,
+   promo-code bonus lures, fake winnings or "withdrawal successful" screenshots,
+   phishing/fake login pages, shady betting/crypto sites). Fails open on error
+   so a moderation outage never deletes legitimate posts. */
+async function moderateImage(imageUrl) {
+  if (!groqApiKey) return { flagged: false };
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${groqApiKey}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: groqVisionModel,
+        temperature: 0,
+        max_tokens: 300,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `You are an image safety and scam classifier for a gaming community Discord. Decide whether the image should be removed.
+
+Set "flagged": true if the image contains ANY of:
+- GRAPHIC / NSFW: nudity, sexual content, gore, graphic violence, self-harm, or shocking/disturbing imagery.
+- SCAM / FRAUD: fake giveaways or "free money", crypto/casino/gambling promotions, celebrity or brand impersonation used to push a website (e.g. a fake MrBeast post), promo-code or bonus lures, fake winnings or fake "withdrawal successful"/"payment received" screenshots, phishing or fake login pages, or links to shady betting/casino/crypto sites.
+
+Do NOT flag normal gaming screenshots, game menus or cheat UIs, ordinary memes, product screenshots, or regular chat images.
+
+Respond with ONLY JSON:
+{"flagged": false}
+or
+{"flagged": true, "category": "graphic" | "scam", "reason": "short reason"}`,
+              },
+              { type: "image_url", image_url: { url: imageUrl } },
+            ],
+          },
+        ],
+      }),
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      console.error("[Image moderation] Groq error:", response.status);
+      return { flagged: false };
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || "{}";
+    let parsed;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      const match = content.match(/\{[\s\S]*\}/);
+      parsed = match ? JSON.parse(match[0]) : {};
+    }
+    return {
+      flagged: Boolean(parsed.flagged),
+      category: parsed.category || "unknown",
+      reason: parsed.reason || "",
+    };
+  } catch (error) {
+    console.error("[Image moderation] error:", error.message);
+    return { flagged: false };
+  }
+}
 
 async function moderateAndRateReview(reviewText) {
   if (!groqApiKey) {
