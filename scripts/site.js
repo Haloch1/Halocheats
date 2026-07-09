@@ -196,17 +196,8 @@ function initCardTilt() {
 
     clearReturnTimer(card);
     clearEnterTimer(card);
-    /* Start the return from the exact transform string we set in updateCard
-       (perspective()/translate3d()/rotateX()/rotateY()), NOT the resolved
-       matrix3d from getComputedStyle. Interpolating a matrix against a function
-       list forces a decompose/recompose that pops — this keeps it component-wise
-       and smooth. */
-    const startTransform =
-      card.style.transform || window.getComputedStyle(card).transform;
     card.classList.add("is-returning");
     card.classList.remove("is-tilting");
-    card.style.removeProperty("transform");
-    card.style.removeProperty("transition");
     card.style.setProperty("--content-shift-x", "0px");
     card.style.setProperty("--content-shift-y", "0px");
     card.style.setProperty("--image-shift-x", "0px");
@@ -214,39 +205,15 @@ function initCardTilt() {
     card.style.setProperty("--glare-x", "50%");
     card.style.setProperty("--glare-y", "50%");
 
-    if (card.animate && startTransform !== "none") {
-      const animation = card.animate(
-        [
-          { transform: startTransform },
-          {
-            transform:
-              "perspective(900px) translate3d(0, 0, 0) rotateX(0deg) rotateY(0deg)",
-          },
-        ],
-        {
-          duration: 420,
-          easing: "cubic-bezier(0.22, 1, 0.36, 1)",
-          fill: "forwards",
-        },
-      );
-
-      returnAnimations.set(card, animation);
-      animation.finished
-        .then(() => {
-          if (returnAnimations.get(card) !== animation) {
-            return;
-          }
-
-          card.classList.remove("is-returning");
-          card.style.removeProperty("transition");
-          card.style.removeProperty("transform");
-          clearCardVars(card);
-          animation.cancel();
-          returnAnimations.delete(card);
-        })
-        .catch(() => {});
-      return;
-    }
+    /* Ease the inline transform back to flat with a single plain CSS transition.
+       The current value (set by updateCard) and the target are both
+       perspective()/translate3d()/rotate() strings with identical primitives,
+       so the browser interpolates each component smoothly. No Web Animations,
+       no matrix decompose, nothing to hand off or pop at the end. */
+    card.style.transition =
+      "transform 460ms cubic-bezier(0.22, 1, 0.36, 1), border-color 300ms ease, box-shadow 300ms ease";
+    card.style.transform =
+      "perspective(900px) translate3d(0, 0, 0) rotateX(0deg) rotateY(0deg)";
 
     returnTimers.set(
       card,
@@ -256,7 +223,7 @@ function initCardTilt() {
         card.style.removeProperty("transform");
         clearCardVars(card);
         returnTimers.delete(card);
-      }, 440),
+      }, 500),
     );
   };
 
