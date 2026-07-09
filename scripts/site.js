@@ -157,6 +157,8 @@ function initCardTilt() {
     card.style.removeProperty("--tilt-y");
     card.style.removeProperty("--content-shift-x");
     card.style.removeProperty("--content-shift-y");
+    card.style.removeProperty("--image-shift-x");
+    card.style.removeProperty("--image-shift-y");
     card.style.removeProperty("--glare-x");
     card.style.removeProperty("--glare-y");
   };
@@ -180,6 +182,8 @@ function initCardTilt() {
     card.style.setProperty("--tilt-y", "0deg");
     card.style.setProperty("--content-shift-x", "0px");
     card.style.setProperty("--content-shift-y", "0px");
+    card.style.setProperty("--image-shift-x", "0px");
+    card.style.setProperty("--image-shift-y", "0px");
     card.style.setProperty("--glare-x", "50%");
     card.style.setProperty("--glare-y", "50%");
     card.classList.remove("is-tilting");
@@ -208,6 +212,8 @@ function initCardTilt() {
     const tiltY = (x - 0.5) * maxTilt * tiltScale;
     const shiftX = (0.5 - x) * maxShift * shiftScale;
     const shiftY = (0.5 - y) * maxShift * shiftScale;
+    const imageShiftX = (x - 0.5) * maxShift * 1.8 * shiftScale;
+    const imageShiftY = (y - 0.5) * maxShift * 1.8 * shiftScale;
 
     clearResetTimer(card);
     card.classList.remove("is-returning");
@@ -215,6 +221,8 @@ function initCardTilt() {
     card.style.setProperty("--tilt-y", `${tiltY.toFixed(2)}deg`);
     card.style.setProperty("--content-shift-x", `${shiftX.toFixed(2)}px`);
     card.style.setProperty("--content-shift-y", `${shiftY.toFixed(2)}px`);
+    card.style.setProperty("--image-shift-x", `${imageShiftX.toFixed(2)}px`);
+    card.style.setProperty("--image-shift-y", `${imageShiftY.toFixed(2)}px`);
     card.style.setProperty("--glare-x", `${(x * 100).toFixed(1)}%`);
     card.style.setProperty("--glare-y", `${(y * 100).toFixed(1)}%`);
     card.classList.add("is-tilting");
