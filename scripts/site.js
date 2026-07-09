@@ -147,8 +147,8 @@ function initCardTilt() {
   const selector = ".product-card, .catalog-category-card";
   const tiltScale = reducedMotion ? 0.65 : 1;
   const shiftScale = reducedMotion ? 0 : 1;
-  const maxTilt = 18;
-  const maxShift = 5;
+  const maxTilt = 9;
+  const maxShift = 4;
   let activeCard = null;
 
   const clearCardVars = (card) => {
