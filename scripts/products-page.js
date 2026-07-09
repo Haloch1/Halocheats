@@ -300,7 +300,6 @@ function renderCategoryCard(category, products) {
     </div>
     <div class="category-card-body">
       <span class="category-card-count">${products.length} ${products.length === 1 ? "product" : "products"}</span>
-      <button class="button button-primary" type="button">View</button>
     </div>
   `;
   return card;
