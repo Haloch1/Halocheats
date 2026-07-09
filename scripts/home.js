@@ -41,7 +41,7 @@ async function loadPopularProducts() {
           statusClass = "pulse";
         }
         return `
-          <article class="product-card reveal${product.featured ? " featured" : ""}" data-delay="${20 + i * 70}">
+          <article class="product-card popular-tilt-card reveal${product.featured ? " featured" : ""}" data-delay="${20 + i * 70}">
             <div class="product-top">
               <span class="product-status ${statusClass}">${statusText}</span>
               <span class="product-tier">${escapeHtmlHome(product.tier || "Popular")}</span>
