@@ -2882,11 +2882,11 @@ a {
 
 .variant-dialog {
   position: relative;
-  width: min(100%, 1040px);
+  width: min(100%, 1120px);
   max-height: none;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(300px, 0.78fr) minmax(500px, 1.22fr);
+  grid-template-columns: minmax(340px, 0.86fr) minmax(520px, 1.14fr);
   gap: 0;
   padding: 0;
   border-radius: 24px;
@@ -2917,9 +2917,9 @@ a {
 .variant-art {
   position: relative;
   display: grid;
-  place-items: end center;
-  min-height: 520px;
-  padding: 26px 22px 14px;
+  place-items: center;
+  min-height: 0;
+  padding: 30px;
   overflow: hidden;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   background:
@@ -2943,7 +2943,7 @@ a {
 }
 
 .variant-art::after {
-  inset: 20px 20px 14px;
+  inset: 22px;
   border-radius: 26px;
   border: 1px solid rgba(111, 159, 255, 0.12);
   box-shadow:
@@ -2954,18 +2954,18 @@ a {
 .variant-product-image {
   position: relative;
   z-index: 1;
-  width: min(100%, 430px);
-  max-height: 470px;
+  width: min(100%, 390px);
+  max-height: min(62vh, 540px);
   height: auto;
   object-fit: contain;
-  object-position: center bottom;
+  object-position: center;
   display: block;
   filter: drop-shadow(0 26px 60px rgba(0, 0, 0, 0.42));
-  transform: translateY(14px);
+  transform: none;
 }
 
 .variant-details {
-  padding: 34px 30px 30px;
+  padding: 30px 28px 28px;
   overflow-y: auto;
 }
 
@@ -3045,7 +3045,7 @@ a {
 
 .variant-label {
   display: block;
-  margin: 18px 0 10px;
+  margin: 14px 0 9px;
   font-weight: 800;
 }
 
@@ -3060,7 +3060,7 @@ a {
   justify-content: space-between;
   gap: 16px;
   width: 100%;
-  padding: 16px 18px;
+  padding: 13px 16px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background:
@@ -3109,8 +3109,8 @@ a {
 
 .variant-option em {
   margin-left: auto;
-  min-width: 98px;
-  padding: 9px 12px;
+  min-width: 84px;
+  padding: 8px 10px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.06);
   color: #f1f1f1;
@@ -3155,17 +3155,18 @@ a {
 .variant-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 24px;
+  gap: 10px;
+  margin-top: 18px;
 }
 
-.variant-actions [data-variant-close] {
+.variant-actions [data-variant-close],
+.variant-actions .cvp-cancel {
   display: none !important;
 }
 
 .variant-actions .button {
   width: 100%;
-  min-height: 56px;
+  min-height: 50px;
   justify-content: center;
 }
 
@@ -3173,7 +3174,7 @@ a {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 8px;
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 .variant-promo-form label {
@@ -3190,7 +3191,7 @@ a {
 
 .variant-promo-form input {
   width: 100%;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.045);
@@ -3220,8 +3221,8 @@ a {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  margin-top: 16px;
-  padding: 12px 14px;
+  margin-top: 14px;
+  padding: 11px 14px;
   border-radius: 12px;
   border: 1px solid rgba(255, 48, 48, 0.4);
   background: rgba(255, 48, 48, 0.065);
@@ -3259,7 +3260,7 @@ a {
 
 .variant-confidence {
   margin-top: 18px;
-  padding: 18px;
+  padding: 16px;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background:
@@ -3272,7 +3273,7 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .variant-confidence-head strong {
@@ -3290,14 +3291,14 @@ a {
 .variant-confidence-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px 12px;
 }
 
 .variant-confidence-grid div {
-  padding: 14px;
+  padding: 0;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border: 0;
+  background: transparent;
 }
 
 .variant-confidence-grid strong {
@@ -3310,14 +3311,14 @@ a {
 .variant-confidence-grid small {
   display: block;
   color: var(--muted);
-  line-height: 1.6;
+  line-height: 1.45;
 }
 
 .variant-confidence-note {
   margin: 12px 0 0;
   color: #cfb7b7;
-  font-size: 0.9rem;
-  line-height: 1.65;
+  font-size: 0.86rem;
+  line-height: 1.55;
 }
 
 .variant-extra {
