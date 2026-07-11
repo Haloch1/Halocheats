@@ -8,7 +8,7 @@ import Stripe from "stripe";
 import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ChannelType, PermissionFlagsBits } from "discord.js";
+import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ChannelType, PermissionFlagsBits, AttachmentBuilder } from "discord.js";
 import { products as _initialProducts } from "./data/products.js";
 import { google } from "googleapis";
 // OAuth 1.0a signing handled with native crypto
@@ -2220,6 +2220,7 @@ if (isConfiguredValue(discordBotToken)) {
         let ticketTopic = channel.name;
         let ticketCreator = "Unknown";
         let ticketCreatorUsername = "Unknown";
+        let ticketCreatorAvatar = null;
         let ticketCreatedAt = null;
         const firstEmbed = allMessages.find(m => m.author.bot && m.embeds.length > 0 && m.embeds[0].title?.startsWith("Ticket:"));
         if (firstEmbed) {
@@ -2232,6 +2233,7 @@ if (isConfiguredValue(discordBotToken)) {
             try {
               const creatorMember = await interaction.guild.members.fetch(creatorId);
               ticketCreatorUsername = creatorMember.user.username;
+              ticketCreatorAvatar = creatorMember.user.displayAvatarURL({ extension: "png", size: 128 });
             } catch { ticketCreatorUsername = creatorId; }
           }
           ticketCreatedAt = firstEmbed.createdTimestamp;
@@ -2266,26 +2268,112 @@ if (isConfiguredValue(discordBotToken)) {
         const duration = ticketCreatedAt ? Math.floor((Date.now() - ticketCreatedAt) / 60000) : 0;
         const durationText = duration < 60 ? `${duration}m` : `${Math.floor(duration / 60)}h ${duration % 60}m`;
 
-        // Send transcript to the transcript channel
+        // Send transcript to the transcript channel (summary + the actual conversation + styled HTML file)
         try {
           const transcriptChannel = await discordBot.channels.fetch("1520561826520105040");
           if (transcriptChannel) {
-            await transcriptChannel.send({
-              embeds: [{
-                title: `📝 Ticket Closed: ${ticketTopic}`,
-                color: 0x7c3aed,
-                fields: [
-                  { name: "Opened by", value: ticketCreator, inline: true },
-                  { name: "Closed by", value: `<@${interaction.user.id}>`, inline: true },
-                  { name: "Duration", value: durationText, inline: true },
-                  { name: "Messages", value: `${messageCount}`, inline: true },
-                ],
-                timestamp: new Date().toISOString(),
-                footer: { text: "Halo Mods Tickets" },
-              }],
-            });
+            const esc = (s = "") => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+            const roleOf = (m) => {
+              if (m.author.bot) return "bot";
+              if (BOT_ADMINS.includes(m.author.id) || m.member?.permissions?.has?.(PermissionFlagsBits.ManageChannels)) return "staff";
+              return "user";
+            };
+
+            /* ── styled HTML transcript (full record, nothing truncated) ── */
+            const rows = msgDataForCount.map((m) => {
+              const role = roleOf(m);
+              const body = m.author.bot && m.embeds.length > 0 ? (m.embeds[0].description || "") : (m.content || "");
+              const badge = role === "bot" ? '<span class="b bot">BOT</span>' : role === "staff" ? '<span class="b staff">STAFF</span>' : "";
+              const when = new Date(m.createdTimestamp).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+              const files = m.attachments?.size
+                ? `<div class="att">${[...m.attachments.values()].map((a) => `<a href="${esc(a.url)}">📎 ${esc(a.name)}</a>`).join(" ")}</div>`
+                : "";
+              return `<div class="msg"><img class="av" src="${esc(m.author.displayAvatarURL({ extension: "png", size: 64 }))}" alt=""><div class="bd"><div class="hd"><span class="nm ${role}">${esc(m.author.username)}</span>${badge}<span class="tm">${esc(when)}</span></div><div class="ct">${esc(body).replace(/\n/g, "<br>")}</div>${files}</div></div>`;
+            }).join("\n");
+
+            const html = `<!doctype html><html><head><meta charset="utf-8"><title>Transcript — ${esc(ticketTopic)}</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0b0b0e;color:#e6e6ea;font:15px/1.55 "Segoe UI",Inter,system-ui,sans-serif}
+.wrap{max-width:860px;margin:0 auto;padding:32px 20px 60px}
+.hero{border:1px solid #26262d;border-left:4px solid #e11d2a;background:linear-gradient(180deg,#141419,#0f0f13);border-radius:12px;padding:22px 24px;margin-bottom:26px}
+.hero h1{margin:0 0 4px;font-size:22px;letter-spacing:.3px}
+.hero .sub{color:#8b8b96;font-size:13px}
+.meta{display:flex;flex-wrap:wrap;gap:22px;margin-top:16px}
+.meta div{font-size:12px;color:#8b8b96}.meta b{display:block;color:#e6e6ea;font-size:14px;margin-top:2px;font-weight:600}
+.msg{display:flex;gap:12px;padding:10px 8px;border-radius:8px}
+.msg:hover{background:#131317}
+.av{width:38px;height:38px;border-radius:50%;flex:0 0 38px;background:#222}
+.hd{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.nm{font-weight:600}.nm.staff{color:#ff4d55}.nm.bot{color:#8b9dff}.nm.user{color:#e6e6ea}
+.b{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;letter-spacing:.5px}
+.b.staff{background:#e11d2a;color:#fff}.b.bot{background:#3a3f52;color:#c9cfe8}
+.tm{color:#6f6f7a;font-size:11px}
+.ct{color:#cfcfd6;white-space:pre-wrap;word-break:break-word}
+.att a{color:#ff8a90;font-size:13px;text-decoration:none}
+.ft{margin-top:30px;text-align:center;color:#5a5a64;font-size:12px}
+</style></head><body><div class="wrap">
+<div class="hero"><h1>${esc(ticketTopic)}</h1><div class="sub">#${esc(channel.name)}</div>
+<div class="meta">
+<div>Opened by<b>${esc(ticketCreatorUsername)}</b></div>
+<div>Closed by<b>${esc(interaction.user.username)}</b></div>
+<div>Duration<b>${esc(durationText)}</b></div>
+<div>Messages<b>${messageCount}</b></div>
+</div></div>
+${rows || '<div class="ct">No messages.</div>'}
+<div class="ft">Halo Cheats · Ticket Transcript · ${esc(new Date().toLocaleString("en-US"))}</div>
+</div></body></html>`;
+
+            const file = new AttachmentBuilder(Buffer.from(html, "utf8"), { name: `transcript-${channel.name}.html` });
+
+            /* ── summary header ── */
+            const header = {
+              title: `📝 Ticket Closed — ${ticketTopic}`,
+              color: 0xe11d2a,
+              fields: [
+                { name: "Opened by", value: ticketCreator, inline: true },
+                { name: "Closed by", value: `<@${interaction.user.id}>`, inline: true },
+                { name: "Duration", value: durationText, inline: true },
+                { name: "Messages", value: `${messageCount}`, inline: true },
+                { name: "Channel", value: `#${channel.name}`, inline: true },
+              ],
+              timestamp: new Date().toISOString(),
+              footer: { text: "Halo Cheats • Ticket Transcript" },
+            };
+            if (ticketCreatorAvatar) header.thumbnail = { url: ticketCreatorAvatar };
+            await transcriptChannel.send({ embeds: [header], files: [file] });
+
+            /* ── the actual conversation, chunked to fit embed limits ── */
+            const chunks = [];
+            let cur = "";
+            for (const block of (transcriptLines || "").split("\n\n")) {
+              const piece = block.length > 3800 ? block.slice(0, 3800) + " …" : block;
+              if (!piece) continue;
+              if ((cur + "\n\n" + piece).length > 3800) { if (cur) chunks.push(cur); cur = piece; }
+              else cur = cur ? cur + "\n\n" + piece : piece;
+            }
+            if (cur) chunks.push(cur);
+
+            const MAX = 5;
+            if (!chunks.length) {
+              await transcriptChannel.send({ embeds: [{ description: "_No messages were sent in this ticket._", color: 0x2b2d31 }] });
+            } else {
+              const shown = chunks.slice(0, MAX);
+              for (let i = 0; i < shown.length; i++) {
+                await transcriptChannel.send({
+                  embeds: [{
+                    description: shown[i],
+                    color: 0x2b2d31,
+                    footer: { text: chunks.length > MAX
+                      ? `Transcript ${i + 1}/${MAX} — truncated, full log in the attached HTML`
+                      : `Transcript ${i + 1}/${chunks.length}` },
+                  }],
+                });
+              }
+            }
           }
-        } catch {}
+        } catch (tErr) {
+          console.error("[Ticket transcript post]", tErr.message);
+        }
 
         // Save transcript to Supabase
         if (supabaseAdmin) {
