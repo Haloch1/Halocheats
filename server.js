@@ -11495,87 +11495,6 @@ pageRoutes.forEach((relativePath, route) => {
   });
 });
 
-/* ── Key expiry reminders (day, week & month keys) ── */
-const KEY_DURATIONS = {
-  day: 24 * 60 * 60 * 1000,
-  "three-day": 3 * 24 * 60 * 60 * 1000,
-  week: 7 * 24 * 60 * 60 * 1000,
-  month: 30 * 24 * 60 * 60 * 1000,
-};
-const EXPIRY_REMINDER_HOURS = {
-  day: 5,       // remind 5 hours before for day keys
-  "three-day": 12, // remind 12 hours before for 3-day keys
-  week: 24,     // remind 24 hours before for week keys
-  month: 24,    // remind 24 hours before for month keys
-};
-const expiryRemindedSet = new Set(); // track order IDs already reminded
-
-async function checkKeyExpiry() {
-  if (!supabaseAdmin || !discordBot) return;
-
-  try {
-    const { data: orders, error } = await supabaseAdmin
-      .from("orders")
-      .select("id, user_id, product_slug, fulfilled_at")
-      .eq("status", "fulfilled")
-      .not("fulfilled_at", "is", null);
-
-    if (error || !orders) return;
-
-    const now = Date.now();
-
-    for (const order of orders) {
-      if (expiryRemindedSet.has(order.id)) continue;
-
-      // Check if this is a day, three-day, week, or month key
-      let durationType = null;
-      if (order.product_slug.endsWith("-day")) durationType = "day";
-      else if (order.product_slug.endsWith("-three-day")) durationType = "three-day";
-      else if (order.product_slug.endsWith("-week")) durationType = "week";
-      else if (order.product_slug.endsWith("-month")) durationType = "month";
-      else continue;
-
-      const duration = KEY_DURATIONS[durationType];
-      const reminderHours = EXPIRY_REMINDER_HOURS[durationType];
-      const fulfilledAt = new Date(order.fulfilled_at).getTime();
-      const expiresAt = fulfilledAt + duration;
-      const reminderAt = expiresAt - reminderHours * 60 * 60 * 1000;
-
-      if (now >= reminderAt && now < expiresAt) {
-        expiryRemindedSet.add(order.id);
-
-        const { data: userData } = await supabaseAdmin.auth.admin.getUserById(order.user_id);
-        const discordId = discordIdOf(userData?.user);
-        if (!discordId) continue;
-
-        const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
-        const productLabel = catalogItem?.name || order.product_slug;
-        const hoursLeft = Math.max(1, Math.round((expiresAt - now) / (60 * 60 * 1000)));
-
-        const expiryUser = await discordBot.users.fetch(discordId);
-        await expiryUser.send({
-          embeds: [{
-            title: "Key Expiring Soon",
-            description: `Your key for **${productLabel}** expires in about **${hoursLeft} hour${hoursLeft === 1 ? "" : "s"}**.`,
-            color: 0xffa500,
-            fields: [
-              { name: "Renew", value: `[Browse Products](${baseUrl}/products/)`, inline: false },
-            ],
-            footer: { text: "Halo Mods" },
-          }],
-        });
-        console.log(`[Expiry] Reminded user ${order.user_id} about ${order.product_slug}`);
-      }
-    }
-  } catch (err) {
-    console.error("[Expiry check]", err.message);
-  }
-}
-
-// Run every 15 minutes (day keys need tighter checks)
-setInterval(checkKeyExpiry, 15 * 60 * 1000);
-setTimeout(checkKeyExpiry, 15_000); // first check 15s after boot
-
 /* ── Memory cleanup: prune Maps/Sets that grow unbounded ── */
 setInterval(() => {
   const now = Date.now();
@@ -11603,9 +11522,6 @@ setInterval(() => {
   for (const [key, ts] of slashCooldownByUser) {
     if (now - ts > 60 * 1000) slashCooldownByUser.delete(key);
   }
-
-  // expiryRemindedSet: clear every 24h cycle (set refills on next check)
-  if (expiryRemindedSet.size > 10000) expiryRemindedSet.clear();
 }, 10 * 60 * 1000); // every 10 minutes
 
 /* ── Restock notifications: DM/email members who asked to be notified ── */
