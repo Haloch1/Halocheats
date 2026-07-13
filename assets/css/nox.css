@@ -3396,3 +3396,9 @@ body.cart-open .cart-drawer { transform: translateX(0); }
 .pop-flag { z-index: 2; }
 
 .pg-stage .cover-img { border-radius: inherit; }
+
+/* [hidden] must win over the display rules on these — otherwise the empty-cart
+   message renders on top of a full cart and the footer lingers when it empties. */
+.cart-empty[hidden],
+.cart-foot[hidden],
+.cart-body[hidden] { display: none !important; }

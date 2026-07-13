@@ -6,6 +6,7 @@
 
 import { initNoxUI, revealIn, spotlight } from "./nox-shared.js";
 import { initNoxCart } from "./nox-cart.js";
+import { initNoxAnalytics } from "./nox-analytics.js";
 import { getCurrentSession } from "./supabase-client.js";
 import {
   loadCatalog,
@@ -94,27 +95,35 @@ function variantsHTML() {
     .join("");
 }
 
+const tick =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+
+function bullets(items) {
+  return items.map((item) => `<li>${tick}${escapeHtml(item)}</li>`).join("");
+}
+
 function featuresHTML() {
-  const groups =
-    product.featureGroups?.length > 0
-      ? product.featureGroups
-      : product.features?.length
-        ? [{ title: "Features", items: product.features }]
-        : [];
+  let groups = (product.featureGroups || []).filter(Boolean);
+
+  /* Some products list featureGroups as title-only entries with no items
+     (e.g. "Memory aim", "Aimbot smoothing"). Rendering those as full blocks
+     would produce a stack of big empty panels, so treat a set of title-only
+     groups as a plain feature list instead. */
+  const withItems = groups.filter((group) => (group.items || []).length > 0);
+  if (groups.length && !withItems.length) {
+    groups = [{ title: "Features", items: groups.map((group) => group.title).filter(Boolean) }];
+  } else if (withItems.length) {
+    groups = withItems;
+  }
+
+  if (!groups.length && product.features?.length) {
+    groups = [{ title: "Features", items: product.features }];
+  }
 
   if (!groups.length) return "";
 
   const blocks = groups
     .map((group, index) => {
-      const items = (group.items || group.features || [])
-        .map(
-          (item) =>
-            `<li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>${escapeHtml(
-              item
-            )}</li>`
-        )
-        .join("");
-
       return `
         <article class="feat-block reveal ${index % 2 ? "d1" : ""}">
           <div class="feat-visual ${product.cover}">
@@ -126,7 +135,7 @@ function featuresHTML() {
           <div class="feat-detail">
             <h3>${escapeHtml(group.title || "Features")}</h3>
             ${group.description ? `<p>${escapeHtml(group.description)}</p>` : ""}
-            <ul class="feat-list">${items}</ul>
+            <ul class="feat-list">${bullets(group.items || [])}</ul>
           </div>
         </article>`;
     })
@@ -570,4 +579,5 @@ async function boot() {
 
 initNoxUI();
 initNoxCart();
+initNoxAnalytics();
 boot();

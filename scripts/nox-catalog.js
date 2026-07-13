@@ -87,11 +87,20 @@ export function productStatus(product) {
   return "undetected";
 }
 
-/* Cheapest live variant price, for "from $x" labels. */
+/* Cheapest price a customer can ACTUALLY buy, for "from $x" labels.
+   Key stock is dynamic: if the 1-day key sells out, quoting its price would
+   advertise a number the server will never honour. So only consider variants
+   that are checkoutReady, and fall back to the full list only when nothing is
+   buyable (the card is showing "Out of stock" at that point anyway). */
 export function fromPrice(product) {
-  const prices = (product.variants || [])
+  const variants = product.variants || [];
+  const buyable = variants.filter((variant) => variant.checkoutReady);
+  const pool = buyable.length ? buyable : variants;
+
+  const prices = pool
     .map((variant) => parseMoney(variant.priceDisplay))
     .filter((price) => price > 0);
+
   if (!prices.length) return 0;
   return Math.min(...prices);
 }
@@ -160,6 +169,20 @@ export function collections(products) {
       status: anyLive ? "undetected" : anyUpdating ? "updating" : "down",
     };
   });
+}
+
+/* A collection has no artwork of its own, so borrow the cover of the first
+   product in it that has one (preferring a featured, in-stock product). */
+export function collectionCover(group) {
+  const ranked = [...group.products].sort((a, b) => {
+    const score = (p) => (p.featured ? 2 : 0) + (p.status === "undetected" ? 1 : 0);
+    return score(b) - score(a);
+  });
+  const withArt = ranked.find((product) => artworkFor(product.slug));
+  if (!withArt) return `<span class="cover-mono">${monogram(group.category)}</span>`;
+  return `<img class="cover-img" src="${artworkFor(
+    withArt.slug
+  )}" alt="" loading="lazy" decoding="async">`;
 }
 
 export function byCategorySlug(products, slug) {

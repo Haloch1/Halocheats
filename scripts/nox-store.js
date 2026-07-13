@@ -3,7 +3,8 @@
 
 import { initNoxUI, revealIn, spotlight } from "./nox-shared.js";
 import { initNoxCart } from "./nox-cart.js";
-import { loadCatalog, collections, monogram, statusLabel } from "./nox-catalog.js";
+import { initNoxAnalytics } from "./nox-analytics.js";
+import { loadCatalog, collections, statusLabel, collectionCover } from "./nox-catalog.js";
 
 function escapeHtml(value) {
   const div = document.createElement("div");
@@ -50,7 +51,7 @@ function cardHTML(group, index) {
     <article class="game-card collection reveal ${delay}${popular}"
              data-cat="${group.slug}" data-name="${escapeHtml(group.category.toLowerCase())}">
       <a class="game-cover ${group.cover}" href="${href}">
-        <span class="cover-mono">${monogram(group.category)}</span>
+        ${collectionCover(group)}
         ${index === 0 ? '<span class="popular-flag">★ Most popular</span>' : ""}
         <span class="status-badge ${status.cls}"><i></i>${status.label}</span>
         <div>
@@ -119,4 +120,5 @@ searchEl?.addEventListener("input", () => {
 
 initNoxUI();
 initNoxCart();
+initNoxAnalytics();
 render();

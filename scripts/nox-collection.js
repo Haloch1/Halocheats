@@ -3,6 +3,7 @@
 
 import { initNoxUI, revealIn, spotlight } from "./nox-shared.js";
 import { initNoxCart } from "./nox-cart.js";
+import { initNoxAnalytics } from "./nox-analytics.js";
 import {
   loadCatalog,
   byCategorySlug,
@@ -10,6 +11,7 @@ import {
   monogram,
   statusLabel,
   money,
+  coverInner,
 } from "./nox-catalog.js";
 
 function escapeHtml(value) {
@@ -48,7 +50,7 @@ function cardHTML(product, index) {
       product.name.toLowerCase()
     )}">
       <a class="prod-cover ${product.cover}" href="${href}">
-        <span class="cover-mono">${monogram(product.name)}</span>
+        ${coverInner(product)}
         ${ribbon}
         <span class="cover-tag">${escapeHtml(
           (product.category || "").split(" ")[0].toUpperCase()
@@ -122,4 +124,5 @@ searchEl?.addEventListener("input", () => {
 
 initNoxUI();
 initNoxCart();
+initNoxAnalytics();
 render();

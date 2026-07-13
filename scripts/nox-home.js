@@ -3,7 +3,8 @@
 
 import { initNoxUI, revealIn, spotlight } from "./nox-shared.js";
 import { initNoxCart } from "./nox-cart.js";
-import { loadCatalog, collections, monogram, statusLabel } from "./nox-catalog.js";
+import { initNoxAnalytics } from "./nox-analytics.js";
+import { loadCatalog, collections, statusLabel, collectionCover } from "./nox-catalog.js";
 
 function escapeHtml(value) {
   const div = document.createElement("div");
@@ -54,7 +55,7 @@ async function renderPopular() {
           <a class="pop-card reveal ${delay}${featured} ${group.cover}" href="/collection/?game=${group.slug}">
             ${flag}
             <span class="status-badge ${status.cls}"><i></i>${status.label}</span>
-            <span class="cover-mono">${monogram(group.category)}</span>
+            ${collectionCover(group)}
             <span class="cover-shine"></span>
             <div class="pop-info">
               <h3>${escapeHtml(group.category)}</h3>
@@ -131,5 +132,6 @@ async function renderReviews() {
 
 initNoxUI();
 initNoxCart();
+initNoxAnalytics();
 renderPopular();
 renderReviews();

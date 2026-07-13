@@ -11,6 +11,13 @@ const CART_KEY = "hc_cart";
 
 let balanceCents = 0;
 
+/* Cart contents come out of localStorage, so never trust them in innerHTML. */
+function escapeHtml(value) {
+  const div = document.createElement("div");
+  div.textContent = String(value ?? "");
+  return div.innerHTML;
+}
+
 function readCart() {
   try {
     const raw = JSON.parse(localStorage.getItem(CART_KEY) || "[]");
@@ -164,6 +171,7 @@ export function initNoxCart() {
 
     if (!hasItems) {
       listEl.innerHTML = "";
+      if (totalEl) totalEl.textContent = money(0);
       return;
     }
 
@@ -171,12 +179,12 @@ export function initNoxCart() {
       .map(
         (item, index) => `
         <div class="cart-item">
-          <span class="cart-item-cover ${item.cover || "cover-generic"}">${monogram(
-            item.productName
-          )}</span>
+          <span class="cart-item-cover ${escapeHtml(
+            item.cover || "cover-generic"
+          )}">${monogram(item.productName)}</span>
           <div class="cart-item-main">
-            <div class="cart-item-name">${item.productName}</div>
-            <div class="cart-item-variant">${item.variantName}</div>
+            <div class="cart-item-name">${escapeHtml(item.productName)}</div>
+            <div class="cart-item-variant">${escapeHtml(item.variantName)}</div>
             <div class="cart-qty">
               <button type="button" data-qty="-1" data-index="${index}" aria-label="Decrease quantity">−</button>
               <span>${Number(item.qty) || 1}</span>
