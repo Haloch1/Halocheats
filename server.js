@@ -103,6 +103,70 @@ const discordSupportChannelId = process.env.DISCORD_SUPPORT_CHANNEL_ID || "";
 const discordRepeatBuyerRoleId = process.env.DISCORD_REPEAT_BUYER_ROLE_ID || "1522380441997545603";
 const OWNER_ID = "1327675126338293921";
 const BOT_ADMINS = [OWNER_ID, "1191199172448239639", "1517857266936709141"]; // madebyedits
+/* Dynamically granted bot admins (loaded from Supabase table `bot_admins`).
+   BOT_ADMINS above are permanent owners and can never be revoked. */
+let dynamicAdmins = [];
+let siteMaintenanceOn = false;
+const isBotAdmin = (id) => BOT_ADMINS.includes(id) || dynamicAdmins.includes(id);
+const isOwner = (id) => BOT_ADMINS.includes(id);
+
+/* Self-contained dark maintenance page served when the site is locked down. */
+const MAINTENANCE_HTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NoxCheats — Maintenance</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #0a0a0f; color: #e5e7eb; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; padding: 24px; }
+  .card { max-width: 480px; }
+  h1 { font-size: 1.9rem; margin: 0 0 12px; color: #fff; }
+  p { font-size: 1rem; line-height: 1.6; color: #9ca3af; margin: 0 0 8px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #f43f5e; margin-right: 8px; box-shadow: 0 0 12px #f43f5e; }
+  .tag { margin-top: 20px; font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: #6b7280; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1><span class="dot"></span>Down for maintenance</h1>
+    <p>NoxCheats is temporarily offline while we make some improvements.</p>
+    <p>We'll be back shortly — thanks for your patience.</p>
+    <div class="tag">NoxCheats</div>
+  </div>
+</body>
+</html>`;
+
+/* Load dynamic bot admins + site maintenance flag from Supabase at startup. */
+async function loadBotAccess() {
+  if (!supabaseAdmin) return;
+  try {
+    const { data: admins } = await supabaseAdmin.from("bot_admins").select("discord_id");
+    dynamicAdmins = Array.isArray(admins) ? admins.map((r) => r.discord_id).filter(Boolean) : [];
+    const { data: setting } = await supabaseAdmin
+      .from("bot_settings")
+      .select("value")
+      .eq("key", "site_maintenance")
+      .maybeSingle();
+    siteMaintenanceOn = setting?.value === "true";
+    console.log(`[bot access] ${dynamicAdmins.length} granted admin(s); maintenance=${siteMaintenanceOn}`);
+  } catch (err) {
+    console.error("[loadBotAccess]", err?.message || err);
+  }
+}
+
+/* Flip the site maintenance kill-switch and persist it to Supabase. */
+async function setMaintenance(on) {
+  siteMaintenanceOn = !!on;
+  if (!supabaseAdmin) return;
+  try {
+    await supabaseAdmin
+      .from("bot_settings")
+      .upsert({ key: "site_maintenance", value: on ? "true" : "false" }, { onConflict: "key" });
+  } catch (err) {
+    console.error("[setMaintenance]", err?.message || err);
+  }
+}
 const pendingSchedules = new Map(); // id -> { timer, title, postAt }
 const resellerBuyLocks = new Map(); // inventorySlug -> Promise that resolves when buy completes
 const ticketCooldownByUser = new Map(); // Discord userId -> ts of last ticket created
@@ -1205,6 +1269,9 @@ if (isConfiguredValue(discordBotToken)) {
   discordBot.once("ready", async () => {
     console.log(`[Discord] Bot logged in as ${discordBot.user.tag}`);
 
+    // Load dynamically-granted bot admins + site maintenance flag
+    loadBotAccess();
+
     // Set bot activity and bio
     discordBot.user.setPresence({
       activities: [{ name: "NoxCheats", type: 0 }], // type 0 = Playing
@@ -1398,6 +1465,27 @@ if (isConfiguredValue(discordBotToken)) {
         new SlashCommandBuilder()
           .setName("transcriptdemo")
           .setDescription("Post an example ticket transcript to the transcript channel (admin only)"),
+        new SlashCommandBuilder()
+          .setName("status")
+          .setDescription("Show site + bot status (admin only)"),
+        new SlashCommandBuilder()
+          .setName("perms")
+          .setDescription("List bot owners and granted staff (admin only)"),
+        new SlashCommandBuilder()
+          .setName("grant")
+          .setDescription("Grant a user bot admin access (owner only)")
+          .addUserOption(o => o.setName("user").setDescription("User to grant bot access").setRequired(true)),
+        new SlashCommandBuilder()
+          .setName("revoke")
+          .setDescription("Revoke a user's bot admin access (owner only)")
+          .addUserOption(o => o.setName("user").setDescription("User to revoke bot access").setRequired(true)),
+        new SlashCommandBuilder()
+          .setName("lockdown")
+          .setDescription("Take the whole site offline for maintenance (admin only)")
+          .addStringOption(o => o.setName("confirm").setDescription("Confirm taking the site offline").setRequired(true).addChoices({ name: "yes — take the whole site offline", value: "yes" })),
+        new SlashCommandBuilder()
+          .setName("online")
+          .setDescription("Bring the site back online (owner only)"),
       ].map((c) => c.toJSON());
 
       if (discordGuildId) {
@@ -2115,6 +2203,7 @@ ${rows || '<div class="ct">No messages.</div>'}
   }
 
   discordBot.on("interactionCreate", async (interaction) => {
+    try {
     // ── Autocomplete for /addkey ──
     if (interaction.isAutocomplete && interaction.isAutocomplete() && (interaction.commandName === "addkey" || interaction.commandName === "price")) {
       const focused = interaction.options.getFocused(true);
@@ -2278,7 +2367,7 @@ ${rows || '<div class="ct">No messages.</div>'}
     /* ── Close ticket button — generate transcript and delete channel ── */
     if (interaction.isButton && interaction.isButton() && interaction.customId === "close_ticket") {
       // Only allow admins and staff to close
-      const isAdmin = BOT_ADMINS.includes(interaction.user.id) || (interaction.member && interaction.member.permissions.has(PermissionFlagsBits.ManageChannels));
+      const isAdmin = isBotAdmin(interaction.user.id) || (interaction.member && interaction.member.permissions.has(PermissionFlagsBits.ManageChannels));
       const isStaffRole = interaction.member && interaction.member.roles.cache.has("1517998063036268705");
 
       if (!isAdmin && !isStaffRole) {
@@ -2434,7 +2523,7 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /transcriptdemo — post an example transcript so you can see the format ── */
     if (interaction.commandName === "transcriptdemo") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admins only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -2594,9 +2683,134 @@ ${rows || '<div class="ct">No messages.</div>'}
       }
     }
 
+    /* ── /status — site + bot status (admin only) ── */
+    if (interaction.commandName === "status") {
+      if (!isBotAdmin(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const siteLine = siteMaintenanceOn ? "🔴 maintenance (offline)" : "🟢 live";
+      const adminCount = new Set([...BOT_ADMINS, ...dynamicAdmins]).size;
+      return interaction.reply({
+        embeds: [{
+          title: "Bot Status",
+          color: siteMaintenanceOn ? 0xff4444 : 0x22c55e,
+          description: `Site: ${siteLine}\nBot admins: ${adminCount}`,
+          footer: { text: "NoxCheats" },
+        }],
+        ephemeral: true,
+      });
+    }
+
+    /* ── /perms — list owners + granted staff (admin only) ── */
+    if (interaction.commandName === "perms") {
+      if (!isBotAdmin(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const owners = BOT_ADMINS.map((id) => `<@${id}>`).join("\n") || "—";
+      const granted = dynamicAdmins.length ? dynamicAdmins.map((id) => `<@${id}>`).join("\n") : "—";
+      return interaction.reply({
+        embeds: [{
+          title: "Bot Permissions",
+          color: 0x5865f2,
+          fields: [
+            { name: "Owners", value: owners, inline: false },
+            { name: "Granted", value: granted, inline: false },
+          ],
+          footer: { text: "NoxCheats" },
+        }],
+        ephemeral: true,
+      });
+    }
+
+    /* ── /grant — give a user bot admin access (owner only) ── */
+    if (interaction.commandName === "grant") {
+      if (!isOwner(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      const targetId = interaction.options.getUser("user")?.id;
+      if (!targetId) {
+        return interaction.editReply({ embeds: [{ description: "No user provided.", color: 0xff4444 }] });
+      }
+      if (BOT_ADMINS.includes(targetId)) {
+        return interaction.editReply({ embeds: [{ description: `<@${targetId}> is already a permanent owner.`, color: 0xffa500 }] });
+      }
+      try {
+        if (supabaseAdmin) {
+          await supabaseAdmin
+            .from("bot_admins")
+            .upsert({ discord_id: targetId, added_by: interaction.user.id }, { onConflict: "discord_id" });
+        }
+        if (!dynamicAdmins.includes(targetId)) dynamicAdmins.push(targetId);
+        return interaction.editReply({ embeds: [{ description: `✅ <@${targetId}> can now use the bot.`, color: 0x22c55e }] });
+      } catch (err) {
+        console.error("[/grant]", err?.message || err);
+        return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /revoke — remove a user's bot admin access (owner only) ── */
+    if (interaction.commandName === "revoke") {
+      if (!isOwner(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      const targetId = interaction.options.getUser("user")?.id;
+      if (!targetId) {
+        return interaction.editReply({ embeds: [{ description: "No user provided.", color: 0xff4444 }] });
+      }
+      if (BOT_ADMINS.includes(targetId)) {
+        return interaction.editReply({ embeds: [{ description: `<@${targetId}> is a permanent owner, can't revoke.`, color: 0xffa500 }] });
+      }
+      try {
+        if (supabaseAdmin) {
+          await supabaseAdmin.from("bot_admins").delete().eq("discord_id", targetId);
+        }
+        dynamicAdmins = dynamicAdmins.filter((id) => id !== targetId);
+        return interaction.editReply({ embeds: [{ description: `🚫 <@${targetId}> can no longer use the bot.`, color: 0x22c55e }] });
+      } catch (err) {
+        console.error("[/revoke]", err?.message || err);
+        return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /lockdown — take the whole site offline (admin only) ── */
+    if (interaction.commandName === "lockdown") {
+      if (!isBotAdmin(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      const confirm = interaction.options.getString("confirm");
+      if (confirm !== "yes") {
+        return interaction.editReply({ embeds: [{ description: "Usage: `/lockdown confirm:yes` to take the whole site offline.", color: 0xffa500 }] });
+      }
+      try {
+        await setMaintenance(true);
+        return interaction.editReply({ embeds: [{ description: "🔴 Site locked down. Only an owner can bring it back with /online.", color: 0xff4444 }] });
+      } catch (err) {
+        console.error("[/lockdown]", err?.message || err);
+        return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /online — bring the site back online (owner only) ── */
+    if (interaction.commandName === "online") {
+      if (!isOwner(interaction.user.id)) {
+        return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        await setMaintenance(false);
+        return interaction.editReply({ embeds: [{ description: "🟢 Site is back online.", color: 0x22c55e }] });
+      } catch (err) {
+        console.error("[/online]", err?.message || err);
+        return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
+      }
+    }
+
     /* ── /help — list commands (admin ones shown only to admins) ── */
     if (interaction.commandName === "help") {
-      const isAdmin = BOT_ADMINS.includes(interaction.user.id);
+      const isAdmin = isBotAdmin(interaction.user.id);
       const publicCmds = [
         "`/key` — view your active license keys",
         "`/account` — your orders, keys, and expiry",
@@ -2728,7 +2942,7 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /leaderboard — owner: top customers by completed orders ── */
     if (interaction.commandName === "leaderboard") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -2793,7 +3007,7 @@ ${rows || '<div class="ct">No messages.</div>'}
     // OWNER_ID defined at top level
 
     if (interaction.commandName === "revenue") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -2859,7 +3073,7 @@ ${rows || '<div class="ct">No messages.</div>'}
     }
 
     if (interaction.commandName === "addkey") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -2919,7 +3133,7 @@ ${rows || '<div class="ct">No messages.</div>'}
     }
 
     if (interaction.commandName === "lookup") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -2996,7 +3210,7 @@ ${rows || '<div class="ct">No messages.</div>'}
     }
 
     if (interaction.commandName === "ban") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -3029,7 +3243,7 @@ ${rows || '<div class="ct">No messages.</div>'}
     }
 
     if (interaction.commandName === "say") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
       try {
@@ -3043,7 +3257,7 @@ ${rows || '<div class="ct">No messages.</div>'}
     }
 
     if (interaction.commandName === "keys") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -3093,7 +3307,7 @@ ${rows || '<div class="ct">No messages.</div>'}
     }
 
     if (interaction.commandName === "usekey") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -3148,7 +3362,7 @@ ${rows || '<div class="ct">No messages.</div>'}
     }
 
     if (interaction.commandName === "reinvite-all") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
       if (!discordGuildId || !supabaseAdmin) {
@@ -3233,9 +3447,11 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /ticket-panel — post a ticket panel embed (owner only) ── */
     if (interaction.commandName === "ticket-panel") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
+
+      await interaction.deferReply({ ephemeral: true });
 
       await interaction.channel.send({
         embeds: [{
@@ -3256,13 +3472,15 @@ ${rows || '<div class="ct">No messages.</div>'}
         }],
       });
 
-      return interaction.reply({ embeds: [{ description: "Ticket panel posted.", color: 0x22c55e }], ephemeral: true });
+      return interaction.editReply({ embeds: [{ description: "Ticket panel posted.", color: 0x22c55e }] });
     }
 
     if (interaction.commandName === "verify-panel") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
+
+      await interaction.deferReply({ ephemeral: true });
 
       const verifyUrl = `${baseUrl}/verify`;
       await interaction.channel.send({
@@ -3284,12 +3502,12 @@ ${rows || '<div class="ct">No messages.</div>'}
         }],
       });
 
-      return interaction.reply({ embeds: [{ description: "Verify panel posted.", color: 0x22c55e }], ephemeral: true });
+      return interaction.editReply({ embeds: [{ description: "Verify panel posted.", color: 0x22c55e }] });
     }
 
     /* ── /stats — Upload statistics + platform analytics ── */
     if (interaction.commandName === "stats") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -3661,7 +3879,7 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /customers — Recent purchases ── */
     if (interaction.commandName === "customers") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -3714,7 +3932,7 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /maskpurchases — Shorten buyer names to 4 letters on all proof posts ── */
     if (interaction.commandName === "maskpurchases") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -3766,7 +3984,7 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /announce — Styled announcement embed ── */
     if (interaction.commandName === "announce") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
       }
 
@@ -3794,7 +4012,7 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /payments — Post the accepted payment methods embed ── */
     if (interaction.commandName === "payments") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
       }
       const channel = interaction.options.getChannel("channel")
@@ -3824,9 +4042,10 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /invest — Log a reseller balance deposit ── */
     if (interaction.commandName === "invest") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
+      await interaction.deferReply({ ephemeral: true });
       const dollars = interaction.options.getNumber("amount");
       const note = interaction.options.getString("note") || "";
       const cents = Math.round(dollars * 100);
@@ -3834,7 +4053,7 @@ ${rows || '<div class="ct">No messages.</div>'}
         await supabaseAdmin.from("reseller_investments").insert({ amount_cents: cents, note });
         const { data: all } = await supabaseAdmin.from("reseller_investments").select("amount_cents");
         const totalCents = (all || []).reduce((s, r) => s + r.amount_cents, 0);
-        return interaction.reply({
+        return interaction.editReply({
           embeds: [{
             title: "Investment Logged",
             color: 0x00c851,
@@ -3847,13 +4066,13 @@ ${rows || '<div class="ct">No messages.</div>'}
           ephemeral: true,
         });
       } catch (err) {
-        return interaction.reply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }], ephemeral: true });
+        return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
       }
     }
 
     /* ── /investments — View total invested vs profit ── */
     if (interaction.commandName === "investments") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -3915,18 +4134,19 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /uninvest — Remove an investment log entry ── */
     if (interaction.commandName === "uninvest") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
+      await interaction.deferReply({ ephemeral: true });
       const entryId = interaction.options.getInteger("id");
       try {
         const { data: row } = await supabaseAdmin.from("reseller_investments").select("*").eq("id", entryId).single();
         if (!row) {
-          return interaction.reply({ embeds: [{ description: `No investment with ID ${entryId}.`, color: 0xff4444 }], ephemeral: true });
+          return interaction.editReply({ embeds: [{ description: `No investment with ID ${entryId}.`, color: 0xff4444 }] });
         }
         await supabaseAdmin.from("reseller_investments").delete().eq("id", entryId);
         const fmt = (c) => `$${(c / 100).toFixed(2)}`;
-        return interaction.reply({
+        return interaction.editReply({
           embeds: [{
             title: "Investment Removed",
             color: 0xffa500,
@@ -3935,15 +4155,17 @@ ${rows || '<div class="ct">No messages.</div>'}
           ephemeral: true,
         });
       } catch (err) {
-        return interaction.reply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }], ephemeral: true });
+        return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
       }
     }
 
     /* ── /uptime — Server health ── */
     if (interaction.commandName === "uptime") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
       }
+
+      await interaction.deferReply({ ephemeral: true });
 
       const uptimeMs = process.uptime() * 1000;
       const hrs = Math.floor(uptimeMs / 3600000);
@@ -3969,7 +4191,7 @@ ${rows || '<div class="ct">No messages.</div>'}
 
       const guildMemberCount = discordBot?.guilds?.cache?.get(discordGuildId)?.memberCount || "?";
 
-      return interaction.reply({
+      return interaction.editReply({
         embeds: [{
           title: "Server Health",
           color: 0x22c55e,
@@ -3990,7 +4212,7 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /userinfo — Lookup user by email ── */
     if (interaction.commandName === "userinfo") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -4066,14 +4288,15 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /togglebot — enable/disable AI auto-answers in a channel ── */
     if (interaction.commandName === "togglebot") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
       }
       const channel = interaction.options.getChannel("channel") || interaction.channel;
       const channelId = channel.id;
       const willMute = !aiMutedChannels.has(channelId);
+      await interaction.deferReply({ ephemeral: true });
       await setChannelAiMuted(channelId, willMute, interaction.user.id);
-      return interaction.reply({
+      return interaction.editReply({
         embeds: [{
           title: willMute ? "AI answers disabled" : "AI answers enabled",
           description: willMute
@@ -4170,7 +4393,7 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /accountstats — Owner lookup of any user's full stats ── */
     if (interaction.commandName === "accountstats") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Owner only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -4292,7 +4515,7 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /pendingschedules — List pending scheduled uploads ── */
     if (interaction.commandName === "pendingschedules") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
       }
       if (pendingSchedules.size === 0) {
@@ -4307,7 +4530,7 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /cancelschedule — Cancel a pending scheduled upload ── */
     if (interaction.commandName === "cancelschedule") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
       }
       const id = interaction.options.getString("id");
@@ -4330,7 +4553,7 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /testorder — Test order fulfillment flow without buying ── */
     if (interaction.commandName === "testorder") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
@@ -4455,7 +4678,7 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /schedule — Schedule a video upload for later ── */
     if (interaction.commandName === "schedule") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
       }
 
@@ -4774,7 +4997,7 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── /upload — YouTube (direct) + all socials (PostPeer → Upload-Post fallback) ── */
     if (interaction.commandName === "upload") {
-      if (!BOT_ADMINS.includes(interaction.user.id)) {
+      if (!isBotAdmin(interaction.user.id)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
       }
 
@@ -5176,6 +5399,14 @@ ${rows || '<div class="ct">No messages.</div>'}
           await ch.send({ embeds: [{ title: "Today's Uploads", description: lines.join("\n"), color: 0x22c55e, footer: { text: "NoxCheats" } }] });
         } catch {}
       }, 5 * 60 * 1000);
+    }
+    } catch (err) {
+      console.error("[interaction]", err);
+      if (interaction.isAutocomplete?.()) return;
+      try {
+        if (interaction.deferred || interaction.replied) await interaction.followUp({ content: "⚠️ Something went wrong running that command.", ephemeral: true });
+        else await interaction.reply({ content: "⚠️ Something went wrong running that command.", ephemeral: true });
+      } catch (_) {}
     }
   });
 
@@ -11376,6 +11607,12 @@ app.post("/api/reviews", async (req, res) => {
       error: "Unable to submit review.",
     });
   }
+});
+
+app.use((req, res, next) => {
+  if (String(process.env.MAINTENANCE_OVERRIDE || "").toLowerCase() === "off") return next();
+  if (!siteMaintenanceOn) return next();
+  res.status(503).type("html").send(MAINTENANCE_HTML);
 });
 
 app.use(
