@@ -99,6 +99,66 @@ function errorStatus(error) {
   return "unavailable";
 }
 
+function safePreview(resource, value) {
+  if (resource === "Account details") {
+    return {
+      id: value.id,
+      type: value.type,
+      country: value.country,
+      default_currency: value.default_currency,
+      charges_enabled: value.charges_enabled,
+      payouts_enabled: value.payouts_enabled,
+      details_submitted: value.details_submitted,
+    };
+  }
+
+  if (resource === "Balance") {
+    return {
+      livemode: value.livemode,
+      available: value.available?.map(({ amount, currency, source_types }) => ({ amount, currency, source_types })),
+      pending: value.pending?.map(({ amount, currency, source_types }) => ({ amount, currency, source_types })),
+      instant_available: value.instant_available?.map(({ amount, currency, source_types }) => ({ amount, currency, source_types })),
+    };
+  }
+
+  const allowedFields = [
+    "id", "object", "created", "livemode", "status", "active", "type",
+    "amount", "amount_refunded", "amount_paid", "amount_due", "amount_remaining",
+    "currency", "paid", "captured", "refunded", "payment_status", "mode",
+    "unit_amount", "billing_scheme", "product", "price", "quantity",
+    "current_period_start", "current_period_end", "collection_method",
+    "charges_enabled", "payouts_enabled", "default_currency", "country",
+  ];
+
+  const sanitize = (item) => {
+    if (!item || typeof item !== "object") return item;
+    const output = {};
+    for (const field of allowedFields) {
+      if (item[field] !== undefined && item[field] !== null && typeof item[field] !== "object") {
+        output[field] = item[field];
+      }
+    }
+    if (item.recurring && typeof item.recurring === "object") {
+      output.recurring = {
+        interval: item.recurring.interval,
+        interval_count: item.recurring.interval_count,
+        usage_type: item.recurring.usage_type,
+      };
+    }
+    return output;
+  };
+
+  if (Array.isArray(value?.data)) {
+    return {
+      returned_items: value.data.length,
+      has_more: Boolean(value.has_more),
+      items: value.data.map(sanitize),
+    };
+  }
+
+  return sanitize(value);
+}
+
 async function inspectKey(key) {
   if (typeof key !== "string" || !/^rk_(test|live)_/.test(key)) {
     throw new Error("Enter a Stripe restricted key beginning with rk_live_ or rk_test_.");
@@ -109,8 +169,8 @@ async function inspectKey(key) {
 
   for (const [resource, check] of checks) {
     try {
-      await check(stripe);
-      results.push({ resource, readAccess: "allowed" });
+      const value = await check(stripe);
+      results.push({ resource, readAccess: "allowed", output: safePreview(resource, value) });
     } catch (error) {
       const status = errorStatus(error);
       if (status === "invalid_key") throw new Error("Stripe rejected this key as invalid or revoked.");
@@ -125,7 +185,7 @@ async function inspectKey(key) {
   return {
     mode: key.startsWith("rk_live_") ? "live" : "test",
     checkedAt: new Date().toISOString(),
-    note: "These are read-only capability checks. Stripe does not expose write-permission metadata through the API, so write access remains unknown.",
+    note: "Output includes a redacted sample from each readable resource. Customer identity, contact information, payment details, metadata, credentials, and secrets are excluded. Write access remains unknown because this viewer performs no writes.",
     results,
   };
 }

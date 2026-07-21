@@ -18,6 +18,9 @@
       button:disabled { opacity: .5; cursor: wait; }
       table { width: 100%; margin-top: 18px; border-collapse: collapse; }
       th, td { padding: 11px 8px; border-bottom: 1px solid #283146; text-align: left; }
+      td { vertical-align: top; }
+      pre { max-width: 430px; max-height: 260px; overflow: auto; padding: 10px; border-radius: 8px; background: #080b11; white-space: pre-wrap; word-break: break-word; }
+      summary { cursor: pointer; color: #a5b4fc; }
       .allowed { color: #6ee7b7; }
       .denied { color: #fca5a5; }
       .unavailable { color: #fcd34d; }
@@ -39,8 +42,9 @@
       <section id="output" class="card hidden">
         <h2 id="mode"></h2>
         <div id="note" class="notice"></div>
+        <button id="download" type="button">Download redacted JSON</button>
         <table>
-          <thead><tr><th>Stripe resource</th><th>Read access</th><th>Details</th></tr></thead>
+          <thead><tr><th>Stripe resource</th><th>Read access</th><th>Output</th></tr></thead>
           <tbody id="rows"></tbody>
         </table>
       </section>
@@ -52,6 +56,8 @@
       const button = document.getElementById("inspect");
       const status = document.getElementById("status");
       const output = document.getElementById("output");
+      const download = document.getElementById("download");
+      let latestOutput = null;
 
       if (location.protocol === "file:") {
         button.disabled = true;
@@ -73,12 +79,32 @@
 
           document.getElementById("mode").textContent = `${data.mode.toUpperCase()} restricted key`;
           document.getElementById("note").textContent = data.note;
-          document.getElementById("rows").innerHTML = data.results.map((item) => `
-            <tr>
-              <td>${item.resource}</td>
-              <td class="${item.readAccess}">${item.readAccess}</td>
-              <td class="muted">${item.detail || "Read request succeeded."}</td>
-            </tr>`).join("");
+          latestOutput = data;
+          const rows = document.getElementById("rows");
+          rows.replaceChildren();
+          for (const item of data.results) {
+            const row = document.createElement("tr");
+            const resourceCell = document.createElement("td");
+            const accessCell = document.createElement("td");
+            const outputCell = document.createElement("td");
+            resourceCell.textContent = item.resource;
+            accessCell.textContent = item.readAccess;
+            accessCell.className = item.readAccess;
+            if (item.output !== undefined) {
+              const details = document.createElement("details");
+              const summary = document.createElement("summary");
+              const preview = document.createElement("pre");
+              summary.textContent = "View redacted output";
+              preview.textContent = JSON.stringify(item.output, null, 2);
+              details.append(summary, preview);
+              outputCell.append(details);
+            } else {
+              outputCell.textContent = item.detail || "No output returned.";
+              outputCell.className = "muted";
+            }
+            row.append(resourceCell, accessCell, outputCell);
+            rows.append(row);
+          }
           output.classList.remove("hidden");
           status.textContent = "Inspection complete.";
         } catch (error) {
@@ -88,6 +114,16 @@
         } finally {
           button.disabled = false;
         }
+      });
+
+      download.addEventListener("click", () => {
+        if (!latestOutput) return;
+        const blob = new Blob([JSON.stringify(latestOutput, null, 2)], { type: "application/json" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `stripe-read-output-${new Date().toISOString().slice(0, 10)}.json`;
+        link.click();
+        URL.revokeObjectURL(link.href);
       });
     </script>
   </body>
