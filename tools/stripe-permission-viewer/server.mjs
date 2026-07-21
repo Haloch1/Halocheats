@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import Stripe from "stripe";
 
 const HOST = "127.0.0.1";
-const PORT = 4400;
+const REQUESTED_PORT = Number.parseInt(process.env.STRIPE_PERMISSION_VIEWER_PORT || "0", 10);
 const APP_TOKEN = randomBytes(32).toString("hex");
 const pageTemplate = await readFile(new URL("./index.html", import.meta.url), "utf8");
 
@@ -268,15 +268,17 @@ const server = createServer(async (request, response) => {
 
 server.on("error", (error) => {
   if (error.code === "EADDRINUSE") {
-    console.error(`Port ${PORT} is already in use. Close the other viewer window and try again.`);
+    console.error(`Port ${REQUESTED_PORT} is already in use. Remove STRIPE_PERMISSION_VIEWER_PORT or choose another port.`);
   } else {
     console.error(`The local viewer could not start: ${error.message}`);
   }
   process.exitCode = 1;
 });
 
-server.listen(PORT, HOST, () => {
-  const url = `http://${HOST}:${PORT}`;
+server.listen(REQUESTED_PORT, HOST, () => {
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : REQUESTED_PORT;
+  const url = `http://${HOST}:${port}`;
   console.log(`Stripe Permission Viewer is available locally at ${url}`);
   console.log("Close this window when you are finished.");
   spawn("powershell.exe", ["-NoProfile", "-Command", `Start-Process '${url}'`], {

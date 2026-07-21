@@ -15,7 +15,7 @@ if not exist "node_modules\stripe\package.json" (
   pause
   exit /b 1
 )
-echo Starting Stripe Permission Viewer at http://127.0.0.1:4400
+echo Starting Stripe Permission Viewer on an available local port...
 echo Keep this window open while using the viewer.
 echo.
 node tools\stripe-permission-viewer\server.mjs
