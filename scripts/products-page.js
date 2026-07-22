@@ -9,18 +9,15 @@ import spooferCategoryImage from "../assets/spoofer.webp";
 import productCrusaderImage from "../assets/product-crusader-r6.webp";
 import productVegaImage from "../assets/product-vega-r6-external.webp";
 import productFrostImage from "../assets/product-r6-frost.webp";
-import productAncientR6Image from "../assets/product-r6-ancient.webp";
 import productRecoilImage from "../assets/product-r6-recoil-private.webp";
 import productInvisionImage from "../assets/product-invision-chams.webp";
 import productFrostLiteImage from "../assets/product-r6-frost-lite.webp";
 import productUnlockAllImage from "../assets/product-r6-unlock-all.webp";
 // Fortnite product images
 import productFortniteFullImage from "../assets/product-fortnite-full.webp";
-import productFortniteAncientImage from "../assets/product-fortnite-ancient.webp";
 import productDisconnectFortniteImage from "../assets/product-disconnect-fortnite-external.webp";
 import productFortniteIgniteImage from "../assets/product-fortnite-ignite-aimbot.webp";
 // Rust product images
-import productRustAncientImage from "../assets/product-rust-ancient.webp";
 import productRustIgniteImage from "../assets/product-rust-ignite.webp";
 import productRustKrushImage from "../assets/product-rust-krush.webp";
 import productRustMekImage from "../assets/product-rust-mek.webp";
@@ -80,18 +77,15 @@ const productArtwork = {
   "crusader-r6": productCrusaderImage,
   "vega-r6-external": productVegaImage,
   "r6-frost": productFrostImage,
-  "r6-ancient": productAncientR6Image,
   "r6-recoil-private": productRecoilImage,
   "invision-chams": productInvisionImage,
   "r6-frost-lite": productFrostLiteImage,
   "r6-unlock-all": productUnlockAllImage,
   // Fortnite
   "fortnite-full": productFortniteFullImage,
-  "fortnite-ancient": productFortniteAncientImage,
   "disconnect-fortnite-external": productDisconnectFortniteImage,
   "fortnite-ignite-aimbot": productFortniteIgniteImage,
   // Rust
-  "rust-ancient": productRustAncientImage,
   "rust-ignite": productRustIgniteImage,
   "rust-krush": productRustKrushImage,
   "rust-mek": productRustMekImage,
@@ -344,31 +338,27 @@ function productMatchesSearch(product) {
 
 function renderProductCard(product, index) {
   const item = document.createElement("article");
-  const isOfflineBadge = String(product.badge || "").toLowerCase() === "offline";
-  const statusClass = isOfflineBadge ? "offline" : (product.available ? "live" : "unavailable");
   item.className = `product-card product-card-page catalog-product${
     product.featured ? " featured" : ""
   }`;
   item.dataset.delay = String(30 + (index % 4) * 35);
-  const hasReadyVariant = (product.variants || []).some((variant) => variant.checkoutReady);
   item.innerHTML = `
-    <div class="product-top">
-      <span class="product-status ${product.sale ? "sale" : product.featured ? "pulse" : statusClass}">${product.sale ? `${product.sale}% OFF` : escapeHtml(product.badge)}</span>
-      <span class="product-tier">${escapeHtml(product.vendor)}</span>
-    </div>
-    <h3>${escapeHtml(product.name)}</h3>
-    <p>${escapeHtml(product.summary)}</p>
-    <ul class="feature-list">
-      ${product.features.map((feature) => `<li>${escapeHtml(feature)}</li>`).join("")}
-    </ul>
-    ${stockBadgeHtml(product)}
-    <div class="product-footer">
-      <strong>${product.sale ? `<span class="sale-price">${escapeHtml(product.priceDisplay)}</span>` : escapeHtml(product.priceDisplay)}</strong>
-      <button class="button button-primary pay-button" data-product-slug="${escapeHtml(product.slug)}">
-        View
-      </button>
-    </div>
-    ${hasReadyVariant ? `<button class="button button-secondary add-cart-button" data-add-cart-slug="${escapeHtml(product.slug)}"><span class="add-cart-ico" aria-hidden="true"></span>Add to Cart</button>` : ""}
+    <button
+      class="product-thumbnail-button pay-button"
+      type="button"
+      data-product-slug="${escapeHtml(product.slug)}"
+      aria-label="View ${escapeHtml(product.name)}"
+    >
+      <img
+        class="product-thumbnail-image"
+        src="${productImageSrc(product)}"
+        alt=""
+        loading="lazy"
+      />
+      <span class="product-thumbnail-overlay" aria-hidden="true">
+        <span>View</span>
+      </span>
+    </button>
   `;
 
   return item;
@@ -504,6 +494,10 @@ function ensureVariantModal() {
       </div>
       <div class="variant-details">
         <p class="eyebrow">Product view</p>
+        <div class="variant-product-kicker">
+          <span data-variant-category></span>
+          <span>Verified listing</span>
+        </div>
         <h3 id="variant-title" data-variant-title></h3>
         <div class="variant-status-row">
           <span class="variant-dot"></span>
@@ -864,7 +858,23 @@ function logProductView(slug) {
   } catch {}
 }
 
-function openVariantModal(product) {
+function updateProductUrl(productSlug, mode = "push") {
+  const url = new URL(window.location.href);
+
+  if (productSlug) {
+    url.searchParams.set("product", productSlug);
+  } else {
+    url.searchParams.delete("product");
+  }
+
+  window.history[mode === "replace" ? "replaceState" : "pushState"](
+    { product: productSlug || null },
+    "",
+    `${url.pathname}${url.search}${url.hash}`
+  );
+}
+
+function openVariantModal(product, { updateUrl = true } = {}) {
   if (!product) {
     renderMessage(notice, "That product could not be loaded. Refresh and try again.", "error");
     return;
@@ -880,6 +890,7 @@ function openVariantModal(product) {
   const modal = ensureVariantModal();
   resetVariantControls(modal);
   modal.querySelector("[data-variant-title]").textContent = product.name;
+  modal.querySelector("[data-variant-category]").textContent = product.category || product.game || "Catalog";
   modal.querySelector("[data-variant-status]").textContent = product.badge;
   modal.querySelector("[data-variant-summary]").textContent = product.summary;
   modal.querySelector("[data-detail-about]").textContent = product.summary;
@@ -921,9 +932,13 @@ function openVariantModal(product) {
   modal.hidden = false;
   document.body.classList.add("modal-open");
   selectVariant(activeVariant?.slug);
+
+  if (updateUrl && new URLSearchParams(window.location.search).get("product") !== product.slug) {
+    updateProductUrl(product.slug);
+  }
 }
 
-function closeVariantModal() {
+function closeVariantModal({ updateUrl = true } = {}) {
   const modal = document.querySelector("[data-variant-modal]");
 
   if (!modal) {
@@ -932,6 +947,10 @@ function closeVariantModal() {
 
   modal.hidden = true;
   document.body.classList.remove("modal-open");
+
+  if (updateUrl && new URLSearchParams(window.location.search).has("product")) {
+    updateProductUrl("", "replace");
+  }
 }
 
 function selectVariant(variantSlug) {
@@ -1285,6 +1304,14 @@ try {
   updateStats(catalogProducts);
   renderCatalogView();
   initReveal();
+
+  const requestedProduct = new URLSearchParams(window.location.search).get("product");
+  if (requestedProduct) {
+    openVariantModal(
+      catalogProducts.find((product) => product.slug === requestedProduct),
+      { updateUrl: false }
+    );
+  }
 } catch (error) {
   renderMessage(notice, error.message, "error");
 }
@@ -1557,4 +1584,18 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     closeVariantModal();
   }
+});
+
+window.addEventListener("popstate", () => {
+  const productSlug = new URLSearchParams(window.location.search).get("product");
+
+  if (!productSlug) {
+    closeVariantModal({ updateUrl: false });
+    return;
+  }
+
+  openVariantModal(
+    catalogProducts.find((product) => product.slug === productSlug),
+    { updateUrl: false }
+  );
 });
