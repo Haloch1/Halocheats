@@ -123,6 +123,15 @@ function initCurrentNav() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
 
   document.querySelectorAll(".nav a").forEach((link) => {
+    // Support opens the floating chat panel. It is not a real page route, so
+    // it must never inherit the homepage's active-nav state.
+    link.classList.remove("is-current");
+    link.removeAttribute("aria-current");
+
+    if (link.hasAttribute("data-open-support") || link.getAttribute("href") === "#") {
+      return;
+    }
+
     if (link.origin !== window.location.origin) {
       return;
     }

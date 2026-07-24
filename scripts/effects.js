@@ -101,7 +101,7 @@ import("./ai-widget.js").catch(function (err) {
   }
 
   /* ── Init ── */
-  document.addEventListener('DOMContentLoaded', function () {
+  function initEffects() {
     initReveals();
     initNavScroll();
     initTicker();
@@ -109,5 +109,14 @@ import("./ai-widget.js").catch(function (err) {
     initYear();
     // Delay glow init slightly so cards are rendered
     setTimeout(initGlow, 500);
-  });
+  }
+
+  // effects.js is loaded both directly and through page modules. If a module
+  // imports it after DOMContentLoaded, an event-only initializer never runs
+  // and every reveal remains hidden. Boot immediately in that case.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initEffects, { once: true });
+  } else {
+    initEffects();
+  }
 })();

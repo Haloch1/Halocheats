@@ -12828,12 +12828,12 @@ async function ensureDiscordStaffGuide(guild) {
   const embed = {
     title: "XenCheats staff desk playbook",
     color: 0xdc2626,
-    description: "Use this channel as the quick reference for handling members safely and consistently.",
+    description: "Use this channel as the current quick reference for handling members safely and consistently.",
     fields: [
-      { name: "Ticket flow", value: "Read the full issue, verify the order or key before changing anything, then reply with one clear next step. Use **/summary** inside a ticket before taking over a long thread.", inline: false },
+      { name: "Ticket flow", value: "Read the full issue, verify the order or key before changing anything, then reply with one clear next step. Website chat resumes for signed-in members after refresh and mirrors to the staff thread. Use **/summary** before taking over a long thread.", inline: false },
       { name: "Priority", value: "**Urgent:** paid order or account-lock issue.\n**High:** activation, key, or loader issue.\n**Normal:** setup and general questions.", inline: false },
       { name: "Useful commands", value: "`/summary` ticket context\n`/known <issue>` verified resolved fixes\n`/orderlookup <id or email>` order status (admins)\n`/staffactivity [staff]` audit history (admins)", inline: false },
-      { name: "Before closing", value: "Only close after the member clearly confirms the issue is fixed. If they confirm it, the ticket is automatically marked resolved. Never expose license keys, payment details, or staff-only notes in public channels.", inline: false },
+      { name: "Before closing", value: "Only close after the member clearly confirms the issue is fixed. If they confirm it, the ticket is automatically marked resolved. Never expose license keys, payment details, or staff-only notes in public channels. Direct website users to the support chat bubble, not the retired /desk page.", inline: false },
     ],
     footer: { text: "XenCheats Staff Guide" },
   };

@@ -33,18 +33,15 @@ function buildWidget() {
   root.className = "ai-widget";
   root.innerHTML = `
     <button class="ai-widget-bubble" type="button" aria-label="Open support chat" aria-expanded="false">
-      <img src="/assets/nox-logo.png" alt="" class="ai-widget-bubble-logo" />
+      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ai-widget-icon-chat"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="ai-widget-icon-close"><path d="M18 6 6 18M6 6l12 12"/></svg>
       <span class="ai-widget-dot" hidden></span>
     </button>
     <div class="ai-widget-panel" hidden>
       <div class="ai-widget-head">
-        <div class="ai-widget-head-info">
-          <img src="/assets/nox-logo.png" alt="" class="ai-widget-avatar" />
-          <div>
-            <strong>Nox Support</strong>
-            <span class="ai-widget-status"><i></i>AI + live team</span>
-          </div>
+        <div>
+          <strong>Nox Support</strong>
+          <span class="ai-widget-status"><i></i>AI + live team</span>
         </div>
         <button type="button" class="ai-widget-close" aria-label="Close chat">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -86,6 +83,8 @@ async function init() {
   let aiThinking = false;
   let aiThinkingTimer = null;
   let resumePromise = null;
+  let activeThread = null;
+  let restoreAttempts = 0;
 
   function scrollToEnd() {
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -111,7 +110,11 @@ async function init() {
     if (aiThinkingTimer) window.clearTimeout(aiThinkingTimer);
     // Safety net: if the backend AI call fails silently, don't leave the
     // "..." indicator spinning forever.
-    aiThinkingTimer = window.setTimeout(() => { aiThinking = false; }, AI_THINKING_TIMEOUT_MS);
+    aiThinkingTimer = window.setTimeout(() => {
+      aiThinking = false;
+      if (activeThread) renderThread(activeThread, { isBaseline: true });
+    }, AI_THINKING_TIMEOUT_MS);
+    renderTypingState();
   }
 
   function stopAiThinking() {
@@ -120,6 +123,22 @@ async function init() {
       window.clearTimeout(aiThinkingTimer);
       aiThinkingTimer = null;
     }
+    renderTypingState();
+  }
+
+  function renderTypingState() {
+    if (!activeThread) {
+      messagesEl.querySelector(".ai-widget-typing")?.remove();
+      if (aiThinking) {
+        messagesEl.insertAdjacentHTML(
+          "beforeend",
+          `<div class="ai-widget-typing"><span>Xen AI is thinking</span><i></i><i></i><i></i></div>`
+        );
+        scrollToEnd();
+      }
+      return;
+    }
+    renderThread(activeThread, { isBaseline: true });
   }
 
   /* isBaseline: true when this is the first time we're hydrating a thread
@@ -127,6 +146,7 @@ async function init() {
      renders must not flag the unread dot for the whole history — only
      messages that arrive *after* the baseline should light it up. */
   function renderThread(thread, { isBaseline = false } = {}) {
+    activeThread = thread || activeThread;
     const msgs = thread?.messages || [];
 
     const newIncoming = msgs.filter(
@@ -214,7 +234,13 @@ async function init() {
         startPolling(POLL_MS_BACKGROUND);
       }
     } catch {
-      /* stay quiet — the user can still open the widget and retry manually */
+      // A refreshed server cookie can arrive a moment after the page. Retry a
+      // couple of times so an existing support session reliably resumes.
+      if (restoreAttempts < 2) {
+        restoreAttempts += 1;
+        await new Promise((resolve) => window.setTimeout(resolve, 1200 * restoreAttempts));
+        return resumeOnLoad();
+      }
     }
   }
 
@@ -328,6 +354,19 @@ async function init() {
     if (!trigger) return;
     e.preventDefault();
     openPanel();
+  });
+
+  // Renew the current support session after a reload, a return to this tab,
+  // or a completed sign-in flow without making the member reopen the widget.
+  window.addEventListener("focus", () => {
+    if (!threadId) resumePromise = resumeOnLoad();
+    else pollThread();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      if (!threadId) resumePromise = resumeOnLoad();
+      else pollThread();
+    }
   });
 
   resumePromise = resumeOnLoad();
