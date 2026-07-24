@@ -1,13 +1,15 @@
 /* ═══ XENCHEATS — Floating AI support widget (bottom-right) ═══
    Replaces the old standalone /desk page. Reuses the existing live-desk
    backend as-is: POST /api/live-desk opens a thread and fires an AI
-   auto-reply (Groq) server-side; a human can jump in from Discord any
-   time after. This file only adds the UI + polling. */
+   auto-reply (Groq/Gemini) server-side; a human can jump in from Discord
+   any time after. This file only adds the UI + polling. */
 
 import { getCurrentSession } from "./supabase-client.js";
 
 const SKIP_PATH_PREFIXES = ["/admin", "/desk-admin"];
-const POLL_MS = 4500;
+const POLL_MS_OPEN = 4000;
+const POLL_MS_BACKGROUND = 10000;
+const AI_THINKING_TIMEOUT_MS = 25000;
 
 function esc(v) {
   return String(v ?? "").replace(/[&<>"']/g, (c) => ({
@@ -31,15 +33,18 @@ function buildWidget() {
   root.className = "ai-widget";
   root.innerHTML = `
     <button class="ai-widget-bubble" type="button" aria-label="Open support chat" aria-expanded="false">
-      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="ai-widget-icon-chat"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+      <img src="/assets/nox-logo.png" alt="" class="ai-widget-bubble-logo" />
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="ai-widget-icon-close"><path d="M18 6 6 18M6 6l12 12"/></svg>
       <span class="ai-widget-dot" hidden></span>
     </button>
     <div class="ai-widget-panel" hidden>
       <div class="ai-widget-head">
-        <div>
-          <strong>Nox Support</strong>
-          <span class="ai-widget-status"><i></i>AI + live team</span>
+        <div class="ai-widget-head-info">
+          <img src="/assets/nox-logo.png" alt="" class="ai-widget-avatar" />
+          <div>
+            <strong>Nox Support</strong>
+            <span class="ai-widget-status"><i></i>AI + live team</span>
+          </div>
         </div>
         <button type="button" class="ai-widget-close" aria-label="Close chat">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -74,9 +79,13 @@ async function init() {
 
   let session = null;
   let threadId = null;
-  let lastMessageCount = 0;
+  let knownMessageIds = new Set();
   let pollTimer = null;
+  let pollIntervalMs = POLL_MS_BACKGROUND;
   let isOpen = false;
+  let aiThinking = false;
+  let aiThinkingTimer = null;
+  let resumePromise = null;
 
   function scrollToEnd() {
     messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -97,8 +106,39 @@ async function init() {
       </div>`;
   }
 
-  function renderThread(thread) {
+  function startAiThinking() {
+    aiThinking = true;
+    if (aiThinkingTimer) window.clearTimeout(aiThinkingTimer);
+    // Safety net: if the backend AI call fails silently, don't leave the
+    // "..." indicator spinning forever.
+    aiThinkingTimer = window.setTimeout(() => { aiThinking = false; }, AI_THINKING_TIMEOUT_MS);
+  }
+
+  function stopAiThinking() {
+    aiThinking = false;
+    if (aiThinkingTimer) {
+      window.clearTimeout(aiThinkingTimer);
+      aiThinkingTimer = null;
+    }
+  }
+
+  /* isBaseline: true when this is the first time we're hydrating a thread
+     (page load resume, or opening the panel for the first time). Baseline
+     renders must not flag the unread dot for the whole history — only
+     messages that arrive *after* the baseline should light it up. */
+  function renderThread(thread, { isBaseline = false } = {}) {
     const msgs = thread?.messages || [];
+
+    const newIncoming = msgs.filter(
+      (m) => m.senderType !== "user" && !knownMessageIds.has(m.id)
+    );
+
+    if (!isBaseline && newIncoming.some((m) => m.senderType === "bot")) {
+      stopAiThinking();
+    }
+
+    knownMessageIds = new Set(msgs.map((m) => m.id));
+
     messagesEl.innerHTML = msgs
       .map(
         (m) => `
@@ -112,15 +152,17 @@ async function init() {
     if (thread?.staffTyping) {
       messagesEl.insertAdjacentHTML(
         "beforeend",
-        `<div class="ai-widget-typing"><i></i><i></i><i></i></div>`
+        `<div class="ai-widget-typing"><span>Support is typing</span><i></i><i></i><i></i></div>`
+      );
+    } else if (aiThinking) {
+      messagesEl.insertAdjacentHTML(
+        "beforeend",
+        `<div class="ai-widget-typing"><span>Nox AI is thinking</span><i></i><i></i><i></i></div>`
       );
     }
 
-    if (msgs.length > lastMessageCount) {
-      if (!isOpen) {
-        dot.hidden = false;
-      }
-      lastMessageCount = msgs.length;
+    if (!isBaseline && newIncoming.length && !isOpen) {
+      dot.hidden = false;
     }
 
     scrollToEnd();
@@ -141,9 +183,10 @@ async function init() {
     }
   }
 
-  function startPolling() {
+  function startPolling(intervalMs) {
+    pollIntervalMs = intervalMs;
     stopPolling();
-    pollTimer = window.setInterval(pollThread, POLL_MS);
+    pollTimer = window.setInterval(pollThread, pollIntervalMs);
   }
 
   function stopPolling() {
@@ -151,8 +194,13 @@ async function init() {
     pollTimer = null;
   }
 
-  async function loadExistingThread() {
-    if (!session) return;
+  /* Runs once on page load (not just when the bubble is clicked) so an
+     existing conversation "renews" after a refresh: the unread dot can
+     light up and polling is already running by the time you open the panel. */
+  async function resumeOnLoad() {
+    session = await getCurrentSession();
+    if (!session?.access_token) return;
+
     try {
       const res = await fetch("/api/live-desk/mine", {
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -162,13 +210,11 @@ async function init() {
       const open = (data.threads || []).find((t) => t.status === "open") || data.threads?.[0];
       if (open) {
         threadId = open.id;
-        renderThread(open);
-        startPolling();
-      } else {
-        renderStarter();
+        renderThread(open, { isBaseline: true });
+        startPolling(POLL_MS_BACKGROUND);
       }
     } catch {
-      renderStarter();
+      /* stay quiet — the user can still open the widget and retry manually */
     }
   }
 
@@ -179,15 +225,14 @@ async function init() {
     bubble.setAttribute("aria-expanded", "true");
     dot.hidden = true;
 
-    // First open after a fresh page load (no session checked yet): show a
-    // brief loading state instead of a blank flash while we resume the
-    // conversation, so it feels like a continuous chat session, not a reset.
-    const firstOpenThisLoad = session === null;
-    if (firstOpenThisLoad) {
-      messagesEl.innerHTML = `<div class="ai-widget-greet">Loading your conversation&hellip;</div>`;
+    // If the page just loaded, resumeOnLoad() may still be in flight — wait
+    // for it instead of racing it, otherwise a fast click right after load
+    // could flash "start a new chat" even though a thread already exists.
+    if (resumePromise) {
+      await resumePromise;
+    } else if (!session) {
+      session = await getCurrentSession();
     }
-
-    session = await getCurrentSession();
 
     if (!session?.access_token) {
       renderGate();
@@ -195,10 +240,11 @@ async function init() {
     }
 
     if (threadId) {
-      startPolling();
+      // Already resumed in the background — speed the poll up while open.
+      startPolling(POLL_MS_OPEN);
       pollThread();
-    } else {
-      await loadExistingThread();
+    } else if (!messagesEl.childElementCount) {
+      renderStarter();
     }
 
     textarea.focus();
@@ -209,7 +255,13 @@ async function init() {
     panel.hidden = true;
     bubble.classList.remove("is-open");
     bubble.setAttribute("aria-expanded", "false");
-    stopPolling();
+    // Keep a slower background poll alive so the unread dot still works,
+    // instead of stopping entirely.
+    if (threadId) {
+      startPolling(POLL_MS_BACKGROUND);
+    } else {
+      stopPolling();
+    }
   }
 
   bubble.addEventListener("click", () => (isOpen ? closePanel() : openPanel()));
@@ -239,7 +291,8 @@ async function init() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Unable to send message.");
         threadId = data.threadId;
-        startPolling();
+        startAiThinking();
+        startPolling(POLL_MS_OPEN);
       } else {
         const res = await fetch("/api/live-desk/reply", {
           method: "POST",
@@ -248,6 +301,7 @@ async function init() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Unable to send message.");
+        startAiThinking();
       }
       pollThread();
     } catch (error) {
@@ -275,6 +329,8 @@ async function init() {
     e.preventDefault();
     openPanel();
   });
+
+  resumePromise = resumeOnLoad();
 }
 
 if (document.readyState === "loading") {
