@@ -1,4 +1,6 @@
 /* ═══ XENCHEATS — Visual Effects (scroll reveal, glow, counters) ═══ */
+import "./ai-widget.js";
+
 (function () {
   'use strict';
 

@@ -49,7 +49,7 @@
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 3.1 14 8.2l5.6.8-4 4 1 5.6-5.1-2.7L6.4 18.6l1-5.6-4-4 5.6-.8Z"/></svg>
               Reviews
             </a>
-            <a href="/desk/">
+            <a href="#" data-open-support>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
               Help
             </a>
@@ -202,38 +202,37 @@
 
         <section class="section support support-desk reveal" data-delay="30" id="support">
           <div class="support-copy">
-            <p class="eyebrow">Live desk</p>
+            <p class="eyebrow">Live support</p>
             <h2>Need help with your order, setup, or key delivery?</h2>
             <p>
-              The live desk gives members one place to ask for stock checks,
-              product guidance, activation help, or follow-up after purchase.
+              Chat with our AI assistant for an instant answer on stock,
+              activation, or delivery &mdash; a human teammate can step in
+              any time. Just tap the chat bubble in the corner.
             </p>
 
             <div class="desk-actions">
-              <a class="button button-primary" data-live-desk-primary href="/desk/">
-                Open Live Desk
-              </a>
-              <a class="button button-secondary" data-live-desk-secondary href="/account/">
+              <button class="button button-primary" type="button" data-open-support>
+                Chat With Us
+              </button>
+              <a class="button button-secondary" href="/account/">
                 Account
               </a>
             </div>
-
-            <div class="inline-message info desk-message" data-live-desk-message></div>
           </div>
 
           <div class="desk-panel">
             <div class="desk-panel-top">
               <div class="desk-dot-wrap">
                 <span class="desk-dot"></span>
-                <strong data-live-desk-status>Desk Online</strong>
+                <strong>AI + Live Team</strong>
               </div>
-              <span class="desk-badge" data-live-desk-hours>24/7 Coverage</span>
+              <span class="desk-badge">24/7 Coverage</span>
             </div>
 
             <div class="desk-metrics">
               <article class="desk-metric">
-                <span>Reply time</span>
-                <strong data-live-desk-reply>~6 min</strong>
+                <span>First reply</span>
+                <strong>Instant</strong>
               </article>
               <article class="desk-metric">
                 <span>Queue</span>
@@ -243,54 +242,6 @@
                 <span>Scope</span>
                 <strong>Sales + help</strong>
               </article>
-            </div>
-
-            <div class="desk-request-shell">
-              <div class="desk-request-copy">
-                <span class="desk-request-label">Open request</span>
-                <p>Create a member account first, then open a live support request from here.</p>
-              </div>
-
-              <form class="desk-request-form" data-live-desk-form>
-                <label>
-                  Name
-                  <input type="text" name="name" maxlength="80" required />
-                </label>
-                <label>
-                  Contact
-                  <input
-                    type="text"
-                    name="contact"
-                    maxlength="140"
-                    placeholder="Discord @name, email, or Telegram"
-                    required
-                  />
-                </label>
-                <label>
-                  Topic
-                  <select name="topic" required>
-                    <option value="">Select one</option>
-                    <option value="Product question">Product question</option>
-                    <option value="Stock check">Stock check</option>
-                    <option value="Order help">Order help</option>
-                    <option value="Key delivery">Key delivery</option>
-                    <option value="Activation help">Activation help</option>
-                  </select>
-                </label>
-                <label>
-                  Details
-                  <textarea
-                    name="details"
-                    rows="4"
-                    maxlength="900"
-                    placeholder="Tell the desk what you need help with."
-                    required
-                  ></textarea>
-                </label>
-                <input class="desk-honeypot" type="text" name="company" tabindex="-1" autocomplete="off" />
-                <button class="button button-primary" type="submit">Send To Discord Desk</button>
-              </form>
-
             </div>
           </div>
         </section>
@@ -367,7 +318,7 @@
 
           <nav class="footer-col" aria-label="Support links">
             <strong>Support</strong>
-            <a href="/desk/">Help Desk</a>
+            <a href="#" data-open-support>Help Desk</a>
             <a href="/account/">Your Account</a>
             <a href="https://discord.gg/xencheats" target="_blank">Discord</a>
           </nav>

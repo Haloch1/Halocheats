@@ -6113,7 +6113,7 @@ ${rows || '<div class="ct">No messages.</div>'}
               description: `We received your payment for **${catalogLabel}** but your key is temporarily unavailable.\n\nPlease **open a support ticket** and you will be treated as **priority** - we'll get your key to you ASAP.`,
               color: 0xffa500,
               fields: [
-                { name: "Support", value: `[Open a Ticket](${baseUrl}/desk/)`, inline: true },
+                { name: "Support", value: `[Chat with us](${baseUrl}/account/)`, inline: true },
                 { name: "Order ID", value: fakeOrder.id, inline: true },
               ],
               footer: { text: "TEST - Not a real order" },
@@ -7190,7 +7190,7 @@ async function handleUnfulfilledOrder(order, session) {
             description: `We received your payment for **${productLabel}** but your key is temporarily unavailable.\n\nPlease **open a support ticket** and you will be treated as **priority** - we'll get your key to you ASAP.`,
             color: 0xffa500,
             fields: [
-              { name: "Support", value: `[Open a Ticket](${baseUrl}/desk/)`, inline: true },
+              { name: "Support", value: `[Chat with us](${baseUrl}/account/)`, inline: true },
               { name: "Order ID", value: order.id, inline: true },
             ],
             footer: { text: "We apologize for the inconvenience" },
@@ -8426,7 +8426,6 @@ app.get("/sitemap.xml", (_req, res) => {
     { loc: "/", priority: "1.0", changefreq: "weekly" },
     { loc: "/products/", priority: "0.9", changefreq: "weekly" },
     { loc: "/reviews/", priority: "0.8", changefreq: "weekly" },
-    { loc: "/desk/", priority: "0.5", changefreq: "monthly" },
     { loc: "/account/", priority: "0.5", changefreq: "monthly" },
     { loc: "/terms/", priority: "0.3", changefreq: "yearly" },
     { loc: "/instructions/", priority: "0.4", changefreq: "monthly" },
@@ -13719,7 +13718,6 @@ const pageRoutes = new Map([
   ["/products", "products/index.html"],
   ["/account", "account/index.html"],
   ["/terms", "terms/index.html"],
-  ["/desk", "desk/index.html"],
   ["/desk-admin", "desk-admin/index.html"],
   ["/requests", "requests/index.html"],
   ["/analytics", "analytics/index.html"],
