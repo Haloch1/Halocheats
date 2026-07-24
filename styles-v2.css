@@ -431,9 +431,12 @@ a {
   line-height: 1.08;
 }
 
-.section-heading h2,
-.support h2 {
+.section-heading h2 {
   font-size: clamp(2.15rem, 4.5vw, 4.35rem);
+}
+
+.support h2 {
+  font-size: clamp(1.6rem, 2.6vw, 2.35rem);
 }
 
 .section-heading > p:last-child,
@@ -1058,11 +1061,23 @@ button:disabled {
   box-shadow: 0 24px 58px rgba(117, 34, 38, 0.15);
 }
 
-.catalog-category-card:hover::after,
-.catalog-category-card:focus-within::after,
-.product-thumbnail-button:hover::after,
-.product-thumbnail-button:focus-visible::after {
-  transform: rotate(28deg) translateX(520%);
+@media (hover: hover) and (pointer: fine) {
+  .catalog-category-card:hover::after,
+  .catalog-category-card:focus-within::after,
+  .product-thumbnail-button:hover::after,
+  .product-thumbnail-button:focus-visible::after {
+    transform: rotate(28deg) translateX(520%);
+  }
+}
+
+/* Touch devices don't have real hover — a tap triggers :hover/:focus-within
+   via "sticky hover" and it stays stuck until something else is tapped, so
+   the sweep looked glitchy on mobile. Disable it there entirely. */
+@media (hover: none), (pointer: coarse) {
+  .catalog-category-card::after,
+  .product-thumbnail-button::after {
+    display: none;
+  }
 }
 
 .category-card-art {
@@ -1209,11 +1224,11 @@ button:disabled {
 
 .support {
   display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(520px, 1.2fr);
+  grid-template-columns: minmax(0, 0.8fr) minmax(420px, 1fr);
   align-items: center;
-  gap: clamp(42px, 7vw, 86px);
-  width: min(1260px, calc(100% - 32px));
-  padding: clamp(54px, 7vw, 92px);
+  gap: clamp(32px, 5vw, 60px);
+  width: min(1080px, calc(100% - 32px));
+  padding: clamp(32px, 4.5vw, 52px);
   border: 1px solid rgba(216, 32, 40, 0.14);
   border-radius: var(--radius-xl);
   background:
@@ -3302,12 +3317,14 @@ body.cart-open .cart-panel { transform: translateX(0); }
 .social-proof-toast {
   position: fixed;
   z-index: 900;
-  right: 20px;
+  /* Left side + smaller: the AI support bubble now owns the bottom-right
+     corner, so this moved over to avoid the two stacking on top of each other. */
+  left: 20px;
   bottom: 20px;
-  width: min(340px, calc(100% - 40px));
-  padding: 14px 42px 14px 15px;
+  width: min(290px, calc(100% - 40px));
+  padding: 12px 34px 12px 13px;
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: var(--shadow-md);
   backdrop-filter: blur(12px);
@@ -3756,7 +3773,7 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
 
   .docs-content { padding: 25px 18px; }
   .cart-panel { padding: 17px; }
-  .social-proof { right: 10px; bottom: 10px; width: calc(100% - 20px); }
+  .social-proof { left: 10px; bottom: 10px; width: min(260px, calc(100% - 90px)); }
 }
 
 @media (hover: none), (pointer: coarse) {
@@ -3914,6 +3931,13 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   animation: ai-widget-in 0.22s ease;
+}
+
+/* The [hidden] attribute toggles the panel from JS. Author rules normally
+   beat the UA [hidden] default regardless of specificity, so without this
+   the panel above rendered open on every page load/refresh. */
+.ai-widget-panel[hidden] {
+  display: none;
 }
 
 @keyframes ai-widget-in {

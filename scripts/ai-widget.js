@@ -179,6 +179,14 @@ async function init() {
     bubble.setAttribute("aria-expanded", "true");
     dot.hidden = true;
 
+    // First open after a fresh page load (no session checked yet): show a
+    // brief loading state instead of a blank flash while we resume the
+    // conversation, so it feels like a continuous chat session, not a reset.
+    const firstOpenThisLoad = session === null;
+    if (firstOpenThisLoad) {
+      messagesEl.innerHTML = `<div class="ai-widget-greet">Loading your conversation&hellip;</div>`;
+    }
+
     session = await getCurrentSession();
 
     if (!session?.access_token) {

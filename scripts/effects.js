@@ -1,25 +1,37 @@
 /* ═══ XENCHEATS — Visual Effects (scroll reveal, glow, counters) ═══ */
-import "./ai-widget.js";
+
+/* Dynamic + defensive: a failure loading the widget must never take down
+   the rest of this file (reveal, glow, nav scroll, ticker, etc). A static
+   `import` here previously meant one throw in ai-widget.js's module graph
+   silently aborted this entire script on every page. */
+import("./ai-widget.js").catch(function (err) {
+  console.error("[ai-widget] failed to load:", err);
+});
 
 (function () {
   'use strict';
 
-  /* ── Scroll Reveal with blur ── */
+  /* ── Scroll Reveal with blur ──
+     NOTE: must add "is-visible" — that's the only class styles-v2.css
+     actually defines a transition for (.reveal.is-visible). This used to
+     add "visible" (no matching CSS rule), so on any page whose own script
+     didn't separately call site.js's initReveal(), .reveal sections such as
+     Terms, Privacy, Instructions, and 404 stayed at opacity:0 forever. */
   function initReveals() {
-    var els = document.querySelectorAll('.reveal');
+    var els = document.querySelectorAll('.reveal:not(.is-visible)');
     if (!els.length) return;
     if (!('IntersectionObserver' in window)) {
-      els.forEach(function (el) { el.classList.add('visible'); });
+      els.forEach(function (el) { el.classList.add('is-visible'); });
       return;
     }
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (e) {
         if (!e.isIntersecting) return;
         var delay = parseInt(e.target.getAttribute('data-delay') || '0', 10);
-        setTimeout(function () { e.target.classList.add('visible'); }, delay);
+        setTimeout(function () { e.target.classList.add('is-visible'); }, delay);
         io.unobserve(e.target);
       });
-    }, { threshold: 0.12 });
+    }, { threshold: 0.12, rootMargin: "0px 0px -10% 0px" });
     els.forEach(function (el) { io.observe(el); });
   }
 
