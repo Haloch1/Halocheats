@@ -6,6 +6,7 @@
     <link rel="icon" type="image/png" href="/assets/nox-logo.png" />
     <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
     <title>Admin | XenCheats</title>
+    <meta name="robots" content="noindex, nofollow" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -1298,6 +1299,7 @@
     </style>
   </head>
   <body>
+    <h1 class="sr-only">Admin panel</h1>
     <div class="page-shell page-shell-inner">
       <div class="ambient ambient-left"></div>
       <div class="ambient ambient-right"></div>
@@ -1454,7 +1456,7 @@
                 <option value="fulfilled">Fulfilled</option>
                 <option value="pending">Pending</option>
               </select>
-              <input type="text" id="orderSearchInput" placeholder="Order ID or customer email..." />
+              <input type="text" id="orderSearchInput" aria-label="Search orders by ID or customer email" placeholder="Order ID or customer email..." />
               <button id="orderSearchBtn">Look Up</button>
               <button id="exportCsvBtn" style="background:rgba(255,255,255,0.06); color:#ddd; border:1px solid rgba(255,255,255,0.1);">Export CSV</button>
               <span class="refresh-note" id="ordersRefreshNote"></span>
@@ -1484,7 +1486,7 @@
                   <option value="unused">Ready to fulfill</option>
                   <option value="assigned">Assigned to an order</option>
                 </select>
-                <input id="keySearchInput" type="search" placeholder="Search product, key, or order" autocomplete="off" />
+                <input id="keySearchInput" type="search" aria-label="Search license keys by product, key, or order" placeholder="Search product, key, or order" autocomplete="off" />
               </div>
               <div class="import-zone" id="importZone" role="button" tabindex="0" aria-label="Import license keys">
                 <div>
@@ -1492,7 +1494,7 @@
                   <strong>Bulk import keys</strong>
                   <p style="margin:4px 0 0; font-size:0.8rem;">Drop a CSV or click to upload. Use <code>product_slug,key_value</code>, one key per line.</p>
                 </div>
-                <input type="file" id="importFileInput" accept=".csv,.txt" />
+                <input type="file" id="importFileInput" aria-label="Choose a CSV or TXT file of license keys to import" accept=".csv,.txt" />
               </div>
             </div>
             <div class="import-result" id="importResult"></div>
@@ -1513,7 +1515,7 @@
           <!-- STAFF ACTIVITY -->
           <div class="admin-panel" id="panel-activity">
             <div class="admin-panel-header"><div><h2>Staff Activity</h2><p>Immutable activity recorded for ticket replies, approvals, and destructive actions.</p></div></div>
-            <div class="admin-toolbar"><input type="search" id="activitySearchInput" placeholder="Search staff member, action, ticket, or order..." autocomplete="off" /><button id="activitySearchBtn">Search</button></div>
+            <div class="admin-toolbar"><input type="search" id="activitySearchInput" aria-label="Search activity by staff member, action, ticket, or order" placeholder="Search staff member, action, ticket, or order..." autocomplete="off" /><button id="activitySearchBtn">Search</button></div>
             <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Staff member</th><th>Action</th><th>Target</th><th>Details</th><th>Time</th></tr></thead><tbody id="activityBody"><tr><td colspan="5" class="empty-state">Loading activity...</td></tr></tbody></table></div>
           </div>
 

@@ -838,6 +838,11 @@ async function loadAdminReviews() {
       )
       .join("");
 
+    // Bind once: loadAdminReviews() re-runs every time the Reviews panel is
+    // opened, and re-binding stacked a duplicate DELETE per visit.
+    if (tbody.dataset.deleteBound === "1") return;
+    tbody.dataset.deleteBound = "1";
+
     tbody.addEventListener("click", async (e) => {
       const btn = e.target.closest("[data-delete-review]");
       if (!btn) return;
@@ -902,6 +907,11 @@ async function loadProducts() {
     `
       )
       .join("");
+
+    // Bind once: loadProducts() re-runs on every Products panel visit, and
+    // re-binding fired a duplicate PATCH per visit.
+    if (editor.dataset.editBound === "1") return;
+    editor.dataset.editBound = "1";
 
     editor.addEventListener("change", async (e) => {
       const toggle = e.target.closest("[data-toggle-product]");

@@ -166,7 +166,9 @@ function escReview(value) {
   ));
 }
 function reviewStars(count) {
-  const n = Math.max(1, Math.min(5, parseInt(count, 10) || 5));
+  // `parseInt(count) || 5` turned a real 0-star rating into 5 stars.
+  const parsed = Number.parseInt(count, 10);
+  const n = Number.isFinite(parsed) ? Math.max(0, Math.min(5, parsed)) : 5;
   return "&#9733;".repeat(n) + "&#9734;".repeat(5 - n);
 }
 function reviewDate(value) {

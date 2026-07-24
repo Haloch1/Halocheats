@@ -610,6 +610,22 @@ refreshSession().catch((error) => {
   );
 });
 
+/* Disables a form's submit button while its request is in flight. Returns null
+   if the form is already submitting, so the caller can bail out early. */
+function lockSubmit(form) {
+  const button = form?.querySelector('button[type="submit"]');
+  if (!button || button.disabled) return null;
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = "Please wait...";
+
+  return () => {
+    button.disabled = false;
+    button.textContent = originalText;
+  };
+}
+
 signUpForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -617,6 +633,9 @@ signUpForm?.addEventListener("submit", async (event) => {
     showStatusMessage(getAuthConfigMessage(), "warn");
     return;
   }
+
+  const unlockSignUp = lockSubmit(signUpForm);
+  if (!unlockSignUp) return;
 
   const formData = new FormData(signUpForm);
   const username = formData.get("username");
@@ -654,6 +673,8 @@ signUpForm?.addEventListener("submit", async (event) => {
     }
 
     showStatusMessage(message, "error");
+  } finally {
+    unlockSignUp();
   }
 });
 
@@ -665,6 +686,9 @@ signInForm?.addEventListener("submit", async (event) => {
     return;
   }
 
+  const unlockSignIn = lockSubmit(signInForm);
+  if (!unlockSignIn) return;
+
   const formData = new FormData(signInForm);
   const email = formData.get("email");
   const password = formData.get("password");
@@ -674,7 +698,8 @@ signInForm?.addEventListener("submit", async (event) => {
     await finishAuth("Signed in successfully.", session);
   } catch (error) {
     showStatusMessage(error instanceof Error ? error.message : "Unable to sign in.", "error");
-    return;
+  } finally {
+    unlockSignIn();
   }
 });
 
@@ -686,20 +711,27 @@ resetRequestForm?.addEventListener("submit", async (event) => {
     return;
   }
 
-  const formData = new FormData(resetRequestForm);
-  const email = formData.get("email");
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/account/`,
-  });
+  const unlockReset = lockSubmit(resetRequestForm);
+  if (!unlockReset) return;
 
-  if (error) {
-    showStatusMessage(error.message, "error");
-    return;
+  try {
+    const formData = new FormData(resetRequestForm);
+    const email = formData.get("email");
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/account/`,
+    });
+
+    if (error) {
+      showStatusMessage(error.message, "error");
+      return;
+    }
+
+    resetRequestForm.reset();
+    showStatusMessage("Password reset link sent. Check your email to continue.", "success");
+    setAuthTab("signin");
+  } finally {
+    unlockReset();
   }
-
-  resetRequestForm.reset();
-  showStatusMessage("Password reset link sent. Check your email to continue.", "success");
-  setAuthTab("signin");
 });
 
 passwordUpdateForm?.addEventListener("submit", async (event) => {
@@ -710,22 +742,29 @@ passwordUpdateForm?.addEventListener("submit", async (event) => {
     return;
   }
 
-  const formData = new FormData(passwordUpdateForm);
-  const password = formData.get("password");
-  const { error } = await supabase.auth.updateUser({ password });
+  const unlockPasswordUpdate = lockSubmit(passwordUpdateForm);
+  if (!unlockPasswordUpdate) return;
 
-  if (error) {
-    showStatusMessage(error.message, "error");
-    return;
+  try {
+    const formData = new FormData(passwordUpdateForm);
+    const password = formData.get("password");
+    const { error } = await supabase.auth.updateUser({ password });
+
+    if (error) {
+      showStatusMessage(error.message, "error");
+      return;
+    }
+
+    passwordUpdateForm.reset();
+    isPasswordRecovery = false;
+    await supabase.auth.signOut();
+    await clearServerSession();
+    setView(null);
+    setAuthTab("signin");
+    showStatusMessage("Password updated. Sign in with your new password.", "success");
+  } finally {
+    unlockPasswordUpdate();
   }
-
-  passwordUpdateForm.reset();
-  isPasswordRecovery = false;
-  await supabase.auth.signOut();
-  await clearServerSession();
-  setView(null);
-  setAuthTab("signin");
-  showStatusMessage("Password updated. Sign in with your new password.", "success");
 });
 
 /* Discord link */
@@ -818,6 +857,10 @@ if (googleResult === "linked") {
 }
 if (googleResult === "error") {
   setTimeout(() => showStatusMessage("Failed to sign in with Google. Please try again.", "error"), 300);
+  window.history.replaceState({}, "", window.location.pathname);
+}
+if (googleResult === "unavailable") {
+  setTimeout(() => showStatusMessage("Google sign-in isn't set up yet. Use email or Discord for now.", "error"), 300);
   window.history.replaceState({}, "", window.location.pathname);
 }
 

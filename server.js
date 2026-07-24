@@ -743,6 +743,36 @@ function clearAuthCookies(res) {
   ]);
 }
 
+/* Discord OAuth tokens live in user_metadata so the bot can act for the member.
+   They must never reach the browser — strip them from anything we send back. */
+const PRIVATE_USER_METADATA_KEYS = ["discord_access_token", "discord_refresh_token"];
+
+function sanitizeUserForClient(user) {
+  if (!user || typeof user !== "object") {
+    return user;
+  }
+
+  const metadata = user.user_metadata;
+  if (!metadata || typeof metadata !== "object") {
+    return user;
+  }
+
+  const safeMetadata = { ...metadata };
+  let stripped = false;
+  for (const key of PRIVATE_USER_METADATA_KEYS) {
+    if (key in safeMetadata) {
+      delete safeMetadata[key];
+      stripped = true;
+    }
+  }
+
+  if (!stripped) {
+    return user;
+  }
+
+  return { ...user, user_metadata: safeMetadata };
+}
+
 function setOwnerCookie(res) {
   res.setHeader(
     "Set-Cookie",
@@ -8599,7 +8629,7 @@ app.post("/api/auth/sign-up", async (req, res) => {
         session: {
           access_token: signInData.session.access_token,
           expires_at: signInData.session.expires_at,
-          user: signInData.user,
+          user: sanitizeUserForClient(signInData.user),
         },
         existingAccount: true,
       });
@@ -8636,10 +8666,10 @@ app.post("/api/auth/sign-up", async (req, res) => {
       ? {
           access_token: data.session.access_token,
           expires_at: data.session.expires_at,
-          user: data.user,
+          user: sanitizeUserForClient(data.user),
         }
       : null,
-    user: data.user,
+    user: sanitizeUserForClient(data.user),
   });
 });
 
@@ -8682,7 +8712,7 @@ app.post("/api/auth/sign-in", async (req, res) => {
     session: {
       access_token: data.session.access_token,
       expires_at: data.session.expires_at,
-      user: data.user,
+      user: sanitizeUserForClient(data.user),
     },
   });
 });
@@ -8703,7 +8733,7 @@ app.get("/api/auth/session", async (req, res) => {
       return res.json({
         session: {
           access_token: accessToken,
-          user: data.user,
+          user: sanitizeUserForClient(data.user),
         },
       });
     }
@@ -8728,7 +8758,7 @@ app.get("/api/auth/session", async (req, res) => {
     session: {
       access_token: data.session.access_token,
       expires_at: data.session.expires_at,
-      user: data.user,
+      user: sanitizeUserForClient(data.user),
     },
   });
 });
@@ -11625,10 +11655,15 @@ app.post("/api/search", async (req, res) => {
 /* ── Google OAuth ── */
 app.get("/api/auth/google", async (req, res) => {
   try {
+    if (!googleClientId || !googleClientSecret) {
+      console.error("[Google OAuth] GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not set.");
+      return res.redirect("/account/?google=unavailable");
+    }
+
     const state = crypto.randomBytes(16).toString("hex");
     res.cookie("google_oauth_state", state, {
       httpOnly: true,
-      secure: true,
+      secure: baseUrl.startsWith("https://"),
       sameSite: "lax",
       maxAge: 300_000,
       path: "/",

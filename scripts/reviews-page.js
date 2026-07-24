@@ -32,7 +32,11 @@ function fmtDate(val) {
 }
 
 function stars(count) {
-  return "&#9733;".repeat(count) + "&#9734;".repeat(5 - count);
+  // Clamp: an out-of-range rating used to make .repeat() throw, which was caught
+  // by loadReviews() and blanked the entire list.
+  const parsed = Number.parseInt(count, 10);
+  const n = Number.isFinite(parsed) ? Math.max(0, Math.min(5, parsed)) : 5;
+  return "&#9733;".repeat(n) + "&#9734;".repeat(5 - n);
 }
 
 function showMessage(el, text, type) {

@@ -36,6 +36,20 @@
   box-sizing: border-box;
 }
 
+/* Screen-reader-only. Used for page <h1>s where the visible design starts at
+   an <h2>, so assistive tech still gets a document heading. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 html {
   scroll-behavior: smooth;
   background: var(--paper);
@@ -1720,7 +1734,9 @@ textarea:focus {
   z-index: auto;
   inset: auto;
   display: block;
-  width: var(--shell);
+  /* Was `var(--shell)`, but a duplicate rule ~40 lines below silently
+     overrode it. Consolidated here to the value that actually rendered. */
+  width: min(1320px, calc(100% - 40px));
   margin: 0 auto;
   padding: 88px 0 112px;
   overflow: visible;
@@ -1752,10 +1768,6 @@ textarea:focus {
   max-height: none;
   overflow: visible;
   grid-template-columns: minmax(500px, 1.16fr) minmax(420px, 0.84fr);
-}
-
-.variant-modal.product-detail-shell {
-  width: min(1320px, calc(100% - 40px));
 }
 
 .product-detail-back {
