@@ -35,6 +35,8 @@ const adminPerksActions = document.querySelector("[data-admin-perks-actions]");
 const authSwitchButtons = document.querySelectorAll("[data-auth-tab]");
 const authPanes = document.querySelectorAll("[data-auth-pane]");
 const passwordToggleButtons = document.querySelectorAll("[data-password-toggle]");
+const googleAuthLabel = document.querySelector("[data-google-auth-label]");
+const discordAuthLabel = document.querySelector("[data-discord-auth-label]");
 
 /* Only allow same-origin relative paths ("/products/", not "//evil.com",
    "https://evil.com", or "javascript:..."). Prevents open redirect / XSS. */
@@ -152,6 +154,10 @@ function setAuthTab(tabName) {
     pane.classList.toggle("is-active", isActive);
     pane.hidden = !isActive;
   });
+
+  const isSignIn = tabName === "signin";
+  if (googleAuthLabel) googleAuthLabel.textContent = isSignIn ? "Sign in with Google" : "Continue with Google";
+  if (discordAuthLabel) discordAuthLabel.textContent = isSignIn ? "Sign in with Discord" : "Continue with Discord";
 }
 
 function formatTimestamp(value) {

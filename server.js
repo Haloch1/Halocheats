@@ -22,9 +22,11 @@ const __dirname = path.dirname(__filename);
    fire-and-forget Supabase/Discord call) crash the whole payment server. */
 process.on("unhandledRejection", (reason) => {
   console.error("[unhandledRejection]", reason instanceof Error ? reason.stack : reason);
+  void reportOperationalError("Unhandled promise rejection", reason);
 });
 process.on("uncaughtException", (error) => {
   console.error("[uncaughtException]", error?.stack || error);
+  void reportOperationalError("Uncaught exception", error);
 });
 
 // Mutable products ref — self-heals if Render starts the server before files finish updating
@@ -56,6 +58,7 @@ const discordSignupChannelId = process.env.DISCORD_SIGNUP_CHANNEL_ID || "";
 const discordSecurityWebhookUrl =
   process.env.DISCORD_SECURITY_WEBHOOK_URL || discordSignupWebhookUrl;
 const discordModerationChannelId = process.env.DISCORD_MODERATION_CHANNEL_ID || "";
+const discordErrorChannelId = process.env.DISCORD_ERROR_CHANNEL_ID || "1530317219337076837";
 const discordOrderWebhookUrl = process.env.DISCORD_ORDER_WEBHOOK_URL || "";
 /* Webhook for the "alerts" channel — new-visitor pings. Create a webhook in your
    alerts channel and set DISCORD_ALERTS_WEBHOOK_URL on Render. */
@@ -1629,6 +1632,31 @@ async function sendDiscordChannelEmbed(channelId, embed) {
   });
   if (!channel || !channel.isTextBased()) return null;
   return channel.send({ embeds: [embed] });
+}
+
+const reportedErrors = new Map();
+async function reportOperationalError(source, error, context = "") {
+  const detail = String(error?.stack || error?.message || error || "Unknown error")
+    .replace(/[A-Za-z0-9_-]{24,}/g, "[redacted]")
+    .slice(0, 900);
+  const fingerprint = crypto.createHash("sha256").update(`${source}:${detail}`).digest("hex");
+  const lastReported = reportedErrors.get(fingerprint) || 0;
+  if (Date.now() - lastReported < 300_000) return;
+  reportedErrors.set(fingerprint, Date.now());
+  try {
+    await sendDiscordChannelEmbed(discordErrorChannelId, {
+      title: "Service error detected",
+      color: 0xe02b2b,
+      fields: [
+        { name: "Source", value: String(source).slice(0, 200), inline: true },
+        ...(context ? [{ name: "Context", value: String(context).slice(0, 500), inline: false }] : []),
+        { name: "Details", value: `\`\`\`${detail}\`\`\``, inline: false },
+      ],
+      timestamp: new Date().toISOString(),
+    });
+  } catch (reportError) {
+    console.error("[error monitor] Failed to send Discord alert:", reportError.message);
+  }
 }
 
 /* ── Discord bot client ── */
@@ -11399,8 +11427,10 @@ app.post("/api/cart/checkout", async (req, res) => {
   }
 
   const delivered = [];
+  let activeSelection = null;
   try {
     for (const selection of selections) {
+      activeSelection = selection;
       const result = await fulfillFromBalance(member, selection, selection.variant.amount, selection.product.name);
       delivered.push({ product: selection.product.name, keyValue: result.keyValue });
     }
@@ -11410,10 +11440,19 @@ app.post("/api/cart/checkout", async (req, res) => {
       return res.status(402).json({ error: "Your balance ran out during checkout.", delivered, balanceCents: currentBalance });
     }
     if (error.code === "out_of_stock") {
+      const unavailableItem = activeSelection
+        ? `${activeSelection.product.name} - ${activeSelection.variant.name}`
+        : "An item in your cart";
       const message = delivered.length
-        ? "Some cart items were out of stock. Items already delivered were charged; unavailable items were not charged."
-        : "Some cart items were out of stock. Your balance was not charged.";
-      return res.status(207).json({ error: message, delivered, balanceCents: currentBalance });
+        ? `${unavailableItem} is out of stock. Items already delivered were charged; this unavailable item was not charged.`
+        : `${unavailableItem} is out of stock. Your balance was not charged.`;
+      return res.status(207).json({
+        error: message,
+        unavailableProduct: activeSelection?.product.name || null,
+        unavailableVariant: activeSelection?.variant.name || null,
+        delivered,
+        balanceCents: currentBalance,
+      });
     }
     console.error("[cart checkout]", error.message);
     return res.status(500).json({ error: "Checkout error.", delivered, balanceCents: currentBalance });

@@ -1082,6 +1082,12 @@ function initWallet() {
       balanceEl.textContent = haloMoney(haloBalanceCents);
       updateBalancePill();
       const count = (data.delivered || []).length;
+      if (res.status === 207) {
+        showCartMessage(data.error || "One cart item could not be fulfilled.", "warn");
+        checkoutBtn.disabled = false;
+        checkoutBtn.textContent = original;
+        return;
+      }
       showCartMessage(`${count} key${count === 1 ? "" : "s"} delivered — view them on your account page.`, "success");
       checkoutBtn.textContent = original;
     } catch (err) {
