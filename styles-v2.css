@@ -3783,3 +3783,62 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
     transform: none;
   }
 }
+
+/* Homepage Discord sign-in prompt. Kept here because every public page uses
+   this stylesheet, while the legacy stylesheet is no longer loaded. */
+.discord-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(45, 18, 20, 0.42);
+  backdrop-filter: blur(7px);
+}
+
+.discord-popup-overlay[hidden] {
+  display: none !important;
+}
+
+.discord-popup {
+  position: relative;
+  width: min(100%, 410px);
+  padding: 34px 30px 24px;
+  text-align: center;
+  color: var(--ink);
+  background: linear-gradient(155deg, #ffffff, #fff5f4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: discord-popup-in 180ms ease-out;
+}
+
+.discord-popup-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  color: var(--ink-soft);
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+}
+
+.discord-popup-close:hover { color: var(--red); background: var(--red-soft); }
+.discord-popup-icon { display: block; margin: 0 auto 14px; }
+.discord-popup-title { margin: 0 0 8px; font: 800 1.25rem/1.2 var(--font-display); }
+.discord-popup-text { margin: 0 0 20px; color: var(--ink-soft); font-size: 0.92rem; line-height: 1.55; }
+.discord-popup-action { display: inline-flex; width: 100%; justify-content: center; margin-bottom: 12px; }
+.discord-popup-dismiss { padding: 5px 8px; color: var(--ink-soft); font: 600 0.78rem var(--font-body); cursor: pointer; background: transparent; border: 0; }
+.discord-popup-dismiss:hover { color: var(--red); }
+
+@keyframes discord-popup-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
