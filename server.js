@@ -12210,10 +12210,28 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     const verificationIp = getVerificationIp(req);
     const verificationIpHash = hashVerificationIp(verificationIp);
     const verificationSubnetHash = hashVerificationSubnet(verificationIp);
+    if (mode === "verify") {
+      // Temporary diagnostic: prints exactly what IP the server resolved and
+      // where it came from, so a misconfigured proxy chain (Cloudflare/Render)
+      // shows up directly in Render logs instead of being guessed at.
+      console.log("[Verification debug]", {
+        discordUser: discordUser.id,
+        resolvedIp: verificationIp,
+        isPrivate: verificationIp ? isPrivateVerificationIp(verificationIp) : null,
+        trustCloudflareIpEnv: process.env.TRUST_CLOUDFLARE_IP || "(unset)",
+        cfConnectingIpHeader: req.headers["cf-connecting-ip"] || "(none)",
+        xForwardedForHeader: req.headers["x-forwarded-for"] || "(none)",
+        reqIp: req.ip,
+        socketRemoteAddress: req.socket?.remoteAddress,
+      });
+    }
     const [ipIsBanned, proxyRisk] = await Promise.all([
       checkVerificationIpBan(verificationIpHash, verificationSubnetHash, deviceFingerprint),
       mode === "verify" ? checkVerificationProxy(verificationIp) : Promise.resolve({ checked: false, detected: false, reasons: [] }),
     ]);
+    if (mode === "verify") {
+      console.log("[Verification debug] proxyRisk result:", proxyRisk);
+    }
     const priorLinks = mode === "verify"
       ? await findPriorVerificationIps(verificationIpHash, verificationSubnetHash, proxyRisk.asn, deviceFingerprint, discordUser.id)
       : { ip: [], subnet: [], asn: [], fingerprint: [] };
