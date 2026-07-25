@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/assets/nox-logo.png" />
+    <title>Verification blocked | XenCheats</title>
+    <meta name="description" content="This Discord verification attempt was blocked by our security check." />
+    <meta name="robots" content="noindex" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../styles-v2.css" />
+    <style>
+      .blocked-shell {
+        max-width: 620px;
+        margin: 0 auto;
+        text-align: center;
+      }
+      .blocked-icon {
+        width: 76px;
+        height: 76px;
+        margin: 0 auto 22px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--red-soft);
+        border: 1px solid #f1b9bc;
+      }
+      .blocked-icon svg {
+        width: 36px;
+        height: 36px;
+      }
+      .blocked-reasons {
+        text-align: left;
+        margin: 22px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 12px;
+      }
+      .blocked-reasons li {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        font-size: 0.92rem;
+        color: var(--ink-soft);
+      }
+      .blocked-reasons li span.step-num {
+        flex: 0 0 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--red);
+        color: #fff;
+        font-size: 0.75rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .blocked-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 26px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-shell">
+        <a class="brand" href="/"><img src="../../assets/nox-logo.png" alt="XenCheats logo" /><div><strong>XenCheats</strong><span>Secure verification</span></div></a>
+        <nav class="nav"><a href="/">Home</a><a href="/products/">Products</a><a href="https://discord.gg/xencheats" target="_blank">Discord</a></nav>
+        <a class="nav-cta" href="/account/">Account</a>
+      </div>
+    </header>
+    <main class="section terms-shell">
+      <div class="blocked-shell">
+        <div class="blocked-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2L4 5v6c0 5.25 3.4 9.74 8 11 4.6-1.26 8-5.75 8-11V5l-8-3z" stroke="#a0151c" stroke-width="1.6" stroke-linejoin="round"/>
+            <path d="M9.5 9.5l5 5m0-5l-5 5" stroke="#a0151c" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="eyebrow">Discord verification</p>
+        <h2>This attempt wasn't allowed</h2>
+        <p style="color:var(--ink-soft);margin-top:8px">
+          Our security check flagged this network or device and stopped verification before it completed.
+          No role was granted and no account was linked.
+        </p>
+        <section class="terms-card reveal" data-delay="80" style="margin-top:28px;text-align:left">
+          <strong style="font-size:0.95rem">What to do next</strong>
+          <ol class="blocked-reasons">
+            <li><span class="step-num">1</span><span>Check your Discord DMs — XenCheats sent you the specific reason this was blocked.</span></li>
+            <li><span class="step-num">2</span><span>If you're on a VPN or proxy, turn it off and try verifying again from your normal connection.</span></li>
+            <li><span class="step-num">3</span><span>Still stuck, or think this is a mistake? Open a ticket in Discord and a specialist will take a look.</span></li>
+          </ol>
+        </section>
+        <div class="blocked-actions">
+          <a class="button button-primary" href="https://discord.gg/xencheats" target="_blank">Open Discord</a>
+          <a class="button button-secondary" href="/">Back to homepage</a>
+        </div>
+      </div>
+    </main>
+    <footer class="site-footer"><div class="footer-inner"><div class="footer-brand"><img src="../../assets/nox-logo.png" alt="XenCheats logo" /><strong>XenCheats</strong></div><div class="footer-links"><a href="/products/">Products</a><a href="https://discord.gg/xencheats" target="_blank">Discord</a></div><div class="footer-copy">&copy; 2026 XenCheats.</div></div></footer>
+    <script type="module" src="../../scripts/verify-blocked.js"></script>
+  </body>
+</html>
