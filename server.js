@@ -1203,11 +1203,12 @@ function hashToken(value) {
   return crypto.createHash("sha256").update(String(value || "")).digest("hex");
 }
 
-function createDiscordOAuthCookieState(state, userId, mode) {
+function createDiscordOAuthCookieState(state, userId, mode, fingerprint) {
   const payload = Buffer.from(JSON.stringify({
     state,
     userId,
     mode,
+    fingerprint: fingerprint || "",
     expiresAt: Date.now() + 300_000,
   })).toString("base64url");
   const secret = discordClientSecret || ownerRequestsKey;
@@ -1311,13 +1312,17 @@ async function queryVerificationTable(operation, fallback) {
   }
 }
 
-async function checkVerificationIpBan(ipHash, subnetHash) {
-  if ((!ipHash && !subnetHash) || !supabaseAdmin) return false;
+async function checkVerificationIpBan(ipHash, subnetHash, fingerprintHash) {
+  if ((!ipHash && !subnetHash && !fingerprintHash) || !supabaseAdmin) return false;
   const { data, error } = await queryVerificationTable(
     () => supabaseAdmin
       .from("discord_verification_ip_bans")
       .select("expires_at")
-      .or([ipHash && `ip_hash.eq.${ipHash}`, subnetHash && `subnet_hash.eq.${subnetHash}`].filter(Boolean).join(","))
+      .or([
+        ipHash && `ip_hash.eq.${ipHash}`,
+        subnetHash && `subnet_hash.eq.${subnetHash}`,
+        fingerprintHash && `fingerprint_hash.eq.${fingerprintHash}`,
+      ].filter(Boolean).join(","))
       .limit(10),
     { data: [], error: null },
   );
@@ -1326,16 +1331,19 @@ async function checkVerificationIpBan(ipHash, subnetHash) {
 }
 
 /* Alt-account correlation with confidence tiers:
+   - "fingerprint": same device (canvas/WebGL/font/hardware signature) — very
+     high confidence, and the one signal that survives a VPN or network change
+     entirely, since it never touches the IP.
    - "ip": exact IP hash match — same device/network, very high confidence.
    - "subnet": same /24 (or /48 for IPv6) network but a different exact IP —
      typical of a home ISP handing out a new dynamic address. Medium confidence.
    - "asn": same ISP/network operator (ASN) but a different subnet entirely —
      weak on its own (huge ISPs share one ASN across a whole region), only
      useful as a secondary signal alongside other risk flags. */
-async function findPriorVerificationIps(ipHash, subnetHash, asn, discordId) {
-  if (!supabaseAdmin) return { ip: [], subnet: [], asn: [] };
+async function findPriorVerificationIps(ipHash, subnetHash, asn, fingerprintHash, discordId) {
+  if (!supabaseAdmin) return { ip: [], subnet: [], asn: [], fingerprint: [] };
 
-  const [ipMatches, subnetMatches, asnMatches] = await Promise.all([
+  const [ipMatches, subnetMatches, asnMatches, fingerprintMatches] = await Promise.all([
     ipHash
       ? queryVerificationTable(
           () => supabaseAdmin
@@ -1369,16 +1377,29 @@ async function findPriorVerificationIps(ipHash, subnetHash, asn, discordId) {
           { data: [], error: null },
         )
       : Promise.resolve({ data: [], error: null }),
+    fingerprintHash
+      ? queryVerificationTable(
+          () => supabaseAdmin
+            .from("discord_verification_ips")
+            .select("discord_id")
+            .eq("fingerprint_hash", fingerprintHash)
+            .neq("discord_id", discordId)
+            .limit(5),
+          { data: [], error: null },
+        )
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   if (ipMatches.error) throw ipMatches.error;
   if (subnetMatches.error) throw subnetMatches.error;
   if (asnMatches.error) throw asnMatches.error;
+  if (fingerprintMatches.error) throw fingerprintMatches.error;
 
   return {
     ip: ipMatches.data || [],
     subnet: subnetMatches.data || [],
     asn: asnMatches.data || [],
+    fingerprint: fingerprintMatches.data || [],
   };
 }
 
@@ -1393,7 +1414,7 @@ const verificationIpLogExcludeIds = new Set(
     .filter(Boolean),
 );
 
-async function recordVerificationIp({ ipHash, subnetHash, asn, isp, connectionType, fraudScore, discordId, userId, proxyDetected }) {
+async function recordVerificationIp({ ipHash, subnetHash, asn, isp, connectionType, fraudScore, fingerprintHash, discordId, userId, proxyDetected }) {
   if (!ipHash || !supabaseAdmin) return;
   if (verificationIpLogExcludeIds.has(String(discordId))) return;
   const { error } = await queryVerificationTable(
@@ -1406,6 +1427,7 @@ async function recordVerificationIp({ ipHash, subnetHash, asn, isp, connectionTy
         isp: isp ? String(isp).slice(0, 200) : null,
         connection_type: connectionType ? String(connectionType).slice(0, 60) : null,
         fraud_score: Number.isFinite(fraudScore) ? fraudScore : null,
+        fingerprint_hash: fingerprintHash || null,
         discord_id: discordId,
         user_id: userId || null,
         proxy_detected: Boolean(proxyDetected),
@@ -1421,7 +1443,7 @@ async function blockKnownVerificationIps(discordId, reason, createdBy) {
   const { data, error } = await queryVerificationTable(
     () => supabaseAdmin
       .from("discord_verification_ips")
-      .select("ip_hash, subnet_hash")
+      .select("ip_hash, subnet_hash, fingerprint_hash")
       .eq("discord_id", discordId)
       .limit(20),
     { data: [], error: null },
@@ -1430,6 +1452,7 @@ async function blockKnownVerificationIps(discordId, reason, createdBy) {
 
   const hashes = [...new Set((data || []).map((entry) => entry.ip_hash).filter(Boolean))];
   const subnetHashes = [...new Set((data || []).map((entry) => entry.subnet_hash).filter(Boolean))];
+  const fingerprintHashes = [...new Set((data || []).map((entry) => entry.fingerprint_hash).filter(Boolean))];
   if (!hashes.length) return 0;
 
   const trimmedReason = String(reason || "Discord ban").slice(0, 500);
@@ -1459,6 +1482,22 @@ async function blockKnownVerificationIps(discordId, reason, createdBy) {
           reason: trimmedReason,
           created_by: trimmedCreatedBy,
         })), { onConflict: "subnet_hash" }),
+      { error: null },
+    ).catch(() => {});
+  }
+
+  /* Device fingerprint bans are the strongest of the three — they survive a
+     full VPN/network change, which is exactly the case IP and subnet bans
+     can't cover. */
+  if (fingerprintHashes.length) {
+    await queryVerificationTable(
+      () => supabaseAdmin
+        .from("discord_verification_ip_bans")
+        .upsert(fingerprintHashes.map((fingerprintHash) => ({
+          fingerprint_hash: fingerprintHash,
+          reason: trimmedReason,
+          created_by: trimmedCreatedBy,
+        })), { onConflict: "fingerprint_hash" }),
       { error: null },
     ).catch(() => {});
   }
@@ -12054,9 +12093,10 @@ app.get("/api/auth/google/callback", async (req, res) => {
   }
 });
 
-/* ── Discord verification redirect (used from Discord verify button) ── */
-app.get("/verify", (_req, res) => res.redirect("/api/auth/discord?mode=verify"));
-
+/* ── Discord verification (used from Discord verify button) ──
+   /verify now serves a real page (see pageRoutes below) that captures a
+   lightweight device fingerprint before continuing here, instead of an
+   instant redirect straight into OAuth. */
 app.get("/api/auth/discord", async (req, res) => {
   try {
     const queryMode = req.query.mode || "";
@@ -12071,9 +12111,17 @@ app.get("/api/auth/discord", async (req, res) => {
 
     const state = crypto.randomBytes(16).toString("hex");
     const mode = queryMode === "verify" ? "verify" : userId ? "link" : "signin";
+    // The /verify landing page sets this short-lived cookie after computing a
+    // device fingerprint client-side; fold it into the signed state so it
+    // survives the Discord round trip without a separate lookup.
+    const incomingCookies = parseCookies(req);
+    const fingerprint = /^[a-f0-9]{64}$/.test(incomingCookies.xc_verify_fp || "")
+      ? incomingCookies.xc_verify_fp
+      : "";
+    res.clearCookie("xc_verify_fp", { path: "/" });
     // Sign the browser-bound context so callback validation works across Render
     // instances without exposing the linked account in Discord's state query.
-    res.cookie("discord_oauth_state", createDiscordOAuthCookieState(state, userId, mode), {
+    res.cookie("discord_oauth_state", createDiscordOAuthCookieState(state, userId, mode, fingerprint), {
       httpOnly: true,
       secure: baseUrl.startsWith("https://"),
       sameSite: "lax",
@@ -12110,6 +12158,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     }
     const userId = stateRecord.userId || "";
     const mode = stateRecord.mode || "signin";
+    const deviceFingerprint = stateRecord.fingerprint || "";
 
     // Clear the state cookie
     res.cookie("discord_oauth_state", "", { maxAge: 0, path: "/" });
@@ -12162,41 +12211,49 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     const verificationIpHash = hashVerificationIp(verificationIp);
     const verificationSubnetHash = hashVerificationSubnet(verificationIp);
     const [ipIsBanned, proxyRisk] = await Promise.all([
-      checkVerificationIpBan(verificationIpHash, verificationSubnetHash),
+      checkVerificationIpBan(verificationIpHash, verificationSubnetHash, deviceFingerprint),
       mode === "verify" ? checkVerificationProxy(verificationIp) : Promise.resolve({ checked: false, detected: false, reasons: [] }),
     ]);
     const priorLinks = mode === "verify"
-      ? await findPriorVerificationIps(verificationIpHash, verificationSubnetHash, proxyRisk.asn, discordUser.id)
-      : { ip: [], subnet: [], asn: [] };
+      ? await findPriorVerificationIps(verificationIpHash, verificationSubnetHash, proxyRisk.asn, deviceFingerprint, discordUser.id)
+      : { ip: [], subnet: [], asn: [], fingerprint: [] };
 
     if (ipIsBanned) {
-      await banDiscordVerificationAttempt(discordUser.id, "banned network");
-      await sendSecurityDiscordAlert("Verification blocked: banned network", [
+      // Ban is keyed by IP, subnet, OR device fingerprint - any one of these
+      // matching a network/device tied to an existing ban is enough, since
+      // this is the classic ban-evasion case the fingerprint exists to catch.
+      await banDiscordVerificationAttempt(discordUser.id, "linked to an existing ban");
+      await sendSecurityDiscordAlert("Auto-banned: linked to an existing ban", [
         { name: "Discord user", value: `<@${discordUser.id}>`, inline: true },
-        { name: "IP association", value: "Matched a blocked IP or subnet", inline: true },
+        { name: "Match", value: "Matched a blocked IP, subnet, or device fingerprint", inline: true },
       ]).catch(() => {});
       return res.redirect("/account/?discord=blocked");
     }
 
-    /* Alt-detection confidence tiers, strongest first. Exact IP reuse uses the
-       existing reuse policy; a subnet-only match (same ISP block, different
-       dynamic IP) uses its own, separately configurable policy since it's a
-       weaker signal on its own. ASN-only matches are informational — logged
-       in the alert but never block by themselves. */
-    const exactIpMatch = mode === "verify" && priorLinks.ip.length > 0;
-    const subnetOnlyMatch = mode === "verify" && !exactIpMatch && priorLinks.subnet.length > 0;
-    const asnOnlyMatch = mode === "verify" && !exactIpMatch && !subnetOnlyMatch && priorLinks.asn.length > 0;
+    /* Alt-detection confidence tiers, strongest first. An exact device
+       fingerprint match survives a full VPN/network change, so it's treated
+       the same as an exact IP match. Subnet-only match (same ISP block,
+       different dynamic IP) uses its own, separately configurable policy
+       since it's weaker on its own. ASN-only matches are informational —
+       logged in the alert but never block by themselves. */
+    const exactFingerprintMatch = mode === "verify" && priorLinks.fingerprint.length > 0;
+    const exactIpMatch = mode === "verify" && !exactFingerprintMatch && priorLinks.ip.length > 0;
+    const subnetOnlyMatch = mode === "verify" && !exactFingerprintMatch && !exactIpMatch && priorLinks.subnet.length > 0;
+    const asnOnlyMatch = mode === "verify" && !exactFingerprintMatch && !exactIpMatch && !subnetOnlyMatch && priorLinks.asn.length > 0;
 
+    const mustBlockForFingerprint = exactFingerprintMatch && verificationIpReusePolicy === "block";
     const mustBlockForIp = exactIpMatch && verificationIpReusePolicy === "block";
     const mustBlockForSubnet = subnetOnlyMatch && verificationSubnetPolicy === "block";
     const mustBlockForProxy = mode === "verify" && proxyRisk.detected && verificationProxyPolicy === "block";
 
-    if (mustBlockForIp || mustBlockForSubnet || mustBlockForProxy) {
+    if (mustBlockForFingerprint || mustBlockForIp || mustBlockForSubnet || mustBlockForProxy) {
       const reason = mustBlockForProxy
         ? `VPN/proxy risk detected (${proxyRisk.reasons.join(", ") || "flagged"})`
-        : mustBlockForIp
-          ? "Network already verified another Discord account (exact IP match)"
-          : "Same network block already verified another Discord account (subnet match)";
+        : mustBlockForFingerprint
+          ? "Same device already verified another Discord account (fingerprint match)"
+          : mustBlockForIp
+            ? "Network already verified another Discord account (exact IP match)"
+            : "Same network block already verified another Discord account (subnet match)";
       await sendSecurityDiscordAlert("Verification blocked by fraud policy", [
         { name: "Discord user", value: `<@${discordUser.id}>`, inline: true },
         { name: "Reason", value: reason, inline: false },
@@ -12205,12 +12262,14 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     }
 
     if (mode === "verify" && (
-      (exactIpMatch && verificationIpReusePolicy === "review")
+      (exactFingerprintMatch && verificationIpReusePolicy === "review")
+      || (exactIpMatch && verificationIpReusePolicy === "review")
       || (subnetOnlyMatch && verificationSubnetPolicy === "review")
       || (asnOnlyMatch)
       || (proxyRisk.detected && verificationProxyPolicy === "review")
     )) {
       const signals = [
+        exactFingerprintMatch && "same device fingerprint as another account",
         exactIpMatch && "exact IP reused from another account",
         subnetOnlyMatch && "same network block as another account",
         asnOnlyMatch && "same ISP/ASN as another account",
@@ -12327,6 +12386,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
       isp: proxyRisk.isp,
       connectionType: proxyRisk.connectionType,
       fraudScore: proxyRisk.fraudScore,
+      fingerprintHash: deviceFingerprint,
       discordId: discordUser.id,
       userId: linkedUserId,
       proxyDetected: proxyRisk.detected,
@@ -14032,6 +14092,7 @@ const pageRoutes = new Map([
   ["/reviews", "reviews/index.html"],
   ["/status", "status/index.html"],
   ["/stripe-landing", "stripe-landing/index.html"],
+  ["/verify", "verify/index.html"],
 ]);
 
 pageRoutes.forEach((relativePath, route) => {
