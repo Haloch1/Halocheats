@@ -2339,8 +2339,76 @@ textarea:focus {
   color: var(--red-dark);
 }
 
+/* A lone leftover feature card (count not divisible by the 3-column grid)
+   looked orphaned, stranded at a third of the row's width. Give it the
+   full row instead so it reads as a deliberate closing group. */
+.variant-feature-grid > .variant-feature-card:last-child:nth-child(3n+1) {
+  grid-column: 1 / -1;
+}
+
+.variant-feature-grid > .variant-feature-card:last-child:nth-child(3n+1) ul {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 6px 18px;
+}
+
+/* The "open instructions" link shared the plain info-box treatment, which
+   made it look like a mismatched, empty twin sitting next to real content.
+   Style it as an explicit call-to-action instead. */
 .variant-info-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-left: 17px;
+  color: var(--red-dark);
+  border-color: rgba(216, 32, 40, 0.2);
+  background: var(--red-soft);
+  font: 700 0.82rem var(--font-display);
+  text-align: center;
   text-decoration: none;
+}
+
+.variant-info-link::after {
+  content: "\2192";
+  font-size: 0.95rem;
+}
+
+/* System requirements repeated the exact same boxed-card look as the info
+   list right above it, so the section read as one long wall of identical
+   boxes. Give it a tighter, spec-sheet style instead for some contrast. */
+.variant-requirements {
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(80, 29, 31, 0.045);
+}
+
+.variant-requirements > div {
+  display: flex;
+  align-items: center;
+  padding: 12px 18px 12px 44px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 0.82rem;
+  transform: none;
+}
+
+.variant-requirements > div:last-child {
+  border-bottom: 0;
+}
+
+.variant-requirements > div:hover {
+  background: var(--paper-soft);
+  transform: none;
+}
+
+.variant-requirements > div::before {
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 /* Dedicated product pages have more room than the quick-view modal. */
