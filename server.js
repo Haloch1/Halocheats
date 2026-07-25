@@ -12545,10 +12545,12 @@ async function generateAILiveDeskReply(thread, userMessage, userContext) {
     }
   }
 
-  // A Discord handoff is terminal for automated desk replies. Do not keep
-  // guessing or repeat troubleshooting after we have directed the member to staff.
+  // Once a ticket has been handed to Discord, never call the model again for
+  // generic follow-ups. Returning null here used to leave the website typing
+  // indefinitely; reply immediately instead, while still allowing a direct
+  // catalog question to use its safe local-data fallback.
   if (historyTurns.some((entry) => entry.role === "assistant" && entry.content.includes("discord.gg/xencheats"))) {
-    return null;
+    return catalogFallback || "This issue has already been handed to the Discord support team. Please continue at https://discord.gg/xencheats so they can finish it with you.";
   }
 
   if (liveStatus) {
@@ -12626,7 +12628,7 @@ SECURITY:
   // still inexpensive. Groq remains the resilience fallback below.
   if (geminiApiKey) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45_000);
+    const timeout = setTimeout(() => controller.abort(), 12_000);
     try {
       console.log("[AI Live Desk] Calling Gemini for thread:", thread.id);
       const response = await fetch(
@@ -12673,13 +12675,12 @@ SECURITY:
 
   if (!groqApiKey) return null;
 
-  /* Retry transient failures (rate limits / 5xx / timeouts / empty replies) with
-     a longer timeout and more room to think, so the desk doesn't fall back to
-     "having trouble thinking". */
+  /* Fail over quickly. A support widget is worse than useless when it appears
+     to think for minutes after a provider outage. */
   let providerRateLimited = false;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45000);
+    const timeout = setTimeout(() => controller.abort(), 12_000);
     try {
       console.log("[AI Live Desk] Calling Groq for thread:", thread.id, "attempt", attempt + 1);
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
