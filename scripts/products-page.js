@@ -500,11 +500,12 @@ function ensureVariantModal() {
     ${dedicatedProductSlug ? "" : '<div class="variant-backdrop" data-variant-close></div>'}
     <section class="variant-dialog" ${dedicatedProductSlug ? "" : 'role="dialog" aria-modal="true"'} aria-labelledby="variant-title">
       ${dedicatedProductSlug ? '<a class="product-detail-back" href="/products/">&larr; All products</a>' : '<button class="variant-close" type="button" data-variant-close aria-label="Close variant selector">&times;</button>'}
-      <div class="variant-art">
+      <div class="variant-art" data-variant-art>
         <img class="variant-product-image" data-variant-product-image alt="" />
         <img class="product-image-blur product-image-blur-top" data-variant-product-blur alt="" aria-hidden="true" />
         <img class="product-image-blur product-image-blur-bottom" data-variant-product-blur alt="" aria-hidden="true" />
         <div class="variant-art-brand" aria-hidden="true"><span>XenCheats</span></div>
+        <div class="variant-art-caption" data-variant-art-caption aria-hidden="true"></div>
       </div>
       <div class="variant-details">
         <p class="eyebrow">Product view</p>
@@ -966,6 +967,21 @@ function openVariantModal(product, { updateUrl = true } = {}) {
   modal.querySelectorAll("[data-variant-product-blur]").forEach((image) => {
     image.src = productImageSrc(product);
   });
+
+  /* Products without dedicated artwork fall back to a wide category photo.
+     That image looks small and empty when "contain"-fit into the tall art
+     panel built for portrait box-art, so switch that panel to a full-bleed
+     cover treatment and add a caption instead of leaving it looking bare. */
+  const artPanel = modal.querySelector("[data-variant-art]");
+  const hasOwnArt = Boolean(productArtwork[product.slug]);
+  if (artPanel) {
+    artPanel.classList.toggle("variant-art-cover", !hasOwnArt);
+  }
+  const artCaption = modal.querySelector("[data-variant-art-caption]");
+  if (artCaption) {
+    artCaption.textContent = hasOwnArt ? "" : (product.category || product.game || "");
+    artCaption.hidden = hasOwnArt;
+  }
 
   if (dedicatedProductSlug) {
     const breadcrumb = document.querySelector("[data-product-breadcrumb]");

@@ -1981,6 +1981,41 @@ textarea:focus {
   object-fit: contain;
 }
 
+/* Fallback (category) artwork is a wide screenshot, not portrait box-art —
+   "contain" left it tiny and floating in a dark void. Cover the whole panel
+   instead so it reads as an intentional hero photo, not a placeholder. */
+.variant-art.variant-art-cover .variant-product-image {
+  padding: 0;
+  object-fit: cover;
+  object-position: center 38%;
+  filter: saturate(1.05) contrast(1.03);
+}
+
+.variant-art.variant-art-cover::before {
+  background: linear-gradient(180deg, rgba(12, 20, 30, 0.55), rgba(20, 34, 48, 0.05) 68%, transparent);
+}
+
+.variant-art.variant-art-cover::after {
+  background: linear-gradient(0deg, rgba(10, 8, 10, 0.82), rgba(20, 12, 14, 0.3) 55%, transparent);
+}
+
+.variant-art-caption {
+  position: absolute;
+  z-index: 4;
+  right: 22px;
+  bottom: 22px;
+  left: 22px;
+  color: #fff;
+  font: 800 0.7rem var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+.variant-art-caption[hidden] {
+  display: none;
+}
+
 .variant-details {
   align-self: stretch;
   padding: clamp(30px, 4vw, 54px);
@@ -3686,6 +3721,7 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
 
   .variant-art { border-radius: 23px 23px 0 0; }
   .variant-product-image { padding: 34px 12px; object-fit: contain; object-position: center; }
+  .variant-art.variant-art-cover .variant-product-image { padding: 0; object-fit: cover; object-position: center 38%; }
   .variant-extra { padding: 30px 22px; }
 
   .member-grid { grid-template-columns: 1fr; }
