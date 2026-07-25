@@ -507,23 +507,36 @@ const WHOLESALE_COSTS = {
   "r6s-chams-license": 0,
   "r6s-lethal-license": 0,
   "r6s-no-recoil-license": 0,
-  // Fortnite
-  "fortnite-full-day": 479, "fortnite-full-week": 1039, "fortnite-full-month": 1999,
+  // Fortnite — TODO: placeholders (0) until real reseller cost is provided
+  "fortnite-dullwave-day": 0, "fortnite-dullwave-three-day": 0, "fortnite-dullwave-week": 0, "fortnite-dullwave-month": 0,
   "fortnite-ancient-day": 399, "fortnite-ancient-week": 1999, "fortnite-ancient-month": 3999,
-  "disconnect-fortnite-external-day": 720, "disconnect-fortnite-external-three-day": 1440, "disconnect-fortnite-external-week": 2800, "disconnect-fortnite-external-month": 5200, "disconnect-fortnite-external-lifetime": 24000,
-  "fortnite-ignite-aimbot-day": 800, "fortnite-ignite-aimbot-three-day": 1600, "fortnite-ignite-aimbot-week": 2520, "fortnite-ignite-aimbot-month": 5600, "fortnite-ignite-aimbot-lifetime": 33600,
-  // Rust
-  "rust-ignite-day": 384, "rust-ignite-three-day": 864, "rust-ignite-week": 1200, "rust-ignite-month": 2880, "rust-ignite-lifetime": 17280,
-  "rust-krush-day": 240, "rust-krush-week": 1200, "rust-krush-month": 2400,
-  "rust-mek-day": 384, "rust-mek-three-day": 768, "rust-mek-week": 1440, "rust-mek-month": 2880, "rust-mek-long": 12000,
-  "rust-ancient-day": 300, "rust-ancient-week": 1250, "rust-ancient-month": 2500,
+  "fortnite-arcane-day": 0, "fortnite-arcane-week": 0, "fortnite-arcane-month": 0,
+  // Rust — TODO: placeholders (0) until real reseller cost is provided
+  "rust-dullwave-day": 0, "rust-dullwave-week": 0, "rust-dullwave-month": 0,
+  "rust-mason-lite-day": 0, "rust-mason-lite-week": 0, "rust-mason-lite-month": 0,
+  "rust-mason-full-day": 0, "rust-mason-full-week": 0, "rust-mason-full-month": 0,
+  "rust-mrpro-day": 0, "rust-mrpro-week": 0, "rust-mrpro-month": 0,
+  // Apex Legends — TODO: placeholders (0) until real reseller cost is provided
+  "apex-mason-day": 0, "apex-mason-week": 0, "apex-mason-month": 0,
+  "apex-ancient-day": 0, "apex-ancient-week": 0, "apex-ancient-month": 0,
+  "apex-dullwave-day": 0, "apex-dullwave-week": 0, "apex-dullwave-month": 0,
+  "apex-arcane-day": 0, "apex-arcane-week": 0, "apex-arcane-month": 0,
   // Spoofer
   "xim-spoofer-day": 399, "xim-spoofer-three-day": 650, "xim-spoofer-week": 1376, "xim-spoofer-month": 2826, "xim-spoofer-lifetime": 9170,
   "spoofer-verse-perm-one-time": 1599, "spoofer-verse-perm-lifetime": 3999,
   // Accounts
   "linked-nfa-account": 479, "stacked-pc-account-account": 1599,
-  // Legacy (removed products — needed for historical profit calc)
+  // Legacy (removed products — kept for historical profit calc on past orders)
   "exodus-r6-three-day": 479,
+  "fortnite-full-day": 479, "fortnite-full-week": 1039, "fortnite-full-month": 1999,
+  "disconnect-fortnite-external-day": 720, "disconnect-fortnite-external-three-day": 1440, "disconnect-fortnite-external-week": 2800, "disconnect-fortnite-external-month": 5200, "disconnect-fortnite-external-lifetime": 24000,
+  "fortnite-ignite-aimbot-day": 800, "fortnite-ignite-aimbot-three-day": 1600, "fortnite-ignite-aimbot-week": 2520, "fortnite-ignite-aimbot-month": 5600, "fortnite-ignite-aimbot-lifetime": 33600,
+  "rust-ignite-day": 384, "rust-ignite-three-day": 864, "rust-ignite-week": 1200, "rust-ignite-month": 2880, "rust-ignite-lifetime": 17280,
+  "rust-krush-day": 240, "rust-krush-week": 1200, "rust-krush-month": 2400,
+  "rust-mek-day": 384, "rust-mek-three-day": 768, "rust-mek-week": 1440, "rust-mek-month": 2880, "rust-mek-long": 12000,
+  "rust-ancient-day": 300, "rust-ancient-week": 1250, "rust-ancient-month": 2500,
+  "ignite-apex-day": 0, "ignite-apex-three-day": 0, "ignite-apex-week": 0, "ignite-apex-month": 0, "ignite-apex-lifetime": 0,
+  "ancient-apex-day": 0, "ancient-apex-week": 0, "ancient-apex-month": 0,
 };
 
 function getWholesaleCostCents(inventorySlug) {

@@ -850,26 +850,26 @@
           name: "Fortnite",
           products: [
             {
-              name: "Fortnite Legacy",
-              slug: "fortnite-legacy",
+              name: "Fortnite - Dullwave",
+              slug: "fortnite-dullwave",
               topics: [
                 {
                   title: "Setup Guide",
                   content: `
+                    <p>This guide covers every Dullwave-based product on XenCheats. The loader archive password is <code>dull</code>.</p>
+                    <h3>1. Before you launch</h3>
+                    <p>Disable Windows Defender, SmartScreen, and Secure Boot. Enable Hyper-V. Uninstall any antivirus software, FACEIT Anti-Cheat, ESEA, and Riot Vanguard.</p>
+                    <h3>2. Starting the loader</h3>
                     <ol>
-                      <li>Disable/remove all antivirus, and make sure Windows Defender is off.</li>
-                      <li>Remove FaceIt and Vanguard.</li>
-                      <li>Enter the game without the cheat and set the window mode to Borderless.</li>
-                      <li>Download the loader &mdash; you'll need the key we gave you to get access.</li>
-                      <li>Download the loader and start it as Administrator.</li>
-                      <li>Enter the key again and click "Activate".</li>
-                      <li>Start the game. In the main menu, press <code>F1</code>. The cheat will inject after you hear the beep.</li>
+                      <li>Make sure the game is closed before starting the loader &mdash; running it while the game is open can result in a ban.</li>
+                      <li>Run the loader as Administrator, log in, and wait for it to fully initialize.</li>
+                      <li>When you see "Press start game and press F2", launch the game.</li>
+                      <li>Once fully loaded, press <code>F2</code>. A confirmation beep means injection succeeded.</li>
+                      <li>Open the menu with <code>Home</code> (default binding).</li>
                     </ol>
-                    <h3>Download Links</h3>
-                    <p>Loader: <a href="https://decapitationfuel.space/" target="_blank">click here</a></p>
-                    <p>Defender Control: <a href="https://www.sordum.org/files/downloads.php?st-defender-control" target="_blank">sordum.org</a></p>
-                    <div class="warn-box">When downloading anything, watch out for pop-up ads &mdash; don't download the wrong file.</div>
-                    <div class="info-box">Any further questions? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a>.</div>
+                    <h3>Recommendations</h3>
+                    <p>The loader deletes itself after a successful run, so redownload it from the site if you need it again. Run it only from a USB flash drive, don't keep it stored permanently on your PC, and unplug the drive after injection.</p>
+                    <div class="info-box">Need help? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a> and our team will assist.</div>
                   `
                 }
               ]
@@ -923,51 +923,32 @@
               ]
             },
             {
-              name: "Zenith (Valorant / Fortnite)",
-              slug: "fortnite-zenith",
+              name: "Fortnite - Arcane",
+              slug: "fortnite-arcane",
               topics: [
                 {
-                  title: "Preparing Your PC",
+                  title: "Setup Guide",
                   content: `
+                    <p>This guide applies to every Arcane-based product on XenCheats, including Fortnite and Apex.</p>
+                    <div class="warn-box">All cheat software carries risk. "Undetected" is never a 100% guarantee. Never use this on your main account, and wait for an update after any game patch before playing again.</div>
+                    <h3>1. Before activating your key</h3>
                     <ol>
-                      <li>Download <a href="https://www.sordum.org/files/downloads.php?st-defender-control" target="_blank">Defender Control</a> (archive password: <code>sordum</code>) and use it to disable Windows Defender.</li>
-                      <li>Install Visual C++ (2015-2022) &mdash; get the latest from Microsoft if you don't have it.</li>
-                      <li>Install <a href="https://www.microsoft.com/en-us/download/details.aspx?id=35" target="_blank">DirectX</a>.</li>
-                      <li>Completely uninstall any third-party antivirus (Avast, Kaspersky, Malwarebytes, McAfee, or similar).</li>
+                      <li>Install the <a href="https://aka.ms/vs/17/release/vc_redist.x64.exe" target="_blank">Visual C++ Redistributable</a> and fully restart your PC.</li>
+                      <li>Uninstall third-party antivirus, disable Windows Defender and SmartScreen, and remove FaceIt/Vanguard if present.</li>
+                      <li>Nvidia users: install the Nvidia App, update drivers, and enable the overlay. AMD users: install AMD Adrenalin (non-PRO), update drivers, and enable in-game overlay + performance metrics.</li>
+                      <li>In BIOS, disable Intel Rapid Storage Technology, then restart again before running the loader.</li>
                     </ol>
-                    <div class="info-box">Why disable Windows Defender? Some anti-cheat systems can detect drivers via Defender's WDFILTER.sys component. Turning it off reduces detection risk and smooths out injection.</div>
-                    <p>Make sure the game is running in Borderless Window mode, not Fullscreen.</p>
-                  `
-                },
-                {
-                  title: "Installing the Loader",
-                  content: `
+                    <h3>2. Running the loader</h3>
                     <ol>
-                      <li>Go to <a href="http://ez-val.com/customer.html" target="_blank">ez-val.com/customer.html</a>.</li>
-                      <li>Enter your license key and click "Download Loader". Only click once &mdash; wait 2-5 minutes while your unique build is generated. Don't refresh or spam the page; each user gets a custom loader build.</li>
+                      <li>Download the loader, place it in its own folder, and run it as Administrator.</li>
+                      <li>Enter your license key and press Enter.</li>
+                      <li>When prompted, choose Yes to clean traces and Yes to enable the HWID spoofer.</li>
+                      <li>The loader closes automatically once done &mdash; launch the game.</li>
                     </ol>
-                    <p>Before running the loader for the first time: update Windows, enable Core Isolation (HVCI) in Windows Security (Valorant only), then restart your PC. Running the loader before these steps can cause an HWID error.</p>
-                    <div class="warn-box">"Unknown Error" usually means a server-side issue or an HWID mismatch. Contact support if it persists.</div>
-                  `
-                },
-                {
-                  title: "Aimbot Usage Advice",
-                  content: `
-                    <div class="warn-box">If this is your first time using an aimbot, consider not using it at all. If you do, use extremely low, human-like settings. If your gameplay looks unnatural or robotic on replay, your settings are too obvious and you risk a manual review and ban.</div>
-                  `
-                },
-                {
-                  title: "Launching Zenith",
-                  content: `
-                    <ol>
-                      <li>Make sure the game and Riot Launcher (if applicable) are completely closed before starting.</li>
-                      <li>Run the loader provided with your purchase and enter your activation key.</li>
-                      <li>The cheat must be launched before the game, and the game set to Borderless.</li>
-                      <li>Start the game &mdash; once Zenith is injected, you're ready to go.</li>
-                    </ol>
-                    <h3>Troubleshooting: menu not showing after injection</h3>
-                    <p>Uninstall the latest Windows updates and security updates, pause automatic Windows Updates, restart your PC, and launch again.</p>
-                    <div class="info-box">Need help? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a>.</div>
+                    <p>The menu opens automatically in most games; use <code>Insert</code> or <code>Home</code> to toggle it (check your product page if a specific game uses a different key).</p>
+                    <h3>Common fixes</h3>
+                    <p>If the loader closes instantly, reinstall the Visual C++ Redistributable above. If the menu shows but isn't clickable, run Steam as a non-administrator and make sure only your GPU's overlay is enabled. If visuals stop working after a game update, wait for the next cheat update.</p>
+                    <div class="info-box">Still stuck? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a> with a screenshot of the error.</div>
                   `
                 }
               ]
@@ -978,91 +959,75 @@
           name: "Rust",
           products: [
             {
-              name: "Rust Ancient",
-              slug: "rust-ancient",
+              name: "Rust - Dullwave",
+              slug: "rust-dullwave",
               topics: [
                 {
-                  title: "Preparation",
+                  title: "Setup Guide",
                   content: `
-                    <h3>1. Disable Windows Defender &amp; antivirus</h3>
-                    <p>Completely turn off Windows Defender (Real-time Protection). Uninstall any third-party antivirus. We strongly recommend <a href="https://www.sordum.org/files/downloads.php?st-defender-control" target="_blank">Defender Control</a> (archive password: <code>sordum</code>).</p>
-                    <h3>2. Nvidia &amp; AMD graphics settings</h3>
-                    <p><strong>Nvidia:</strong> enable the <a href="https://www.nvidia.com/en-eu/geforce/geforce-experience/download" target="_blank">GeForce Experience</a> overlay via Settings &rarr; In-Game Overlay &rarr; Enable.</p>
-                    <p><strong>AMD:</strong> install <a href="https://steelseries.com/gg/downloads/gg/latest/windows" target="_blank">SteelSeries GG</a>, enable Sonar (Settings &rarr; General &rarr; Enable Sonar), then Settings &rarr; Sonar &rarr; Shortcuts &rarr; Master and bind <code>F7</code> to "Volume - Up".</p>
-                    <h3>3. Adjust Rust settings</h3>
-                    <p>Start Rust without the cheat loaded first, and set Screen Mode to Borderless or Windowed &mdash; Fullscreen is not supported.</p>
-                  `
-                },
-                {
-                  title: "Installing & Running the Cheat",
-                  content: `
+                    <p>This guide covers every Dullwave-based product on XenCheats. The loader archive password is <code>dull</code>.</p>
+                    <h3>1. Before you launch</h3>
+                    <p>Disable Windows Defender, SmartScreen, and Secure Boot. Enable Hyper-V. Uninstall any antivirus software, FACEIT Anti-Cheat, ESEA, and Riot Vanguard.</p>
+                    <h3>2. Rust-specific injection</h3>
                     <ol>
-                      <li>Download the loader from <a href="http://undetect.net/download/loader" target="_blank">undetect.net</a> and run it as Administrator.</li>
-                      <li>Enter the license key you received after purchase.</li>
-                      <li>Select Rust in the product list and click Load. Leave the HWID spoofer checkbox enabled if you want it, otherwise uncheck it.</li>
-                      <li>The loader closes automatically after a few moments.</li>
-                      <li>Launch the game &mdash; Nvidia users get the menu automatically; AMD users press <code>F7</code> to inject.</li>
+                      <li>Run Discord and enable the Discord Overlay (non-legacy version).</li>
+                      <li>Start Rust and wait for the overlay to finish loading.</li>
+                      <li>Press <code>F4</code> in the main menu to inject.</li>
                     </ol>
-                    <p>Press <code>Insert</code> to open or close the in-game menu.</p>
-                  `
-                },
-                {
-                  title: "Troubleshooting",
-                  content: `
-                    <p>Most issues come down to Windows Defender or antivirus still running &mdash; make sure Defender is fully disabled and third-party antivirus is uninstalled.</p>
-                    <h3>Update required software</h3>
-                    <p><a href="https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one" target="_blank">Visual C++ Redistributables</a> and <a href="https://www.microsoft.com/ru-ru/download/details.aspx?id=35" target="_blank">DirectX</a>.</p>
-                    <h3>Windows 11</h3>
-                    <p>Disable Kernel Isolation &mdash; <a href="https://mega.nz/file/81lSHTAQ#WneLGwK1XT9g110Pw9pkkNKLnf3OX7Rk3mKM61Y4WN4" target="_blank">download the fix</a>.</p>
-                    <h3>Anti-cheat conflicts</h3>
-                    <p>Uninstall FaceIt and Riot Vanguard via "Add or Remove Programs" if installed.</p>
-                    <h3>Reputation-Based Protection</h3>
-                    <p>Search for "Reputation-Based Protection" in the Start Menu and disable all options.</p>
-                    <h3>Window mode</h3>
-                    <p>Rust must run in Borderless or Windowed mode, not Full Screen.</p>
-                    <div class="info-box">Still stuck? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a>.</div>
+                    <h3>Recommendations</h3>
+                    <p>The loader deletes itself after a successful run, so redownload it from the site if you need it again. Run it only from a USB flash drive, don't keep it stored permanently on your PC, and unplug the drive after injection.</p>
+                    <div class="info-box">Need help? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a> and our team will assist.</div>
                   `
                 }
               ]
             },
             {
-              name: "Rust Cicada",
-              slug: "rust-cicada",
+              name: "Rust Mason Full",
+              slug: "rust-mason-full",
               topics: [
                 {
-                  title: "Setup Instructions",
+                  title: "Setup Guide",
                   content: `
+                    <p>This guide applies to Mason Full products (Rust, Apex, EFT, War Thunder). The loader must be launched from a USB flash drive and must never remain on your PC &mdash; remove the drive immediately after a successful injection.</p>
+                    <h3>1. Game preparation</h3>
+                    <p>Launch the game, set Window Mode to "Fullscreen in Window", then close the game completely.</p>
+                    <h3>2. Download the loader</h3>
+                    <p>Download the loader (link is in your order) using the key you received, and move it to your USB flash drive.</p>
+                    <h3>3. First injection</h3>
                     <ol>
-                      <li>Make sure the Discord overlay is enabled (the legacy version also works).</li>
-                      <li>Open the loader application and enter your license key.</li>
-                      <li>Wait until the loader prompts you to launch the main program.</li>
-                      <li>Start the main program and keep its window active/focused.</li>
-                      <li>Press <code>Insert</code> to open the menu once it's fully loaded.</li>
+                      <li>Run the loader as Administrator from the USB flash drive.</li>
+                      <li>Select your game, click it, then click "Run".</li>
+                      <li>On success, a checkmark appears, the loader closes, and it asks you to restart &mdash; click Yes.</li>
                     </ol>
-                    <div class="info-box">The loader download link is included in the purchase note you receive after checkout, not in this guide.</div>
+                    <h3>4. Second injection (after reboot)</h3>
+                    <ol>
+                      <li>Run the loader again as Administrator from the USB drive.</li>
+                      <li>Select your game and click "Run". Choose whether to hide the overlay when asked.</li>
+                      <li>Remove the USB drive immediately and launch the game yourself.</li>
+                    </ol>
+                    <p>Once in the main menu, press <code>Home</code> to open the cheat menu. HWID Spoofer is included &mdash; if prompted after a restart, click Yes and follow the standard steps.</p>
+                    <h3>Saving your settings</h3>
+                    <p>In the cheat's Configuration tab, use "Save config to clipboard" and paste it into a Notepad file to keep it. To reload, copy the saved text and use "Load config from clipboard".</p>
+                    <div class="info-box">Need help? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a> and our team will assist.</div>
                   `
-                },
+                }
+              ]
+            },
+            {
+              name: "Rust - MrPro",
+              slug: "rust-mrpro",
+              topics: [
                 {
-                  title: "Troubleshooting",
+                  title: "Setup Guide",
                   content: `
-                    <h3>Critical system requirements</h3>
-                    <p>Install <a href="https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one/" target="_blank">Visual C++ Redistributables (x86 and x64)</a> before using the loader &mdash; missing redistributables cause startup/initialization failures. Install them and restart your PC if they're missing.</p>
-                    <h3>HWID errors</h3>
-                    <p>Follow the instructions shown in the loader window. If a reset is required, open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a>.</p>
-                    <h3>Other loader errors</h3>
-                    <p>Reinstall the loader, confirm all required components are installed, then restart your PC and try again.</p>
-                    <h3>Initialization problems</h3>
-                    <p>If you see a driver-related message, restart your PC, try launching again, and confirm your system meets the tool's minimum requirements. These failures usually stem from missing system updates or incompatible configurations.</p>
-                    <h3>Performance or latency</h3>
-                    <ul>
-                      <li>Disable G-Sync / FreeSync in your monitor settings and the NVIDIA/AMD control panel.</li>
-                      <li>Match your Windows display resolution, monitor's native resolution, and in-application resolution.</li>
-                      <li>Disable GPU throttling / power-saving options in the NVIDIA/AMD control panel.</li>
-                      <li>Update your GPU drivers for better DirectX 11 compatibility and stability.</li>
-                      <li>On lower-end systems, cap the in-application FPS limit at 60.</li>
-                    </ul>
-                    <h3>Additional tools</h3>
-                    <p><a href="https://www.sordum.org/9480/defender-control-v2-1/" target="_blank">Defender Control</a> (password: <code>sordum</code>), <a href="https://www.microsoft.com/en-us/download/details.aspx?id=35" target="_blank">DirectX Runtimes</a>, <a href="https://pureinfotech.com/install-windows-11-23h2-mounting-iso/" target="_blank">Windows version upgrade/downgrade guide</a>.</p>
+                    <div class="warn-box">This product is Intel-only. AMD processors are not supported &mdash; check your CPU before purchasing.</div>
+                    <ol>
+                      <li>Disable Windows Defender (Real-time Protection) and uninstall any third-party antivirus.</li>
+                      <li>Launch Rust without the cheat loaded first, and set Screen Mode to Borderless or Windowed &mdash; Fullscreen is not supported.</li>
+                      <li>Download the loader linked in your order and run it as Administrator.</li>
+                      <li>Enter your license key and select Rust from the product list.</li>
+                    </ol>
+                    <div class="info-box">Need help? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a> and our team will assist.</div>
                   `
                 }
               ]
@@ -1192,6 +1157,69 @@
                     <h3>Window mode</h3>
                     <p>Apex Legends must run in Borderless or Windowed mode &mdash; Fullscreen will cause issues.</p>
                     <div class="info-box">Still stuck? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a>.</div>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Apex - Mason",
+              slug: "apex-mason",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>This guide applies to Mason Full products (Rust, Apex, EFT, War Thunder). The loader must be launched from a USB flash drive and must never remain on your PC &mdash; remove the drive immediately after a successful injection.</p>
+                    <h3>1. Game preparation</h3>
+                    <p>Launch the game, set Window Mode to "Fullscreen in Window", then close the game completely.</p>
+                    <h3>2. Download the loader</h3>
+                    <p>Download the loader (link is in your order) using the key you received, and move it to your USB flash drive.</p>
+                    <h3>3. First injection</h3>
+                    <ol>
+                      <li>Run the loader as Administrator from the USB flash drive.</li>
+                      <li>Select your game, click it, then click "Run".</li>
+                      <li>On success, a checkmark appears, the loader closes, and it asks you to restart &mdash; click Yes.</li>
+                    </ol>
+                    <h3>4. Second injection (after reboot)</h3>
+                    <ol>
+                      <li>Run the loader again as Administrator from the USB drive.</li>
+                      <li>Select your game and click "Run". Choose whether to hide the overlay when asked.</li>
+                      <li>Remove the USB drive immediately and launch the game yourself.</li>
+                    </ol>
+                    <p>Once in the main menu, press <code>Home</code> to open the cheat menu. HWID Spoofer is included &mdash; if prompted after a restart, click Yes and follow the standard steps.</p>
+                    <h3>Saving your settings</h3>
+                    <p>In the cheat's Configuration tab, use "Save config to clipboard" and paste it into a Notepad file to keep it. To reload, copy the saved text and use "Load config from clipboard".</p>
+                    <div class="info-box">Need help? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a> and our team will assist.</div>
+                  `
+                }
+              ]
+            },
+            {
+              name: "Apex - Arcane",
+              slug: "apex-arcane",
+              topics: [
+                {
+                  title: "Setup Guide",
+                  content: `
+                    <p>This guide applies to every Arcane-based product on XenCheats, including Fortnite and Apex.</p>
+                    <div class="warn-box">All cheat software carries risk. "Undetected" is never a 100% guarantee. Never use this on your main account, and wait for an update after any game patch before playing again.</div>
+                    <h3>1. Before activating your key</h3>
+                    <ol>
+                      <li>Install the <a href="https://aka.ms/vs/17/release/vc_redist.x64.exe" target="_blank">Visual C++ Redistributable</a> and fully restart your PC.</li>
+                      <li>Uninstall third-party antivirus, disable Windows Defender and SmartScreen, and remove FaceIt/Vanguard if present.</li>
+                      <li>Nvidia users: install the Nvidia App, update drivers, and enable the overlay. AMD users: install AMD Adrenalin (non-PRO), update drivers, and enable in-game overlay + performance metrics.</li>
+                      <li>In BIOS, disable Intel Rapid Storage Technology, then restart again before running the loader.</li>
+                    </ol>
+                    <h3>2. Running the loader</h3>
+                    <ol>
+                      <li>Download the loader, place it in its own folder, and run it as Administrator.</li>
+                      <li>Enter your license key and press Enter.</li>
+                      <li>When prompted, choose Yes to clean traces and Yes to enable the HWID spoofer.</li>
+                      <li>The loader closes automatically once done &mdash; launch the game.</li>
+                    </ol>
+                    <p>The menu opens automatically in most games; use <code>Insert</code> or <code>Home</code> to toggle it (check your product page if a specific game uses a different key).</p>
+                    <h3>Common fixes</h3>
+                    <p>If the loader closes instantly, reinstall the Visual C++ Redistributable above. If the menu shows but isn't clickable, run Steam as a non-administrator and make sure only your GPU's overlay is enabled. If visuals stop working after a game update, wait for the next cheat update.</p>
+                    <div class="info-box">Still stuck? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a> with a screenshot of the error.</div>
                   `
                 }
               ]
