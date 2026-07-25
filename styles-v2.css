@@ -595,7 +595,22 @@ button:disabled {
 .hero-accent-glow {
   position: relative;
   display: inline-block;
-  text-shadow: 0 0 32px rgba(216, 32, 40, 0.38);
+  animation: hero-glow-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes hero-glow-pulse {
+  0%, 100% {
+    text-shadow:
+      0 0 18px rgba(255, 55, 66, 0.55),
+      0 0 44px rgba(216, 32, 40, 0.42),
+      0 0 84px rgba(216, 32, 40, 0.22);
+  }
+  50% {
+    text-shadow:
+      0 0 26px rgba(255, 55, 66, 0.78),
+      0 0 64px rgba(216, 32, 40, 0.6),
+      0 0 118px rgba(216, 32, 40, 0.34);
+  }
 }
 
 .hero-accent-glow::after {
@@ -603,11 +618,11 @@ button:disabled {
   right: 2%;
   bottom: 1px;
   left: 2%;
-  height: 8px;
+  height: 11px;
   content: "";
   border-radius: 999px;
-  background: rgba(216, 32, 40, 0.17);
-  filter: blur(3px);
+  background: rgba(216, 32, 40, 0.32);
+  filter: blur(10px);
 }
 
 .hero-text {

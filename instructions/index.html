@@ -30,7 +30,7 @@
     <style>
       .docs-layout {
         display: flex;
-        width: min(calc(100% - 32px), var(--max-width));
+        width: min(calc(100% - 32px), var(--shell));
         margin: 0 auto;
         padding-top: 80px;
         min-height: 100vh;
@@ -71,7 +71,7 @@
         background: none;
         border: none;
         outline: none;
-        color: var(--text);
+        color: var(--ink);
         font-family: "Chakra Petch", sans-serif;
         font-size: 0.88rem;
         width: 100%;
@@ -115,7 +115,7 @@
         font-weight: 700;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--muted);
+        color: var(--ink-soft);
       }
 
       .sidebar-category-body {
@@ -190,8 +190,8 @@
 
       .sidebar-topic.active {
         background: rgba(255, 42, 42, 0.1);
-        color: var(--accent-soft);
-        border-left: 2px solid var(--accent);
+        color: var(--red-dark);
+        border-left: 2px solid var(--red);
         padding-left: 26px;
       }
 
@@ -202,16 +202,30 @@
         min-width: 0;
       }
 
+      .docs-content-eyebrow {
+        margin: 0 0 8px;
+        color: var(--red-dark);
+        font-family: "Oxanium", sans-serif;
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .docs-content-eyebrow[hidden] {
+        display: none;
+      }
+
       .docs-content-title {
         font-family: "Oxanium", sans-serif;
         font-size: 2rem;
         font-weight: 700;
         margin: 0 0 16px;
-        color: var(--text);
+        color: var(--ink);
       }
 
       .docs-content-body {
-        color: var(--muted);
+        color: var(--ink-soft);
         line-height: 1.8;
         font-size: 0.95rem;
       }
@@ -221,7 +235,7 @@
       }
 
       .docs-content-body h3 {
-        color: var(--text);
+        color: var(--ink);
         font-family: "Oxanium", sans-serif;
         font-size: 1.15rem;
         margin: 28px 0 10px;
@@ -238,7 +252,7 @@
       }
 
       .docs-content-body a {
-        color: var(--accent-soft);
+        color: var(--red-dark);
         text-decoration: underline;
       }
 
@@ -247,7 +261,7 @@
         padding: 2px 7px;
         border-radius: 5px;
         font-size: 0.88rem;
-        color: var(--accent-soft);
+        color: var(--red-dark);
       }
 
       .docs-content-body .info-box {
@@ -296,12 +310,12 @@
 
       .docs-next-title {
         font-weight: 600;
-        color: var(--text);
+        color: var(--ink);
         font-size: 0.95rem;
       }
 
       .docs-next-arrow {
-        color: var(--accent-soft);
+        color: var(--red-dark);
         font-size: 1.2rem;
       }
 
@@ -315,7 +329,7 @@
         width: 48px;
         height: 48px;
         border-radius: 50%;
-        background: var(--accent);
+        background: var(--red);
         color: #fff;
         border: none;
         font-size: 1.3rem;
@@ -404,6 +418,7 @@
         </aside>
         <div class="docs-overlay" id="docsOverlay"></div>
         <main class="docs-content">
+          <p class="docs-content-eyebrow" id="contentEyebrow" hidden></p>
           <h1 class="docs-content-title" id="contentTitle">Instructions</h1>
           <div class="docs-content-body" id="contentBody">
             <p>Select a product from the sidebar to view setup instructions.</p>
@@ -1273,6 +1288,7 @@
       searchInput.addEventListener("input", () => buildSidebar(searchInput.value));
 
       /* ── Show Topic ── */
+      const contentEyebrow = document.getElementById("contentEyebrow");
       const contentTitle = document.getElementById("contentTitle");
       const contentBody = document.getElementById("contentBody");
       const contentNext = document.getElementById("contentNext");
@@ -1282,6 +1298,10 @@
         if (idx === -1) return;
 
         const topic = allTopics[idx];
+        if (contentEyebrow) {
+          contentEyebrow.textContent = `${topic.category} · ${topic.product}`;
+          contentEyebrow.hidden = false;
+        }
         contentTitle.textContent = topic.title;
         contentBody.innerHTML = topic.content;
 
