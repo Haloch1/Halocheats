@@ -10,7 +10,7 @@ import Stripe from "stripe";
 import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, AttachmentBuilder } from "discord.js";
+import { Client, GatewayIntentBits, Partials, REST, Routes, SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, PermissionFlagsBits, AttachmentBuilder } from "discord.js";
 import { products as _initialProducts } from "./data/products.js";
 import { google } from "googleapis";
 // OAuth 1.0a signing handled with native crypto
@@ -130,6 +130,10 @@ const verificationSubnetPolicy = ["allow", "review", "block"].includes(process.e
 const verificationFraudScoreThreshold = Number.isFinite(Number(process.env.DISCORD_VERIFICATION_FRAUD_SCORE_THRESHOLD))
   ? Number(process.env.DISCORD_VERIFICATION_FRAUD_SCORE_THRESHOLD)
   : 85;
+/* Channel where a member's "think this is a mistake?" appeal opens a private
+   thread so an admin can talk to them directly (the DM<->thread relay lives
+   in the messageCreate handler further down). */
+const discordVerificationAppealChannelId = process.env.DISCORD_VERIFICATION_APPEAL_CHANNEL_ID || "1530685965205635162";
 const discordMemberCategoryIds = (
   process.env.DISCORD_MEMBER_CATEGORY_IDS
   || "1528634343910674503,1528634343910674508,1528634343910674510,1528634344174780588,1528634344174780591"
@@ -159,7 +163,7 @@ const OWNER_ONLY_COMMANDS = new Set([
   "ticket-panel", "invest", "investments", "uninvest", "accountstats",
   "leaderboard", "reinvite-all",
 ]);
-const ADMIN_ONLY_COMMANDS = new Set(["orderlookup", "staffactivity"]);
+const ADMIN_ONLY_COMMANDS = new Set(["orderlookup", "staffactivity", "disallowedips"]);
 const discordStaffGuideChannelId = process.env.DISCORD_STAFF_GUIDE_CHANNEL_ID || "1530269093100388583";
 const pendingSchedules = new Map(); // id -> { timer, title, postAt }
 const resellerBuyLocks = new Map(); // inventorySlug -> Promise that resolves when buy completes
@@ -1569,17 +1573,22 @@ async function banDiscordVerificationAttempt(discordId, reason) {
 /* Verification results are private to the member who attempted them, so they
    go out as a DM rather than a message in the shared #verification channel -
    nobody else in the server should be able to see who got blocked or why. */
-async function sendVerificationBlockedDm(discordId, message) {
+async function sendVerificationBlockedDm(discordId, shortReason) {
   if (!discordBot) return;
   try {
     const user = await discordBot.users.fetch(discordId);
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`verify_appeal_yes:${discordId}`).setLabel("Yes").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`verify_appeal_no:${discordId}`).setLabel("No").setStyle(ButtonStyle.Secondary),
+    );
     await user.send({
       embeds: [{
-        title: "Verification not allowed",
-        description: message,
+        title: shortReason,
+        description: "Think this is a mistake?",
         color: 0xd82028,
         footer: { text: "XenCheats | Secure verification" },
       }],
+      components: [row],
     });
   } catch (error) {
     // Most common cause: the user has server/DMs closed to non-friends - not
@@ -2564,7 +2573,11 @@ if (isConfiguredValue(discordBotToken)) {
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
+      GatewayIntentBits.DirectMessages,
     ],
+    // Needed to receive DM messageCreate events (DM channels/messages aren't
+    // cached by default) - required for the verification-appeal relay.
+    partials: [Partials.Channel, Partials.Message],
   });
 
   /* Client-level error handling: without an "error" listener the EventEmitter
@@ -2794,6 +2807,10 @@ if (isConfiguredValue(discordBotToken)) {
         new SlashCommandBuilder()
           .setName("reinvite-all")
           .setDescription("Re-add all linked users to the server using stored OAuth tokens (owner only)"),
+        new SlashCommandBuilder()
+          .setName("disallowedips")
+          .setDescription("Check if an IP is on the blocked verification list (admin only)")
+          .addStringOption(o => o.setName("ip").setDescription("IP address to check").setRequired(true)),
       ];
 
       const commands = commandBuilders.map((command) => {
@@ -2960,6 +2977,54 @@ if (isConfiguredValue(discordBotToken)) {
       console.error("[Automod] Error handling banned term:", err.message);
     }
     return;
+  });
+
+  /* ── Verification appeal relay — DM from the member goes into their thread,
+     a staff reply in that thread goes back to them as a DM. Mirrors the
+     existing support-ticket relay pattern, scoped to appeal threads only. */
+  discordBot.on("messageCreate", async (message) => {
+    if (message.author.bot) return;
+
+    try {
+      if (message.channel.type === ChannelType.DM) {
+        const { data: appeal } = await queryVerificationTable(
+          () => supabaseAdmin
+            .from("discord_verification_appeals")
+            .select("thread_id")
+            .eq("discord_id", message.author.id)
+            .eq("status", "open")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          { data: null, error: null },
+        );
+        if (!appeal?.thread_id) return;
+        const thread = await discordBot.channels.fetch(appeal.thread_id).catch(() => null);
+        if (thread) {
+          await thread.send(`**${message.author.tag}:** ${message.content || "(no text)"}`.slice(0, 2000)).catch(() => {});
+        }
+        return;
+      }
+
+      if (message.channel.isThread?.() && message.channel.parentId === discordVerificationAppealChannelId) {
+        const { data: appeal } = await queryVerificationTable(
+          () => supabaseAdmin
+            .from("discord_verification_appeals")
+            .select("discord_id")
+            .eq("thread_id", message.channel.id)
+            .eq("status", "open")
+            .maybeSingle(),
+          { data: null, error: null },
+        );
+        if (!appeal?.discord_id) return;
+        const user = await discordBot.users.fetch(appeal.discord_id).catch(() => null);
+        if (user) {
+          await user.send(message.content?.slice(0, 2000) || "(no text)").catch(() => {});
+        }
+      }
+    } catch (error) {
+      console.error("[Verification appeal] Relay failed:", error.message);
+    }
   });
 
   /* ── Word filter — runs before all other handlers ── */
@@ -4098,6 +4163,55 @@ ${rows || '<div class="ct">No messages.</div>'}
       return;
     }
 
+    /* ── Verification block appeal ("Think this is a mistake?" Yes/No) ── */
+    if (interaction.isButton?.() && interaction.customId.startsWith("verify_appeal_no:")) {
+      return interaction.update({
+        embeds: [{ description: "No worries — thanks for confirming.", color: 0x08723d }],
+        components: [],
+      });
+    }
+
+    if (interaction.isButton?.() && interaction.customId.startsWith("verify_appeal_yes:")) {
+      await interaction.update({
+        embeds: [{ description: "Connecting you with a team member — reply here and they'll see it shortly.", color: 0xd82028 }],
+        components: [],
+      });
+
+      try {
+        const discordId = interaction.user.id;
+        const appealChannel = discordVerificationAppealChannelId
+          ? await discordBot.channels.fetch(discordVerificationAppealChannelId).catch(() => null)
+          : null;
+
+        if (appealChannel?.threads?.create) {
+          const thread = await appealChannel.threads.create({
+            name: `Appeal - ${interaction.user.username}`.slice(0, 90),
+            autoArchiveDuration: 1440,
+            reason: "Verification block appeal",
+          });
+          await thread.send({
+            embeds: [{
+              title: "Verification appeal",
+              description: `<@${discordId}> said their verification block was a mistake. Reply in this thread to message them directly — their replies will show up here too.`,
+              color: 0xd82028,
+              fields: [{ name: "User", value: `${interaction.user.tag} (${discordId})`, inline: true }],
+            }],
+          });
+          await queryVerificationTable(
+            () => supabaseAdmin.from("discord_verification_appeals").insert({
+              discord_id: discordId,
+              thread_id: thread.id,
+              status: "open",
+            }),
+            { data: null, error: null },
+          );
+        }
+      } catch (err) {
+        console.error("[Verification appeal] Could not open appeal thread:", err.message);
+      }
+      return;
+    }
+
     if (interaction.isButton && interaction.isButton() && interaction.customId === "open_ticket") {
       const modal = new ModalBuilder()
         .setCustomId("ticket_modal")
@@ -5144,6 +5258,57 @@ ${rows || '<div class="ct">No messages.</div>'}
       } catch (err) {
         console.error("[Slash /ban]", err.message);
         return interaction.editReply({ embeds: [{ description: `Ban failed: ${err.message}`, color: 0xff4444 }] });
+      }
+    }
+
+    if (interaction.commandName === "disallowedips") {
+      if (!isDiscordAdminInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const ipInput = interaction.options.getString("ip").trim();
+        if (!isIP(ipInput)) {
+          return interaction.editReply({ embeds: [{ description: "That doesn't look like a valid IP address.", color: 0xff4444 }] });
+        }
+
+        const ipHash = hashVerificationIp(ipInput);
+        const subnetHash = hashVerificationSubnet(ipInput);
+        const { data: bans, error } = await queryVerificationTable(
+          () => supabaseAdmin
+            .from("discord_verification_ip_bans")
+            .select("ip_hash, subnet_hash, reason, created_at")
+            .or([
+              ipHash && `ip_hash.eq.${ipHash}`,
+              subnetHash && `subnet_hash.eq.${subnetHash}`,
+            ].filter(Boolean).join(","))
+            .limit(10),
+          { data: [], error: null },
+        );
+        if (error) throw error;
+
+        if (!bans?.length) {
+          return interaction.editReply({
+            embeds: [{ title: `IP check: ${ipInput}`, description: "Not on the blocked list.", color: 0x08723d }],
+          });
+        }
+
+        const matchLines = bans.map((ban) => {
+          const matchType = ban.ip_hash === ipHash ? "Exact IP match" : "Same subnet";
+          const when = ban.created_at ? new Date(ban.created_at).toLocaleString() : "unknown time";
+          return `${matchType} — ${ban.reason || "No reason logged"} (banned ${when})`;
+        }).join("\n");
+
+        return interaction.editReply({
+          embeds: [{
+            title: `IP check: ${ipInput}`,
+            description: `**Blocked.**\n${matchLines}`,
+            color: 0xd82028,
+          }],
+        });
+      } catch (err) {
+        console.error("[Slash /disallowedips]", err.message);
+        return interaction.editReply({ embeds: [{ description: `Lookup failed: ${err.message}`, color: 0xff4444 }] });
       }
     }
 
@@ -12226,7 +12391,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
        the Discord server. */
     if (await isDiscordGuildBanned(discordUser.id)) {
       console.warn(`[Verification security] Blocked banned Discord user ${discordUser.id}.`);
-      await sendVerificationBlockedDm(discordUser.id, "This Discord account is banned from the server, so verification can't complete. Contact support if you think this is a mistake.");
+      await sendVerificationBlockedDm(discordUser.id, "Account banned");
       return res.redirect("/verify/blocked");
     }
 
@@ -12268,7 +12433,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
         { name: "Discord user", value: `<@${discordUser.id}>`, inline: true },
         { name: "Match", value: "Matched a blocked IP, subnet, or device fingerprint", inline: true },
       ]).catch(() => {});
-      await sendVerificationBlockedDm(discordUser.id, "This device or network is linked to an existing ban, so this account has been banned as well. Contact support if you think this is a mistake.");
+      await sendVerificationBlockedDm(discordUser.id, "Account banned");
       return res.redirect("/verify/blocked");
     }
 
@@ -12296,11 +12461,18 @@ app.get("/api/auth/discord/callback", async (req, res) => {
           : mustBlockForIp
             ? "Network already verified another Discord account (exact IP match)"
             : "Same network block already verified another Discord account (subnet match)";
+      const shortReason = mustBlockForProxy
+        ? "VPN not allowed"
+        : mustBlockForFingerprint
+          ? "Device not allowed"
+          : mustBlockForIp
+            ? "IP not allowed"
+            : "Network not allowed";
       await sendSecurityDiscordAlert("Verification blocked by fraud policy", [
         { name: "Discord user", value: `<@${discordUser.id}>`, inline: true },
         { name: "Reason", value: reason, inline: false },
       ]).catch(() => {});
-      await sendVerificationBlockedDm(discordUser.id, `Verification wasn't allowed from this network or device (${reason.toLowerCase()}). Contact support if you think this is a mistake.`);
+      await sendVerificationBlockedDm(discordUser.id, shortReason);
       return res.redirect("/verify/blocked");
     }
 
