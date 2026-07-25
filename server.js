@@ -111,8 +111,11 @@ const discordVerifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || "";
 const discordUnverifiedRoleId = process.env.DISCORD_UNVERIFIED_ROLE_ID || "";
 const discordVerificationChannelId =
   process.env.DISCORD_VERIFICATION_CHANNEL_ID || "1528634343369736284";
-/* Verification fraud controls. The IP is HMAC-hashed before it is stored, so
-   the database cannot be used to recover a member's raw network address. */
+/* Verification fraud controls. Ban/alt matching is done on an HMAC hash of the
+   IP (never the reverse-recoverable raw address). The raw IP is additionally
+   stored on discord_verification_ips (ip_address column) so /ips can show it
+   to admins - this is a deliberate tradeoff: a DB breach exposes real member
+   IPs, not just hashes. Requested and accepted 2026-07-25. */
 const verificationIpHashSecret = process.env.DISCORD_VERIFICATION_IP_HASH_SECRET || "";
 const verificationIpReusePolicy = ["allow", "review", "block"].includes(process.env.DISCORD_VERIFICATION_IP_REUSE_POLICY)
   ? process.env.DISCORD_VERIFICATION_IP_REUSE_POLICY
@@ -1418,13 +1421,14 @@ const verificationIpLogExcludeIds = new Set(
     .filter(Boolean),
 );
 
-async function recordVerificationIp({ ipHash, subnetHash, asn, isp, connectionType, fraudScore, fingerprintHash, discordId, userId, proxyDetected }) {
+async function recordVerificationIp({ ip, ipHash, subnetHash, asn, isp, connectionType, fraudScore, fingerprintHash, discordId, userId, proxyDetected }) {
   if (!ipHash || !supabaseAdmin) return;
   if (verificationIpLogExcludeIds.has(String(discordId))) return;
   const { error } = await queryVerificationTable(
     () => supabaseAdmin
       .from("discord_verification_ips")
       .upsert({
+        ip_address: ip || null,
         ip_hash: ipHash,
         subnet_hash: subnetHash || null,
         asn: Number.isFinite(asn) ? asn : null,
@@ -5281,6 +5285,7 @@ ${rows || '<div class="ct">No messages.</div>'}
         let ipHash = "";
         let subnetHash = "";
         let fingerprintHash = "";
+        let resolvedIp = ipInput;
         let title = "";
 
         if (ipInput) {
@@ -5291,7 +5296,7 @@ ${rows || '<div class="ct">No messages.</div>'}
           const { data: lastAttempt } = await queryVerificationTable(
             () => supabaseAdmin
               .from("discord_verification_ips")
-              .select("ip_hash, subnet_hash, fingerprint_hash")
+              .select("ip_address, ip_hash, subnet_hash, fingerprint_hash")
               .eq("discord_id", targetUser.id)
               .order("last_verified_at", { ascending: false })
               .limit(1)
@@ -5306,6 +5311,7 @@ ${rows || '<div class="ct">No messages.</div>'}
           ipHash = lastAttempt.ip_hash || "";
           subnetHash = lastAttempt.subnet_hash || "";
           fingerprintHash = lastAttempt.fingerprint_hash || "";
+          resolvedIp = lastAttempt.ip_address || "";
           title = `User check: ${targetUser.tag}`;
         }
 
@@ -5330,26 +5336,41 @@ ${rows || '<div class="ct">No messages.</div>'}
         if (error) throw error;
 
         // Cross-reference the verification-attempt log for the same hash(es)
-        // to show which known accounts share this network or device - bans
-        // themselves only store hashes, never a raw IP or username.
+        // to show which known accounts (and IPs) share this network or
+        // device - bans themselves only store hashes, never a raw IP.
         const { data: attempts } = await queryVerificationTable(
           () => supabaseAdmin
             .from("discord_verification_ips")
-            .select("discord_id")
+            .select("discord_id, ip_address")
             .or(hashFilter)
             .limit(10),
           { data: [], error: null },
         );
 
-        const uniqueDiscordIds = [...new Set((attempts || []).map((row) => row.discord_id).filter(Boolean))].slice(0, 10);
+        const uniqueAttempts = [];
+        const seenDiscordIds = new Set();
+        for (const row of attempts || []) {
+          if (!row.discord_id || seenDiscordIds.has(row.discord_id)) continue;
+          seenDiscordIds.add(row.discord_id);
+          uniqueAttempts.push(row);
+        }
+
         let accountsLine = "None on record.";
-        if (uniqueDiscordIds.length) {
+        if (uniqueAttempts.length) {
           const users = await Promise.all(
-            uniqueDiscordIds.map((id) => discordBot.users.fetch(id).catch(() => null))
+            uniqueAttempts.map((row) => discordBot.users.fetch(row.discord_id).catch(() => null))
           );
           accountsLine = users
-            .map((user, i) => user ? `${user.tag} (<@${uniqueDiscordIds[i]}>)` : `Unknown user (<@${uniqueDiscordIds[i]}>)`)
+            .map((user, i) => {
+              const label = user ? `${user.tag} (<@${uniqueAttempts[i].discord_id}>)` : `Unknown user (<@${uniqueAttempts[i].discord_id}>)`;
+              return uniqueAttempts[i].ip_address ? `${label} — ${uniqueAttempts[i].ip_address}` : label;
+            })
             .join("\n");
+        }
+
+        const fields = [{ name: "Known accounts on this network/device", value: accountsLine, inline: false }];
+        if (resolvedIp) {
+          fields.unshift({ name: "IP address", value: resolvedIp, inline: true });
         }
 
         if (!bans?.length) {
@@ -5358,7 +5379,7 @@ ${rows || '<div class="ct">No messages.</div>'}
               title,
               description: "Not on the blocked list.",
               color: 0x08723d,
-              fields: [{ name: "Known accounts on this network/device", value: accountsLine, inline: false }],
+              fields,
             }],
           });
         }
@@ -5378,7 +5399,7 @@ ${rows || '<div class="ct">No messages.</div>'}
             title,
             description: `**Blocked.**\n${matchLines}`,
             color: 0xd82028,
-            fields: [{ name: "Known accounts on this network/device", value: accountsLine, inline: false }],
+            fields,
           }],
         });
       } catch (err) {
@@ -12506,6 +12527,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
        once the real linked account ID is known. */
     try {
       await recordVerificationIp({
+        ip: verificationIp,
         ipHash: verificationIpHash,
         subnetHash: verificationSubnetHash,
         asn: proxyRisk.asn,
@@ -12692,6 +12714,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     }
 
     await recordVerificationIp({
+      ip: verificationIp,
       ipHash: verificationIpHash,
       subnetHash: verificationSubnetHash,
       asn: proxyRisk.asn,
