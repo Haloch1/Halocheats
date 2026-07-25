@@ -12467,7 +12467,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     if (await isDiscordGuildBanned(discordUser.id)) {
       console.warn(`[Verification security] Blocked banned Discord user ${discordUser.id}.`);
       await sendVerificationBlockedDm(discordUser.id, "Account banned");
-      return res.redirect("/verify/blocked");
+      return res.redirect(`/verify/blocked?reason=${encodeURIComponent("Account banned")}`);
     }
 
     const verificationIp = getVerificationIp(req);
@@ -12531,7 +12531,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
         { name: "Match", value: "Matched a blocked IP, subnet, or device fingerprint", inline: true },
       ]).catch(() => {});
       await sendVerificationBlockedDm(discordUser.id, "Account banned");
-      return res.redirect("/verify/blocked");
+      return res.redirect(`/verify/blocked?reason=${encodeURIComponent("Account banned")}`);
     }
 
     /* Alt-detection confidence tiers, strongest first. An exact device
@@ -12570,7 +12570,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
         { name: "Reason", value: reason, inline: false },
       ]).catch(() => {});
       await sendVerificationBlockedDm(discordUser.id, shortReason);
-      return res.redirect("/verify/blocked");
+      return res.redirect(`/verify/blocked?reason=${encodeURIComponent(shortReason)}`);
     }
 
     if (mode === "verify" && (
