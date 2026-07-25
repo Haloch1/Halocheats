@@ -6132,27 +6132,55 @@ ${rows || '<div class="ct">No messages.</div>'}
         await channel.send({
           embeds: [{
             title: "🎬 XenCheats Media Program",
-            description: "Want a key for making content? Here's how it works.",
+            description:
+              "We work with a small group of creators to get XenCheats in front of more players. In exchange for a license key, "
+              + "you make content that actually shows the product off. It's a simple trade, but we're picky about who gets in and "
+              + "who stays in — read everything below before you apply.",
             color: 0xd82028,
             fields: [
               {
-                name: "Getting in",
-                value: "Send 2-3 videos you've already made before you get a key. The first key is **not** free — we won't argue about this, and pushing back on it gets you kicked from the program.",
+                name: "① How to apply",
+                value:
+                  "Send **2-3 videos you've already made** — doesn't have to be for us, we just need to see you can actually put "
+                  + "together watchable content before we hand over a key. No portfolio, no key. This isn't negotiable, and it's "
+                  + "the fastest way to get denied if you skip it.",
                 inline: false,
               },
               {
-                name: "Two paths",
-                value: "**Going live (recommended)** or **posting videos** — either way, content has to be high quality and clearly showcase the cheat.",
+                name: "② The first key is not free",
+                value:
+                  "You still pay for your first key like anyone else. Once your content earns its keep, future keys can be "
+                  + "covered by the program — but the first one is on you. We will not argue about this, haggle over it, or make "
+                  + "exceptions. If you push back on this rule, you're removed from the program on the spot, no second warnings.",
                 inline: false,
               },
               {
-                name: "Your bio",
-                value: "Add our Discord and website link to your channel/profile bio.",
+                name: "③ Pick a path",
+                value:
+                  "**Going live (recommended)** — stream real gameplay with the cheat running. This is the strongest proof we can "
+                  + "ask for and the path we'd rather you take.\n\n"
+                  + "**Posting videos** — clips or edited videos work too, but they have to be **high quality**: clean recording, "
+                  + "no obvious downtime, and the cheat's features clearly on display for the whole clip, not buried in one corner "
+                  + "of a 20-minute video.",
                 inline: false,
               },
               {
-                name: "Quality standard",
-                value: "Poor quality content ends your spot in the program.",
+                name: "④ Your bio, every time",
+                value:
+                  "Whatever platform you're posting on, our **Discord invite and website link** need to be visible in your "
+                  + "channel or profile bio for as long as you're in the program. If it disappears, so does your access.",
+                inline: false,
+              },
+              {
+                name: "⑤ Quality is enforced, not suggested",
+                value:
+                  "We check what gets posted. Low-effort, low-quality, or clearly half-hearted content gets you pulled from the "
+                  + "program — we'd rather have fewer creators doing this right than a lot of people phoning it in.",
+                inline: false,
+              },
+              {
+                name: "Ready?",
+                value: "Open a support ticket in Discord with your 2-3 videos linked and we'll take it from there.",
                 inline: false,
               },
             ],
