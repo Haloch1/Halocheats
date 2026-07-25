@@ -166,7 +166,7 @@ const OWNER_ONLY_COMMANDS = new Set([
   "ticket-panel", "invest", "investments", "uninvest", "accountstats",
   "leaderboard", "reinvite-all",
 ]);
-const ADMIN_ONLY_COMMANDS = new Set(["orderlookup", "staffactivity", "ips"]);
+const ADMIN_ONLY_COMMANDS = new Set(["orderlookup", "staffactivity", "ips", "media-panel"]);
 const discordStaffGuideChannelId = process.env.DISCORD_STAFF_GUIDE_CHANNEL_ID || "1530269093100388583";
 const pendingSchedules = new Map(); // id -> { timer, title, postAt }
 const resellerBuyLocks = new Map(); // inventorySlug -> Promise that resolves when buy completes
@@ -651,6 +651,7 @@ const discordQuestionsChannelId =
   process.env.DISCORD_QUESTIONS_CHANNEL_ID || "1528634344174780590";
 const discordTranscriptChannelId = process.env.DISCORD_TRANSCRIPT_CHANNEL_ID || "";
 const discordPaymentsChannelId = process.env.DISCORD_PAYMENTS_CHANNEL_ID || discordProofChannelId;
+const discordMediaChannelId = process.env.DISCORD_MEDIA_CHANNEL_ID || "1528634343910674509";
 
 /* Mask an email to first 3 chars of the local part + domain, e.g. "sad***@gmail.com" */
 function maskEmail(email) {
@@ -2819,6 +2820,10 @@ if (isConfiguredValue(discordBotToken)) {
           .setDescription("Check verification network/ban info by IP or by user (admin only)")
           .addStringOption(o => o.setName("ip").setDescription("IP address to check").setRequired(false))
           .addUserOption(o => o.setName("user").setDescription("Discord user to check").setRequired(false)),
+        new SlashCommandBuilder()
+          .setName("media-panel")
+          .setDescription("Post the media/content creator program rules (admin only)")
+          .addChannelOption(o => o.setName("channel").setDescription("Channel to post in (default: media channel)").setRequired(false)),
       ];
 
       const commands = commandBuilders.map((command) => {
@@ -6110,6 +6115,52 @@ ${rows || '<div class="ct">No messages.</div>'}
           }],
         });
         return interaction.reply({ embeds: [{ description: `Payment methods posted in <#${channel.id}>.`, color: 0x22c55e }], ephemeral: true });
+      } catch (err) {
+        return interaction.reply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }], ephemeral: true });
+      }
+    }
+
+    /* ── /media-panel — Post the media/content creator program rules ── */
+    if (interaction.commandName === "media-panel") {
+      if (!isDiscordAdminInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const channel = interaction.options.getChannel("channel")
+        || (discordBot && discordMediaChannelId ? await discordBot.channels.fetch(discordMediaChannelId).catch(() => null) : null)
+        || interaction.channel;
+      try {
+        await channel.send({
+          embeds: [{
+            title: "🎬 XenCheats Media Program",
+            description: "Want a key for making content? Here's how it works.",
+            color: 0xd82028,
+            fields: [
+              {
+                name: "Getting in",
+                value: "Send 2-3 videos you've already made before you get a key. The first key is **not** free — we won't argue about this, and pushing back on it gets you kicked from the program.",
+                inline: false,
+              },
+              {
+                name: "Two paths",
+                value: "**Going live (recommended)** or **posting videos** — either way, content has to be high quality and clearly showcase the cheat.",
+                inline: false,
+              },
+              {
+                name: "Your bio",
+                value: "Add our Discord and website link to your channel/profile bio.",
+                inline: false,
+              },
+              {
+                name: "Quality standard",
+                value: "Poor quality content ends your spot in the program.",
+                inline: false,
+              },
+            ],
+            footer: { text: "XenCheats | Media Program" },
+            timestamp: new Date().toISOString(),
+          }],
+        });
+        return interaction.reply({ embeds: [{ description: `Media program rules posted in <#${channel.id}>.`, color: 0x22c55e }], ephemeral: true });
       } catch (err) {
         return interaction.reply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }], ephemeral: true });
       }
