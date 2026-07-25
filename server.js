@@ -521,13 +521,19 @@ const WHOLESALE_COSTS = {
   "apex-ancient-day": 0, "apex-ancient-week": 0, "apex-ancient-month": 0,
   "apex-dullwave-day": 0, "apex-dullwave-week": 0, "apex-dullwave-month": 0,
   "apex-arcane-day": 0, "apex-arcane-week": 0, "apex-arcane-month": 0,
-  // Spoofer
-  "xim-spoofer-day": 399, "xim-spoofer-three-day": 650, "xim-spoofer-week": 1376, "xim-spoofer-month": 2826, "xim-spoofer-lifetime": 9170,
-  "spoofer-verse-perm-one-time": 1599, "spoofer-verse-perm-lifetime": 3999,
-  // Accounts
-  "linked-nfa-account": 479, "stacked-pc-account-account": 1599,
+  // Spoofer — TODO: placeholders (0) until real reseller cost is provided
+  "spoofer-lunar-day": 0, "spoofer-lunar-week": 0, "spoofer-lunar-month": 0,
+  "spoofer-shadow-day": 0, "spoofer-shadow-week": 0, "spoofer-shadow-month": 0,
+  "eac-be-spoofer-day": 0, "eac-be-spoofer-week": 0, "eac-be-spoofer-month": 0,
+  // Accounts — TODO: placeholders (0) until real reseller cost is provided
+  "r6s-nfa-account-level-50-99": 0, "r6s-nfa-account-level-100-plus": 0,
+  "r6s-nfa-account-previous-platinum": 0, "r6s-nfa-account-black-ices-20": 0,
+  "r6s-nfa-account-previous-emerald": 0,
   // Legacy (removed products — kept for historical profit calc on past orders)
   "exodus-r6-three-day": 479,
+  "xim-spoofer-day": 399, "xim-spoofer-three-day": 650, "xim-spoofer-week": 1376, "xim-spoofer-month": 2826, "xim-spoofer-lifetime": 9170,
+  "spoofer-verse-perm-one-time": 1599, "spoofer-verse-perm-lifetime": 3999,
+  "linked-nfa-account": 479, "stacked-pc-account-account": 1599,
   "fortnite-full-day": 479, "fortnite-full-week": 1039, "fortnite-full-month": 1999,
   "disconnect-fortnite-external-day": 720, "disconnect-fortnite-external-three-day": 1440, "disconnect-fortnite-external-week": 2800, "disconnect-fortnite-external-month": 5200, "disconnect-fortnite-external-lifetime": 24000,
   "fortnite-ignite-aimbot-day": 800, "fortnite-ignite-aimbot-three-day": 1600, "fortnite-ignite-aimbot-week": 2520, "fortnite-ignite-aimbot-month": 5600, "fortnite-ignite-aimbot-lifetime": 33600,

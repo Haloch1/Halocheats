@@ -128,15 +128,6 @@ const apexMeta = {
   available: true,
 };
 
-const eftMeta = {
-  vendor: "Escape From Tarkov",
-  game: "Escape From Tarkov",
-  category: "Escape From Tarkov",
-  badge: "Coming Soon",
-  featured: false,
-  available: false,
-};
-
 const rustMeta = {
   vendor: "Rust",
   game: "Rust",
@@ -718,173 +709,102 @@ const productCatalog = [
     ],
   },
   {
-    ...eftMeta,
-    slug: "eft-coffee-chams",
-    name: "Coffee Chams - EFT",
-    priceDisplay: `From ${money(750)}`,
+    ...spooferMeta,
+    badge: "Undetected",
+    slug: "spoofer-lunar",
+    name: "Spoofer - Lunar",
+    priceDisplay: `From ${money(500)}`,
     summary:
-      "Chams-focused EFT tool with loot-through-walls, recoil and stamina modifications, and FOV controls.",
-    features: ["Chams visuals", "Loot through walls", "Recoil control"],
+      "Universal temp HWID & TPM spoofer built to bypass bans, stay undetected, and protect your real hardware ID across all Windows versions.",
+    features: ["Temp HWID spoof", "TPM spoof", "Universal Windows support"],
     featureGroups: [
-      {
-        title: "Misc",
-        items: ["Infinite stamina", "No sway", "No recoil", "Modify recoil", "No visor", "Recoil percent selector", "No pain effects", "No sprint inertia"],
-      },
-      {
-        title: "Visuals",
-        items: ["Enemy chams", "Local player chams", "Loot item chams", "Corpse chams", "Visibility check", "Zoom helper", "Normal FOV selector", "Aiming FOV selector"],
-      },
+      { title: "Coverage", items: ["Temp HWID spoof", "TPM spoof", "Optional seed change (F2)"] },
+      { title: "Setup", items: ["BIOS TPM & virtualization steps", "Secure Boot check", "Loader activation"] },
     ],
     generalInfo: [
-      "Chams-focused with loot through walls and recoil customization.",
-      "Built for visual clarity over feature overload.",
+      "Does not currently support Rust or Fortnite. For COD Ranked, spoof once, restart your PC, then spoof again.",
       ...universalSetupNotes,
     ],
-    requirements: ["Windows 10 / 11", "Escape From Tarkov installed"],
+    requirements: ["Windows 10 / 11", "BIOS/UEFI access", "TPM & virtualization support"],
     variants: [
-      unavailableVariant("eft-coffee-chams", "week", "7 Day Key", 750),
-      unavailableVariant("eft-coffee-chams", "month", "30 Day Key", 1500),
-    ],
-  },
-  {
-    ...eftMeta,
-    slug: "eft-coffee-lite",
-    name: "Coffee Lite - EFT",
-    priceDisplay: `From ${money(400)}`,
-    summary:
-      "Full-featured EFT suite with silent aimbot, deep exploits, loot and player ESP, and customizable loot filtering.",
-    features: ["Silent aimbot", "Loot ESP", "Exploit tools"],
-    featureGroups: [
-      {
-        title: "Aimbot",
-        items: ["Silent aimbot", "Aimkey selection", "Show aimline", "Crosshair", "Aim FOV", "Aimbone selection", "Modify recoil", "Grenade aim"],
-      },
-      {
-        title: "Exploits",
-        items: ["Debug camera", "Anti AFK", "Session ID spoof", "Long jump", "Keep gun steady", "Instant plant"],
-      },
-      {
-        title: "Loot ESP",
-        items: ["Top loot list", "Active quest items", "Price per slot", "Loot chams", "Loot list size", "Default distance cap"],
-      },
-      {
-        title: "Player ESP",
-        items: ["Box settings", "Skeleton", "Draw distance", "Pink chams", "Look direction ray"],
-      },
-      {
-        title: "Loot Filtering",
-        items: ["Add items by name", "Ignore distance cap", "Ignore min price", "Override name", "Override color"],
-      },
-    ],
-    generalInfo: [
-      "Full EFT suite with silent aim, loot through walls, radar, and thermal.",
-      "Deep loot filtering lets you customize exactly what shows up.",
-      ...universalSetupNotes,
-    ],
-    requirements: ["Windows 10 / 11", "Escape From Tarkov installed"],
-    variants: [
-      unavailableVariant("eft-coffee-lite", "day", "1 Day Key", 400),
-      unavailableVariant("eft-coffee-lite", "week", "7 Day Key", 2250),
-      unavailableVariant("eft-coffee-lite", "month", "30 Day Key", 4500),
-    ],
-  },
-  {
-    ...eftMeta,
-    slug: "ancient-eft",
-    name: "Ancient - EFT External",
-    priceDisplay: `From ${money(300)}`,
-    summary:
-      "External EFT setup with aim tools, player ESP, and loot awareness.",
-    features: ["Aim support", "Player ESP", "Loot visuals"],
-    featureGroups: [
-      { title: "Aimbot", items: ["Smooth", "FOV", "Bone selection"] },
-      { title: "Visuals", items: ["Players", "Loot", "Distance", "Skeleton"] },
-      { title: "Misc", items: ["Config support", "Streamproof"] },
-    ],
-    generalInfo: [
-      "Currently being updated. Check back soon for availability.",
-      ...universalSetupNotes,
-    ],
-    requirements: ["Windows 10 / 11", "Escape From Tarkov installed"],
-    variants: [
-      unavailableVariant("ancient-eft", "day", "1 Day Key", 300),
-      unavailableVariant("ancient-eft", "week", "7 Day Key", 1250),
-      unavailableVariant("ancient-eft", "month", "30 Day Key", 2500),
+      keyVariant("spoofer-lunar", "day", "1 Day Key", 500),
+      keyVariant("spoofer-lunar", "week", "7 Day Key", 1500),
+      keyVariant("spoofer-lunar", "month", "30 Day Key", 3000),
     ],
   },
   {
     ...spooferMeta,
-    slug: "xim-spoofer",
-    name: "Xim Spoofer",
-    priceDisplay: `From ${money(539)}`,
+    slug: "spoofer-shadow",
+    name: "Spoofer - Shadow",
+    priceDisplay: `From ${money(160)}`,
     summary:
-      "Hardware reset support for users who need a clean device-identity setup path across supported games.",
-    features: ["Hardware reset support", "Multi-game support", "Guided setup"],
+      "Lightweight, regularly updated temp HWID spoofer that works with EAC and BattleEye. Fast and easy to use across multiple games.",
+    features: ["EAC & BattleEye support", "Lightweight", "Multi-game"],
     featureGroups: [
-      { title: "Coverage", items: ["Device reset flow", "Temporary and longer options", "Desk-assisted setup"] },
-      { title: "Setup", items: ["Check Windows build", "Confirm motherboard mode", "Follow support notes"] },
-      { title: "Aftercare", items: ["Restart guidance", "Status checks", "Ticket follow-up"] },
+      { title: "Coverage", items: ["EAC (EasyAntiCheat)", "BE (BattleEye AC)"] },
     ],
     generalInfo: [
-      "This category can require careful system checks before use.",
-      "Open a ticket before setup if you are unsure about your Windows or motherboard configuration.",
+      "Disable antivirus and Windows Defender before running the loader.",
       ...universalSetupNotes,
     ],
-    requirements: ["Windows 10 / 11", "UEFI motherboard preferred", "Administrator access"],
+    requirements: [
+      "Game version: EAC (EasyAntiCheat), BE (BattleEye AC)",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11 (21H2, 22H2, 23H2, 24H2, 25H2)",
+    ],
     variants: [
-      keyVariant("xim-spoofer", "day", "1 Day Key", 539),
-      keyVariant("xim-spoofer", "three-day", "3 Days Key", 878),
-      keyVariant("xim-spoofer", "week", "1 Week Key", 1858),
-      keyVariant("xim-spoofer", "month", "1 Month Key", 3815),
-      keyVariant("xim-spoofer", "lifetime", "Lifetime Key", 12380),
+      keyVariant("spoofer-shadow", "day", "1 Day Key", 160),
+      keyVariant("spoofer-shadow", "week", "7 Day Key", 740),
+      keyVariant("spoofer-shadow", "month", "30 Day Key", 1360),
+    ],
+  },
+  {
+    ...spooferMeta,
+    slug: "eac-be-spoofer",
+    name: "EAC / BE Spoofer",
+    priceDisplay: `From ${money(399)}`,
+    summary:
+      "Dedicated spoofer for EAC- and BattleEye-protected games, covering a clean hardware identity reset in one setup.",
+    features: ["EAC & BattleEye coverage", "Clean identity reset"],
+    featureGroups: [
+      { title: "Coverage", items: ["EasyAntiCheat", "BattleEye"] },
+    ],
+    generalInfo: [
+      "Open a support ticket if you are unsure about your Windows version compatibility.",
+      ...universalSetupNotes,
+    ],
+    requirements: ["CPU: Intel & AMD", "OS: Windows 10 - Windows 11 (21H2, 22H2, 23H2)"],
+    variants: [
+      keyVariant("eac-be-spoofer", "day", "1 Day Key", 399),
+      keyVariant("eac-be-spoofer", "week", "7 Day Key", 999),
+      keyVariant("eac-be-spoofer", "month", "30 Day Key", 1999),
     ],
   },
   {
     ...accountsMeta,
-    available: false,
-    badge: "Coming Soon",
-    slug: "linked-nfa",
-    name: "Linked NFA",
-    priceDisplay: `From ${money(647)}`,
+    badge: "Online",
+    slug: "r6s-nfa-account",
+    name: "R6S Ranked Ready NFA Account",
+    priceDisplay: `From ${money(400)}`,
     summary:
-      "Not full-access ranked-ready account option for users who want a quick account handoff.",
-    features: ["NFA account", "Ranked-ready option", "Ticket delivery"],
+      "Non-Full Access Rainbow Six Siege account, ranked-ready with a clean standing, instant delivery, and a 3-hour replacement guarantee.",
+    features: ["Instant delivery", "Ranked-ready", "3-hour replacement guarantee"],
     featureGroups: [
-      { title: "Account", items: ["Linked account details", "NFA access", "Support handoff"] },
-      { title: "Delivery", items: ["Ticket confirmation", "Account notes", "Follow-up support"] },
+      { title: "Account", items: ["Non-Full Access (NFA)", "Clean standing", "Ranked-ready inventory"] },
+      { title: "Delivery", items: ["Instant delivery", "3-hour replacement guarantee", "Support handoff"] },
     ],
     generalInfo: [
-      "Account products are delivered through support after review.",
       "Change any available security details immediately after receiving access.",
       ...universalSetupNotes,
     ],
-    requirements: ["Member account", "Valid contact method", "Support ticket required"],
+    requirements: ["Valid contact method for delivery", "Support ticket for replacement requests"],
     variants: [
-      unavailableVariant("linked-nfa", "account", "1 NFA Account", 647),
-    ],
-  },
-  {
-    ...accountsMeta,
-    available: false,
-    badge: "Coming Soon",
-    slug: "stacked-pc-account",
-    name: "Stacked PC Account",
-    priceDisplay: `From ${money(2159)}`,
-    summary:
-      "Stacked linked Rainbow Six Siege PC account with ranked-ready inventory and account notes.",
-    features: ["Stacked PC account", "Loaded inventory", "Ranked-ready"],
-    featureGroups: [
-      { title: "Account", items: ["Linked PC account", "Loaded inventory", "Ranked-ready status"] },
-      { title: "Delivery", items: ["Ticket confirmation", "Account notes", "Follow-up support"] },
-    ],
-    generalInfo: [
-      "Account products are delivered manually so support can verify the exact handoff details.",
-      "Review all account notes before changing details or opening a follow-up ticket.",
-      ...universalSetupNotes,
-    ],
-    requirements: ["Member account", "Valid contact method", "Support ticket required"],
-    variants: [
-      unavailableVariant("stacked-pc-account", "account", "1 NFA Stacked Linked Account", 2159),
+      keyVariant("r6s-nfa-account", "level-50-99", "Level 50-99", 400),
+      keyVariant("r6s-nfa-account", "level-100-plus", "Level 100+", 500),
+      keyVariant("r6s-nfa-account", "previous-platinum", "Previous Platinum", 600),
+      keyVariant("r6s-nfa-account", "black-ices-20", "+20 Black Ices", 750),
+      keyVariant("r6s-nfa-account", "previous-emerald", "Previous Emerald", 850),
     ],
   },
   {
@@ -1005,26 +925,6 @@ const productCatalog = [
       keyVariant("rust-mrpro", "day", "1 Day Key", 640),
       keyVariant("rust-mrpro", "week", "7 Day Key", 3220),
       keyVariant("rust-mrpro", "month", "30 Day Key", 6440),
-    ],
-  },
-  {
-    ...spooferMeta,
-    slug: "spoofer-verse-perm",
-    name: "Verse - Perm Spoofer",
-    priceDisplay: `From ${money(2159)}`,
-    summary:
-      "Permanent spoofing option for supported games and motherboard brands, with setup checks before purchase.",
-    features: ["Permanent spoofing", "Motherboard coverage", "Setup checks"],
-    featureGroups: [
-      { title: "Supported games", items: ["League of Legends", "Fortnite", "Apex Legends", "Rust"] },
-      { title: "Motherboards", items: ["ASUS", "Gigabyte", "MSI", "ASRock", "HP"] },
-      { title: "Notes", items: ["Open a ticket for Lenovo, Acer, or Dell", "TPM bypass not included"] },
-    ],
-    generalInfo: ["Open a support ticket first if your motherboard brand is not listed."],
-    requirements: ["Windows 10 / 11", "Supported motherboard"],
-    variants: [
-      keyVariant("spoofer-verse-perm", "one-time", "One Time Key", 2159),
-      keyVariant("spoofer-verse-perm", "lifetime", "Lifetime Key", 5399),
     ],
   },
 ];
