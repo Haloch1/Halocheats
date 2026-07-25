@@ -12581,20 +12581,30 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     const mustBlockForProxy = mode === "verify" && proxyRisk.detected && verificationProxyPolicy === "block";
 
     if (mustBlockForFingerprint || mustBlockForIp || mustBlockForSubnet || mustBlockForProxy) {
-      const reason = mustBlockForProxy
-        ? `VPN/proxy risk detected (${proxyRisk.reasons.join(", ") || "flagged"})`
-        : mustBlockForFingerprint
-          ? "Same device already verified another Discord account (fingerprint match)"
-          : mustBlockForIp
-            ? "Network already verified another Discord account (exact IP match)"
-            : "Same network block already verified another Discord account (subnet match)";
-      const shortReason = mustBlockForProxy
-        ? "VPN not allowed"
-        : mustBlockForFingerprint
-          ? "Device not allowed"
-          : mustBlockForIp
-            ? "IP not allowed"
-            : "Network not allowed";
+      // Build the full list of reasons that actually fired instead of picking
+      // just one - an alt account verifying over a VPN trips both an
+      // alt-match AND a proxy flag, and hiding either one behind the other
+      // would make the stated reason inaccurate.
+      const reasonParts = [];
+      const shortReasonParts = [];
+      if (mustBlockForFingerprint) {
+        reasonParts.push("Same device already verified another Discord account (fingerprint match)");
+        shortReasonParts.push("Alt account detected (same device)");
+      }
+      if (mustBlockForIp) {
+        reasonParts.push("Network already verified another Discord account (exact IP match)");
+        shortReasonParts.push("Alt account detected (same IP)");
+      }
+      if (mustBlockForSubnet) {
+        reasonParts.push("Same network block already verified another Discord account (subnet match)");
+        shortReasonParts.push("Alt account detected (same network)");
+      }
+      if (mustBlockForProxy) {
+        reasonParts.push(`VPN/proxy risk detected (${proxyRisk.reasons.join(", ") || "flagged"})`);
+        shortReasonParts.push("VPN not allowed");
+      }
+      const reason = reasonParts.join("; ");
+      const shortReason = shortReasonParts.join(" + ");
       await sendSecurityDiscordAlert("Verification blocked by fraud policy", [
         { name: "Discord user", value: `<@${discordUser.id}>`, inline: true },
         { name: "Reason", value: reason, inline: false },
