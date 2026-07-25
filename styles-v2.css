@@ -4164,6 +4164,15 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
     opacity: 1;
     transform: none;
   }
+
+  /* The feature ticker is a decorative scroller, not motion that triggers
+     vestibular issues the way parallax/zoom effects can - keep it running
+     even with reduced motion enabled, otherwise it freezes mid-scroll and
+     looks broken rather than calm. */
+  .ticker-track {
+    animation-duration: 30s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
 
 /* Homepage Discord sign-in prompt. Kept here because every public page uses
