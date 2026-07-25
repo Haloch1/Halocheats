@@ -5299,11 +5299,38 @@ ${rows || '<div class="ct">No messages.</div>'}
           return `${matchType} — ${ban.reason || "No reason logged"} (banned ${when})`;
         }).join("\n");
 
+        // Bans are stored as hashes only (no raw IP or username kept on the
+        // ban row itself) - cross-reference the verification-attempt log for
+        // this same hash to show who was actually using this network.
+        const { data: attempts } = await queryVerificationTable(
+          () => supabaseAdmin
+            .from("discord_verification_ips")
+            .select("discord_id")
+            .or([
+              ipHash && `ip_hash.eq.${ipHash}`,
+              subnetHash && `subnet_hash.eq.${subnetHash}`,
+            ].filter(Boolean).join(","))
+            .limit(10),
+          { data: [], error: null },
+        );
+
+        const uniqueDiscordIds = [...new Set((attempts || []).map((row) => row.discord_id).filter(Boolean))].slice(0, 10);
+        let accountsLine = "None on record.";
+        if (uniqueDiscordIds.length) {
+          const users = await Promise.all(
+            uniqueDiscordIds.map((id) => discordBot.users.fetch(id).catch(() => null))
+          );
+          accountsLine = users
+            .map((user, i) => user ? `${user.tag} (<@${uniqueDiscordIds[i]}>)` : `Unknown user (<@${uniqueDiscordIds[i]}>)`)
+            .join("\n");
+        }
+
         return interaction.editReply({
           embeds: [{
             title: `IP check: ${ipInput}`,
             description: `**Blocked.**\n${matchLines}`,
             color: 0xd82028,
+            fields: [{ name: "Known accounts on this network", value: accountsLine, inline: false }],
           }],
         });
       } catch (err) {
