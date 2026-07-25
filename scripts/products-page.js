@@ -240,6 +240,42 @@ async function renderProductReviews(product) {
   listEl.innerHTML = cards + moreLink;
 }
 
+function renderRelatedProducts(product) {
+  const modal = document.querySelector("[data-variant-modal]");
+  const section = modal?.querySelector("[data-related-section]");
+  const list = modal?.querySelector("[data-related-list]");
+  const heading = modal?.querySelector("[data-related-heading]");
+
+  if (!section || !list) return;
+
+  const category = product.category || product.game || "";
+  const related = catalogProducts
+    .filter((item) => item.slug !== product.slug && (item.category || item.game) === category)
+    .slice(0, 3);
+
+  if (!related.length) {
+    section.hidden = true;
+    return;
+  }
+
+  section.hidden = false;
+  if (heading) heading.textContent = `More ${category}`;
+
+  list.innerHTML = related
+    .map(
+      (item) => `
+        <a class="variant-related-card" href="/products/${encodeURIComponent(item.slug)}/">
+          <span class="variant-related-thumb">
+            <img src="${productImageSrc(item)}" alt="" loading="lazy" />
+            ${item.badge ? `<span class="product-status-badge ${badgeTone(item.badge)}">${escapeHtml(item.badge)}</span>` : ""}
+          </span>
+          <span class="variant-related-name">${escapeHtml(item.name)}</span>
+          <span class="variant-related-price">${escapeHtml(item.priceDisplay || "")}</span>
+        </a>`
+    )
+    .join("");
+}
+
 function groupProducts(products) {
   return products.reduce((groups, product) => {
     const category = product.category || product.game || "Catalog";
@@ -604,6 +640,7 @@ function ensureVariantModal() {
         <img class="product-image-blur product-image-blur-top" data-variant-product-blur alt="" aria-hidden="true" />
         <img class="product-image-blur product-image-blur-bottom" data-variant-product-blur alt="" aria-hidden="true" />
         <div class="variant-art-brand" aria-hidden="true"><span>XenCheats</span></div>
+        <span class="product-status-badge variant-art-status" data-variant-art-badge></span>
         <div class="variant-art-caption" data-variant-art-caption aria-hidden="true"></div>
       </div>
       <div class="variant-details">
@@ -673,6 +710,10 @@ function ensureVariantModal() {
         <section class="variant-reviews-section" id="product-reviews">
           <h4>Customer Reviews <span class="variant-reviews-count" data-reviews-count></span></h4>
           <div class="variant-reviews-list" data-reviews-list></div>
+        </section>
+        <section class="variant-related-section" id="product-related" data-related-section hidden>
+          <h4><span data-related-heading>You might also like</span></h4>
+          <div class="variant-related-list" data-related-list></div>
         </section>
       </div>
     </section>
@@ -1087,6 +1128,17 @@ function openVariantModal(product, { updateUrl = true } = {}) {
     artCaption.hidden = hasOwnArt;
   }
 
+  const artBadge = modal.querySelector("[data-variant-art-badge]");
+  if (artBadge) {
+    if (product.badge) {
+      artBadge.hidden = false;
+      artBadge.textContent = product.badge;
+      artBadge.className = `product-status-badge variant-art-status ${badgeTone(product.badge)}`;
+    } else {
+      artBadge.hidden = true;
+    }
+  }
+
   if (dedicatedProductSlug) {
     const breadcrumb = document.querySelector("[data-product-breadcrumb]");
     if (breadcrumb) breadcrumb.textContent = product.name;
@@ -1127,6 +1179,7 @@ function openVariantModal(product, { updateUrl = true } = {}) {
   }
   selectVariant(activeVariant?.slug);
   renderProductReviews(product);
+  renderRelatedProducts(product);
 
   if (updateUrl && new URLSearchParams(window.location.search).get("product") !== product.slug) {
     updateProductUrl(product.slug);

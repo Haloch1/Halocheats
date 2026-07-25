@@ -601,15 +601,17 @@ button:disabled {
 @keyframes hero-glow-pulse {
   0%, 100% {
     text-shadow:
-      0 0 18px rgba(255, 55, 66, 0.55),
-      0 0 44px rgba(216, 32, 40, 0.42),
-      0 0 84px rgba(216, 32, 40, 0.22);
+      0 0 8px rgba(255, 120, 120, 0.9),
+      0 0 22px rgba(255, 55, 66, 0.85),
+      0 0 48px rgba(216, 32, 40, 0.65),
+      0 0 96px rgba(216, 32, 40, 0.4);
   }
   50% {
     text-shadow:
-      0 0 26px rgba(255, 55, 66, 0.78),
-      0 0 64px rgba(216, 32, 40, 0.6),
-      0 0 118px rgba(216, 32, 40, 0.34);
+      0 0 12px rgba(255, 150, 150, 1),
+      0 0 32px rgba(255, 55, 66, 1),
+      0 0 72px rgba(216, 32, 40, 0.85),
+      0 0 140px rgba(216, 32, 40, 0.55);
   }
 }
 
@@ -2014,6 +2016,14 @@ textarea:focus {
   background: linear-gradient(0deg, rgba(10, 8, 10, 0.82), rgba(20, 12, 14, 0.3) 55%, transparent);
 }
 
+.variant-art-status {
+  top: 20px;
+  right: 20px;
+  left: auto;
+  z-index: 4;
+  font-size: 0.68rem;
+}
+
 .variant-art-caption {
   position: absolute;
   z-index: 4;
@@ -2219,9 +2229,25 @@ textarea:focus {
 
 .variant-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 9px;
   margin-top: 17px;
+}
+
+/* One clear "Buy now" action instead of four same-weight buttons — Pay with
+   Card (and the Notify substitute) take the full row as the primary CTA,
+   the alternate payment methods sit underneath as smaller secondary picks. */
+.variant-actions .button-primary {
+  grid-column: 1 / -1;
+  min-height: 56px;
+  font-size: 1rem;
+}
+
+.variant-actions .button-balance,
+.variant-actions .button-crypto,
+.variant-actions .button-secondary {
+  min-height: 46px;
+  font-size: 0.8rem;
 }
 
 .variant-trust-row {
@@ -2490,6 +2516,63 @@ textarea:focus {
 .variant-reviews-more:hover {
   border-color: rgba(216, 32, 40, 0.3);
   background: var(--red-soft);
+}
+
+.variant-related-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.variant-related-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  text-decoration: none;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.variant-related-card:hover {
+  border-color: rgba(216, 32, 40, 0.28);
+  box-shadow: 0 14px 30px rgba(80, 29, 31, 0.09);
+  transform: translateY(-2px);
+}
+
+.variant-related-thumb {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 12px;
+  aspect-ratio: 4 / 3;
+}
+
+.variant-related-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.variant-related-thumb .product-status-badge {
+  top: 8px;
+  left: 8px;
+  font-size: 0.58rem;
+}
+
+.variant-related-name {
+  overflow: hidden;
+  font: 700 0.85rem var(--font-display);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.variant-related-price {
+  color: var(--red-dark);
+  font: 800 0.82rem var(--font-display);
 }
 
 /* Dedicated product pages have more room than the quick-view modal. */
@@ -4018,7 +4101,8 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .variant-feature-grid,
   .variant-info-list,
   .variant-requirements,
-  .variant-reviews-list { grid-template-columns: 1fr; }
+  .variant-reviews-list,
+  .variant-related-list { grid-template-columns: 1fr; }
 
   .auth-card { padding: 20px 16px; }
   .auth-entry-side { padding: 20px; }

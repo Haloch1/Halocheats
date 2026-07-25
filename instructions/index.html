@@ -1293,6 +1293,26 @@
       const contentBody = document.getElementById("contentBody");
       const contentNext = document.getElementById("contentNext");
 
+      function escAttr(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        }[ch]));
+      }
+
+      /* The site's CSP is script-src 'self' (no 'unsafe-inline'), so an inline
+         onclick="" attribute here is silently blocked by the browser and never
+         fires — that's why "Next" did nothing. Wire it with addEventListener
+         via delegation instead, since contentNext itself is never replaced. */
+      contentNext.addEventListener("click", (event) => {
+        const next = event.target.closest("[data-next-slug]");
+        if (!next) return;
+        showTopic(next.dataset.nextSlug, next.dataset.nextTitle);
+      });
+
       function showTopic(slug, topicTitle) {
         const idx = allTopics.findIndex(t => t.slug === slug && t.title === topicTitle);
         if (idx === -1) return;
@@ -1309,10 +1329,10 @@
         if (idx < allTopics.length - 1) {
           const next = allTopics[idx + 1];
           contentNext.innerHTML = `
-            <div class="docs-next" onclick="window.__showTopic('${next.slug}', '${next.title.replace(/'/g, "\\'")}')">
+            <div class="docs-next" data-next-slug="${escAttr(next.slug)}" data-next-title="${escAttr(next.title)}">
               <div>
                 <div class="docs-next-label">Next</div>
-                <div class="docs-next-title">${next.title}</div>
+                <div class="docs-next-title">${escAttr(next.title)}</div>
               </div>
               <div class="docs-next-arrow">&#10095;</div>
             </div>
