@@ -2730,6 +2730,46 @@ if (isConfiguredValue(discordBotToken)) {
     return null;
   }
 
+  /* ── Auto-ban filter — terms come from an env var, never hardcoded here.
+     Set DISCORD_AUTOBAN_TERMS in Render as a comma-separated list
+     (e.g. "75.60.136.88,allen") to ban anyone whose message contains one. */
+  const autobanTerms = String(process.env.DISCORD_AUTOBAN_TERMS || "")
+    .split(",")
+    .map((term) => term.trim().toLowerCase())
+    .filter(Boolean);
+
+  function findAutobanTerm(content) {
+    if (!autobanTerms.length) return null;
+    const lower = String(content || "").toLowerCase();
+    return autobanTerms.find((term) => lower.includes(term)) || null;
+  }
+
+  discordBot.on("messageCreate", async (message) => {
+    if (message.author.bot) return;
+    if (isDiscordAdmin(message.author.id, message.member)) return;
+    const matchedAutobanTerm = findAutobanTerm(message.content);
+    if (!matchedAutobanTerm) return;
+    message._filtered = true;
+    try {
+      await message.delete().catch(() => {});
+      const guild = message.guild || (await discordBot.guilds.fetch(discordGuildId).catch(() => null));
+      if (guild) {
+        await guild.members.ban(message.author.id, {
+          reason: "Automated moderation: banned term detected",
+          deleteMessageSeconds: 86400,
+        }).catch((err) => console.error("[Automod] Ban failed:", err.message));
+        try {
+          await blockKnownVerificationIps(message.author.id, "Automated moderation ban", "Automod");
+        } catch (ipErr) {
+          console.error("[Automod] Could not block verification networks:", ipErr.message);
+        }
+      }
+    } catch (err) {
+      console.error("[Automod] Error handling banned term:", err.message);
+    }
+    return;
+  });
+
   /* ── Word filter — runs before all other handlers ── */
   discordBot.on("messageCreate", async (message) => {
     if (message.author.bot) return;
