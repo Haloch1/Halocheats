@@ -1581,9 +1581,12 @@ async function sendVerificationBlockedDm(discordId, shortReason) {
   if (!discordBot) return;
   try {
     const user = await discordBot.users.fetch(discordId);
+    // The reason rides along in the customId (max 100 chars, plenty of room
+    // for these short labels) so the appeal thread can state it without a
+    // separate lookup.
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`verify_appeal_yes:${discordId}`).setLabel("Yes").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`verify_appeal_no:${discordId}`).setLabel("No").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`verify_appeal_yes:${discordId}:${shortReason}`).setLabel("Yes").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`verify_appeal_no:${discordId}:${shortReason}`).setLabel("No").setStyle(ButtonStyle.Secondary),
     );
     await user.send({
       embeds: [{
@@ -4184,6 +4187,8 @@ ${rows || '<div class="ct">No messages.</div>'}
 
       try {
         const discordId = interaction.user.id;
+        // customId shape: verify_appeal_yes:<discordId>:<shortReason>
+        const blockReason = interaction.customId.split(":").slice(2).join(":") || "Not specified";
         const appealChannel = discordVerificationAppealChannelId
           ? await discordBot.channels.fetch(discordVerificationAppealChannelId).catch(() => null)
           : null;
@@ -4199,7 +4204,10 @@ ${rows || '<div class="ct">No messages.</div>'}
               title: "Verification appeal",
               description: `<@${discordId}> said their verification block was a mistake. Reply in this thread to message them directly — their replies will show up here too.`,
               color: 0xd82028,
-              fields: [{ name: "User", value: `${interaction.user.tag} (${discordId})`, inline: true }],
+              fields: [
+                { name: "User", value: `${interaction.user.tag} (${discordId})`, inline: true },
+                { name: "Blocked for", value: blockReason, inline: true },
+              ],
             }],
           });
           await queryVerificationTable(
