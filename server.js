@@ -12468,9 +12468,28 @@ loadAiMutedChannels();
 
 /* ── AI: Live Desk auto-reply ── */
 
+function getCatalogQuestionFallback(query) {
+  const text = String(query || "").toLowerCase();
+  const asksForChoice = /\b(which|what|recommend|suggest|best|should i get|pick)\b/.test(text);
+  const asksAboutR6 = /\b(r6|rainbow six|siege)\b/.test(text);
+
+  if (!asksForChoice || !asksAboutR6) return null;
+
+  const r6Products = products
+    .filter((product) => /rainbow six|siege|\br6\b/i.test(`${product.category || ""} ${product.game || ""} ${product.name || ""}`))
+    .filter((product) => product.available !== false)
+    .slice(0, 3)
+    .map((product) => product.name)
+    .filter(Boolean);
+
+  if (!r6Products.length) return null;
+  return `For R6, the current options are ${r6Products.join(", ")}. Check the live options at https://xencheats.wtf/products, then tell me whether you want a setup focused on visuals, aim settings, or simple setup and I can narrow it down.`;
+}
+
 async function generateAILiveDeskReply(thread, userMessage, userContext) {
-  if (!geminiApiKey && !groqApiKey) return null;
+  const catalogFallback = getCatalogQuestionFallback(userMessage);
   const discordHandoffReply = "I can't resolve this from the desk. Please join https://discord.gg/xencheats so the Discord support team can take over.";
+  if (!geminiApiKey && !groqApiKey) return catalogFallback || discordHandoffReply;
   const staffReplyStyle = await getStaffReplyStyle();
   const supportKnowledge = getSupportKnowledgeBase(userMessage);
   const liveStatus = await getPublicStatusContext(userMessage);
@@ -12706,9 +12725,7 @@ SECURITY:
       await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
     }
   }
-  return providerRateLimited
-    ? "AI support has reached its provider usage limit for now. Staff can continue with you in this ticket."
-    : null;
+  return catalogFallback || discordHandoffReply;
 }
 
 function supportSearchTerms(value) {
