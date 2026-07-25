@@ -116,17 +116,17 @@ const discordVerificationChannelId =
 const verificationIpHashSecret = process.env.DISCORD_VERIFICATION_IP_HASH_SECRET || "";
 const verificationIpReusePolicy = ["allow", "review", "block"].includes(process.env.DISCORD_VERIFICATION_IP_REUSE_POLICY)
   ? process.env.DISCORD_VERIFICATION_IP_REUSE_POLICY
-  : "review";
+  : "block";
 const verificationProxyPolicy = ["allow", "review", "block"].includes(process.env.DISCORD_VERIFICATION_PROXY_POLICY)
   ? process.env.DISCORD_VERIFICATION_PROXY_POLICY
-  : "review";
+  : "block";
 const verificationRequireSecurityTables = process.env.DISCORD_VERIFICATION_REQUIRE_SECURITY_TABLES === "true";
 const ipQualityScoreApiKey = process.env.IPQUALITYSCORE_API_KEY || "";
 /* Subnet-level alt detection: same ISP block (different dynamic IP) is a weaker
    signal than an exact IP match, so it gets its own policy. */
 const verificationSubnetPolicy = ["allow", "review", "block"].includes(process.env.DISCORD_VERIFICATION_SUBNET_POLICY)
   ? process.env.DISCORD_VERIFICATION_SUBNET_POLICY
-  : "review";
+  : "block";
 const verificationFraudScoreThreshold = Number.isFinite(Number(process.env.DISCORD_VERIFICATION_FRAUD_SCORE_THRESHOLD))
   ? Number(process.env.DISCORD_VERIFICATION_FRAUD_SCORE_THRESHOLD)
   : 85;
