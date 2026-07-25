@@ -627,8 +627,6 @@ function maskEmail(email) {
   const shown = local.slice(0, 3);
   return `${shown}***${domain}`;
 }
-const liveDeskCooldownMs = 45_000;
-const liveDeskCooldownByIp = new Map();
 const liveDeskStaffTypingByThread = new Map(); // threadId -> expiry timestamp
 const signupIpMap = new Map(); // IP -> [userId, ...]  (rolling fraud check, not persisted)
 const staffAccessTtlMs = 1000 * 60 * 60 * 8;
@@ -8874,18 +8872,6 @@ app.post("/api/live-desk", async (req, res) => {
     });
   }
 
-  const clientIp = getClientIp(req);
-  const now = Date.now();
-  const lastOpenedAt = liveDeskCooldownByIp.get(clientIp) || 0;
-
-  if (now - lastOpenedAt < liveDeskCooldownMs) {
-    const secondsLeft = Math.ceil((liveDeskCooldownMs - (now - lastOpenedAt)) / 1000);
-
-    return res.status(429).json({
-      error: `Please wait ${secondsLeft} seconds before opening another desk request.`,
-    });
-  }
-
   const name = sanitizeInput(req.body?.name, 80);
   const contact = sanitizeInput(req.body?.contact, 140);
   const topic = sanitizeInput(req.body?.topic, 80);
@@ -9008,8 +8994,6 @@ app.post("/api/live-desk", async (req, res) => {
         console.error("[AI Live Desk] Auto-reply error:", aiErr.message);
       }
     })();
-
-    liveDeskCooldownByIp.set(clientIp, now);
 
     return res.json({
       ok: true,
@@ -13823,11 +13807,6 @@ setInterval(() => {
       const ts = typeof val === "number" ? val : val?.ts;
       if (ts && now - ts > 5 * 60 * 1000) map.delete(key);
     }
-  }
-
-  // liveDeskCooldownByIp: clear entries older than cooldown period
-  for (const [key, ts] of liveDeskCooldownByIp) {
-    if (now - ts > liveDeskCooldownMs * 2) liveDeskCooldownByIp.delete(key);
   }
 
   // signupIpMap: cap at 5000 entries, clear oldest
