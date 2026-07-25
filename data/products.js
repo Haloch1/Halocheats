@@ -152,7 +152,7 @@ const productCatalog = [
     badge: "Undetected",
     slug: "r6s-ancient",
     name: "R6S Ancient",
-    priceDisplay: money(300),
+    priceDisplay: `From ${money(300)}`,
     summary:
       "Full-featured Rainbow Six Siege loadout combining a tunable aimbot, layered player ESP, and gadget control for both attackers and defenders.",
     features: ["Aimbot suite", "Player ESP", "Gadget control"],
@@ -220,13 +220,17 @@ const productCatalog = [
       "Full-screen mode: not supported (windowed/borderless only)",
       "Built-in spoofer included (may not work on all systems)",
     ],
-    variants: [keyVariant("r6s-ancient", "license", "License Key", 300)],
+    variants: [
+      keyVariant("r6s-ancient", "day", "1 Day Key", 300),
+      keyVariant("r6s-ancient", "week", "7 Day Key", 1500),
+      keyVariant("r6s-ancient", "month", "30 Day Key", 3000),
+    ],
   },
   {
     ...r6Meta,
     slug: "r6s-crusader",
     name: "Crusader R6S",
-    priceDisplay: money(400),
+    priceDisplay: `From ${money(400)}`,
     summary:
       "Aim- and ESP-focused Rainbow Six Siege tool built around clean target reads and adjustable aim assist.",
     features: ["Player ESP", "Aimbot"],
@@ -271,14 +275,18 @@ const productCatalog = [
       "OS: Windows 10, Windows 11",
       "Full-screen mode: not supported (windowed/borderless only)",
     ],
-    variants: [keyVariant("r6s-crusader", "license", "License Key", 400)],
+    variants: [
+      keyVariant("r6s-crusader", "day", "1 Day Key", 400),
+      keyVariant("r6s-crusader", "week", "7 Day Key", 2000),
+      keyVariant("r6s-crusader", "month", "30 Day Key", 4000),
+    ],
   },
   {
     ...r6Meta,
     badge: "Updating",
     slug: "r6s-vega",
     name: "R6S Vega",
-    priceDisplay: money(400),
+    priceDisplay: `From ${money(400)}`,
     summary:
       "Adaptive Rainbow Six Siege X toolkit pairing a real-time aimbot with map-wide visuals and stream-safe overlays.",
     features: ["Adaptive aimbot", "Full visuals", "Streamproof"],
@@ -309,13 +317,18 @@ const productCatalog = [
       "Full-screen mode: supported",
       "Streamproof: not compatible with Alienware PCs",
     ],
-    variants: [keyVariant("r6s-vega", "license", "License Key", 400)],
+    variants: [
+      keyVariant("r6s-vega", "day", "1 Day Key", 400),
+      keyVariant("r6s-vega", "three-day", "3 Day Key", 800),
+      keyVariant("r6s-vega", "week", "7 Day Key", 1600),
+      keyVariant("r6s-vega", "month", "30 Day Key", 3000),
+    ],
   },
   {
     ...r6Meta,
     slug: "r6s-chams",
     name: "R6S Chams Wallhack",
-    priceDisplay: money(350),
+    priceDisplay: `From ${money(350)}`,
     summary:
       "Lightweight Rainbow Six Siege wallhack focused purely on chams-based visibility through walls, built to stay low-impact on performance.",
     features: ["Chams wallhack", "Low performance impact"],
@@ -338,14 +351,18 @@ const productCatalog = [
       "Full-screen mode: not supported (windowed/borderless only)",
       "Requires a USB flash drive; Nvidia GPU only",
     ],
-    variants: [keyVariant("r6s-chams", "license", "License Key", 350)],
+    variants: [
+      keyVariant("r6s-chams", "day", "1 Day Key", 350),
+      keyVariant("r6s-chams", "week", "7 Day Key", 1500),
+      keyVariant("r6s-chams", "month", "30 Day Key", 3000),
+    ],
   },
   {
     ...r6Meta,
     badge: "Updating",
     slug: "r6s-lethal",
     name: "R6S Lethal (Full)",
-    priceDisplay: money(1099),
+    priceDisplay: `From ${money(1099)}`,
     summary:
       "The most complete Rainbow Six Siege package in the lineup, combining full ESP coverage, an aim suite, and utility tools in one internal build.",
     features: ["Full ESP suite", "Aimbot + misc aim tools", "Utility features"],
@@ -420,14 +437,19 @@ const productCatalog = [
       "OS: Windows 10, Windows 11",
       "Full-screen mode: not supported (windowed/borderless only)",
     ],
-    variants: [keyVariant("r6s-lethal", "license", "License Key", 1099, { stockLabel: "Backorder" })],
+    variants: [
+      keyVariant("r6s-lethal", "day", "1 Day Key", 1099, { stockLabel: "Backorder" }),
+      keyVariant("r6s-lethal", "week", "7 Day Key", 3299, { stockLabel: "Backorder" }),
+      keyVariant("r6s-lethal", "month", "30 Day Key", 5299, { stockLabel: "Backorder" }),
+      keyVariant("r6s-lethal", "year", "1 Year Key", 34999, { stockLabel: "Backorder" }),
+    ],
   },
   {
     ...r6Meta,
     badge: "Undetected",
     slug: "r6s-no-recoil",
     name: "R6S No Recoil Script",
-    priceDisplay: money(300),
+    priceDisplay: `From ${money(300)}`,
     summary:
       "External no-recoil tool for Rainbow Six Siege with per-operator profiles and a live toggle overlay, built to run alongside any aim or ESP tool.",
     features: ["Recoil removal", "Per-operator profiles", "Toggle overlay"],
@@ -471,7 +493,12 @@ const productCatalog = [
       "OS: Windows 10, Windows 11",
       "Full-screen mode: not supported (windowed/borderless only)",
     ],
-    variants: [keyVariant("r6s-no-recoil", "license", "License Key", 300)],
+    variants: [
+      keyVariant("r6s-no-recoil", "day", "1 Day Key", 300),
+      keyVariant("r6s-no-recoil", "week", "7 Day Key", 1000),
+      keyVariant("r6s-no-recoil", "month", "30 Day Key", 2000),
+      keyVariant("r6s-no-recoil", "three-month", "90 Day Key", 3500),
+    ],
   },
   {
     ...fortniteMeta,

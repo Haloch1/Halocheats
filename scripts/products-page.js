@@ -278,7 +278,6 @@ function productImageSrc(product) {
 
 function renderCategoryCard(category, products) {
   const card = document.createElement("article");
-  const label = categoryImageLabel(category);
   const imageSrc = categoryImageSrc(category);
   card.className = "catalog-category-card";
   card.dataset.categoryCard = category;
@@ -287,6 +286,7 @@ function renderCategoryCard(category, products) {
       <img src="${imageSrc}" alt="${escapeHtml(category)}" loading="lazy" />
     </div>
     <div class="category-card-body">
+      <h3 class="category-card-title">${escapeHtml(category)}</h3>
       <span class="category-card-count">${products.length} ${products.length === 1 ? "product" : "products"}</span>
     </div>
   `;
@@ -330,6 +330,14 @@ function productMatchesSearch(product) {
     .includes(searchQuery);
 }
 
+function badgeTone(badge) {
+  const value = String(badge || "").toLowerCase();
+  if (value.includes("undetected")) return "tone-green";
+  if (value.includes("updating")) return "tone-amber";
+  if (value.includes("coming soon")) return "tone-muted";
+  return "tone-blue";
+}
+
 function renderProductCard(product, index) {
   const item = document.createElement("article");
   item.className = `product-card product-card-page catalog-product${
@@ -350,10 +358,18 @@ function renderProductCard(product, index) {
       />
       <img class="product-image-blur product-image-blur-top" src="${productImageSrc(product)}" alt="" loading="lazy" aria-hidden="true" />
       <img class="product-image-blur product-image-blur-bottom" src="${productImageSrc(product)}" alt="" loading="lazy" aria-hidden="true" />
+      ${product.badge ? `<span class="product-status-badge ${badgeTone(product.badge)}">${escapeHtml(product.badge)}</span>` : ""}
       <span class="product-thumbnail-overlay" aria-hidden="true">
         <span>View</span>
       </span>
     </a>
+    <div class="product-card-info">
+      <h4 class="product-card-name">${escapeHtml(product.name)}</h4>
+      <div class="product-card-meta">
+        <span class="product-card-price">${escapeHtml(product.priceDisplay || "")}</span>
+        <span class="product-card-cta">View&nbsp;&rarr;</span>
+      </div>
+    </div>
   `;
 
   return item;
