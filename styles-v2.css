@@ -4027,6 +4027,11 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
 .ai-widget-msg-self { align-self: flex-end; }
 .ai-widget-msg-self p { background: linear-gradient(135deg, var(--red), var(--red-dark)); color: #fff; border-bottom-right-radius: 4px; }
 .ai-widget-msg-self span { text-align: right; }
+.ai-widget-msg p { overflow-wrap: anywhere; }
+.ai-widget-msg p strong { font-weight: 800; }
+.ai-widget-msg p code { padding: 0.08em 0.3em; color: inherit; font: 0.88em var(--font-mono); background: rgba(128, 20, 20, 0.08); border-radius: 4px; }
+.ai-widget-msg p a { color: var(--red-dark); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.ai-widget-msg-self p a { color: #fff; }
 
 .ai-widget-msg-error p { background: var(--red-soft); color: var(--red-dark); border: 1px solid var(--line-strong); }
 

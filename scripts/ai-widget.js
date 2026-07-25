@@ -17,6 +17,16 @@ function esc(v) {
   }[c]));
 }
 
+// AI replies are stored as plain text. Escape first, then allow only the few
+// presentation features the support assistant uses; never render raw HTML.
+function formatMessage(v) {
+  return esc(v)
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(https:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replace(/\n/g, "<br>");
+}
+
 function shouldSkip() {
   const path = window.location.pathname;
   return SKIP_PATH_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
@@ -164,7 +174,7 @@ async function init() {
         (m) => `
         <div class="ai-widget-msg ai-widget-msg-${m.senderType === "user" ? "self" : m.senderType}">
           <span>${esc(senderLabel(m.senderType))}</span>
-          <p>${esc(m.body)}</p>
+          <p>${formatMessage(m.body)}</p>
         </div>`
       )
       .join("");
