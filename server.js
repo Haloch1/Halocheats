@@ -163,7 +163,7 @@ const OWNER_ONLY_COMMANDS = new Set([
   "ticket-panel", "invest", "investments", "uninvest", "accountstats",
   "leaderboard", "reinvite-all",
 ]);
-const ADMIN_ONLY_COMMANDS = new Set(["orderlookup", "staffactivity", "disallowedips"]);
+const ADMIN_ONLY_COMMANDS = new Set(["orderlookup", "staffactivity", "ips"]);
 const discordStaffGuideChannelId = process.env.DISCORD_STAFF_GUIDE_CHANNEL_ID || "1530269093100388583";
 const pendingSchedules = new Map(); // id -> { timer, title, postAt }
 const resellerBuyLocks = new Map(); // inventorySlug -> Promise that resolves when buy completes
@@ -2808,9 +2808,10 @@ if (isConfiguredValue(discordBotToken)) {
           .setName("reinvite-all")
           .setDescription("Re-add all linked users to the server using stored OAuth tokens (owner only)"),
         new SlashCommandBuilder()
-          .setName("disallowedips")
-          .setDescription("Check if an IP is on the blocked verification list (admin only)")
-          .addStringOption(o => o.setName("ip").setDescription("IP address to check").setRequired(true)),
+          .setName("ips")
+          .setDescription("Check verification network/ban info by IP or by user (admin only)")
+          .addStringOption(o => o.setName("ip").setDescription("IP address to check").setRequired(false))
+          .addUserOption(o => o.setName("user").setDescription("Discord user to check").setRequired(false)),
       ];
 
       const commands = commandBuilders.map((command) => {
@@ -5261,55 +5262,81 @@ ${rows || '<div class="ct">No messages.</div>'}
       }
     }
 
-    if (interaction.commandName === "disallowedips") {
+    if (interaction.commandName === "ips") {
       if (!isDiscordAdminInteraction(interaction)) {
         return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
       }
       await interaction.deferReply({ ephemeral: true });
       try {
-        const ipInput = interaction.options.getString("ip").trim();
-        if (!isIP(ipInput)) {
+        const ipInput = interaction.options.getString("ip")?.trim() || "";
+        const targetUser = interaction.options.getUser("user");
+
+        if (!ipInput && !targetUser) {
+          return interaction.editReply({ embeds: [{ description: "Provide an IP address or a user to check.", color: 0xff4444 }] });
+        }
+        if (ipInput && !isIP(ipInput)) {
           return interaction.editReply({ embeds: [{ description: "That doesn't look like a valid IP address.", color: 0xff4444 }] });
         }
 
-        const ipHash = hashVerificationIp(ipInput);
-        const subnetHash = hashVerificationSubnet(ipInput);
+        let ipHash = "";
+        let subnetHash = "";
+        let fingerprintHash = "";
+        let title = "";
+
+        if (ipInput) {
+          ipHash = hashVerificationIp(ipInput);
+          subnetHash = hashVerificationSubnet(ipInput);
+          title = `IP check: ${ipInput}`;
+        } else {
+          const { data: lastAttempt } = await queryVerificationTable(
+            () => supabaseAdmin
+              .from("discord_verification_ips")
+              .select("ip_hash, subnet_hash, fingerprint_hash")
+              .eq("discord_id", targetUser.id)
+              .order("last_verified_at", { ascending: false })
+              .limit(1)
+              .maybeSingle(),
+            { data: null, error: null },
+          );
+          if (!lastAttempt) {
+            return interaction.editReply({
+              embeds: [{ title: `User check: ${targetUser.tag}`, description: "No verification record on file for this user.", color: 0x08723d }],
+            });
+          }
+          ipHash = lastAttempt.ip_hash || "";
+          subnetHash = lastAttempt.subnet_hash || "";
+          fingerprintHash = lastAttempt.fingerprint_hash || "";
+          title = `User check: ${targetUser.tag}`;
+        }
+
+        const hashFilter = [
+          ipHash && `ip_hash.eq.${ipHash}`,
+          subnetHash && `subnet_hash.eq.${subnetHash}`,
+          fingerprintHash && `fingerprint_hash.eq.${fingerprintHash}`,
+        ].filter(Boolean).join(",");
+
+        if (!hashFilter) {
+          return interaction.editReply({ embeds: [{ title, description: "No usable network data on file for this check.", color: 0x08723d }] });
+        }
+
         const { data: bans, error } = await queryVerificationTable(
           () => supabaseAdmin
             .from("discord_verification_ip_bans")
-            .select("ip_hash, subnet_hash, reason, created_at")
-            .or([
-              ipHash && `ip_hash.eq.${ipHash}`,
-              subnetHash && `subnet_hash.eq.${subnetHash}`,
-            ].filter(Boolean).join(","))
+            .select("ip_hash, subnet_hash, fingerprint_hash, reason, created_at")
+            .or(hashFilter)
             .limit(10),
           { data: [], error: null },
         );
         if (error) throw error;
 
-        if (!bans?.length) {
-          return interaction.editReply({
-            embeds: [{ title: `IP check: ${ipInput}`, description: "Not on the blocked list.", color: 0x08723d }],
-          });
-        }
-
-        const matchLines = bans.map((ban) => {
-          const matchType = ban.ip_hash === ipHash ? "Exact IP match" : "Same subnet";
-          const when = ban.created_at ? new Date(ban.created_at).toLocaleString() : "unknown time";
-          return `${matchType} — ${ban.reason || "No reason logged"} (banned ${when})`;
-        }).join("\n");
-
-        // Bans are stored as hashes only (no raw IP or username kept on the
-        // ban row itself) - cross-reference the verification-attempt log for
-        // this same hash to show who was actually using this network.
+        // Cross-reference the verification-attempt log for the same hash(es)
+        // to show which known accounts share this network or device - bans
+        // themselves only store hashes, never a raw IP or username.
         const { data: attempts } = await queryVerificationTable(
           () => supabaseAdmin
             .from("discord_verification_ips")
             .select("discord_id")
-            .or([
-              ipHash && `ip_hash.eq.${ipHash}`,
-              subnetHash && `subnet_hash.eq.${subnetHash}`,
-            ].filter(Boolean).join(","))
+            .or(hashFilter)
             .limit(10),
           { data: [], error: null },
         );
@@ -5325,16 +5352,37 @@ ${rows || '<div class="ct">No messages.</div>'}
             .join("\n");
         }
 
+        if (!bans?.length) {
+          return interaction.editReply({
+            embeds: [{
+              title,
+              description: "Not on the blocked list.",
+              color: 0x08723d,
+              fields: [{ name: "Known accounts on this network/device", value: accountsLine, inline: false }],
+            }],
+          });
+        }
+
+        const matchLines = bans.map((ban) => {
+          const matchType = ipHash && ban.ip_hash === ipHash
+            ? "Exact IP match"
+            : fingerprintHash && ban.fingerprint_hash === fingerprintHash
+              ? "Device fingerprint match"
+              : "Same subnet";
+          const when = ban.created_at ? new Date(ban.created_at).toLocaleString() : "unknown time";
+          return `${matchType} — ${ban.reason || "No reason logged"} (banned ${when})`;
+        }).join("\n");
+
         return interaction.editReply({
           embeds: [{
-            title: `IP check: ${ipInput}`,
+            title,
             description: `**Blocked.**\n${matchLines}`,
             color: 0xd82028,
-            fields: [{ name: "Known accounts on this network", value: accountsLine, inline: false }],
+            fields: [{ name: "Known accounts on this network/device", value: accountsLine, inline: false }],
           }],
         });
       } catch (err) {
-        console.error("[Slash /disallowedips]", err.message);
+        console.error("[Slash /ips]", err.message);
         return interaction.editReply({ embeds: [{ description: `Lookup failed: ${err.message}`, color: 0xff4444 }] });
       }
     }
