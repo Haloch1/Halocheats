@@ -12605,9 +12605,28 @@ app.get("/api/auth/discord/callback", async (req, res) => {
       }
       const reason = reasonParts.join("; ");
       const shortReason = shortReasonParts.join(" + ");
+
+      // Pull in whichever prior-match tiers actually fired so mods can see
+      // exactly which existing account(s) this looks like an alt of, by name.
+      const matchedDiscordIds = [...new Set([
+        ...(mustBlockForFingerprint ? priorLinks.fingerprint : []),
+        ...(mustBlockForIp ? priorLinks.ip : []),
+        ...(mustBlockForSubnet ? priorLinks.subnet : []),
+      ].map((row) => row.discord_id).filter(Boolean))].slice(0, 5);
+      let altOfLine = "";
+      if (matchedDiscordIds.length) {
+        const matchedUsers = await Promise.all(
+          matchedDiscordIds.map((id) => discordBot.users.fetch(id).catch(() => null))
+        );
+        altOfLine = matchedUsers
+          .map((user, i) => user ? `${user.tag} (<@${matchedDiscordIds[i]}>)` : `Unknown user (<@${matchedDiscordIds[i]}>)`)
+          .join("\n");
+      }
+
       await sendSecurityDiscordAlert("Verification blocked by fraud policy", [
         { name: "Discord user", value: `<@${discordUser.id}>`, inline: true },
         { name: "Reason", value: reason, inline: false },
+        ...(altOfLine ? [{ name: "Possible alt of", value: altOfLine, inline: false }] : []),
       ]).catch(() => {});
       await sendVerificationBlockedDm(discordUser.id, shortReason);
       return res.redirect(`/verify/blocked?reason=${encodeURIComponent(shortReason)}`);
