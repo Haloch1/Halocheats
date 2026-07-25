@@ -6140,10 +6140,7 @@ ${rows || '<div class="ct">No messages.</div>'}
             fields: [
               {
                 name: "① How to apply",
-                value:
-                  "Send **2-3 videos you've already made** — doesn't have to be for us, we just need to see you can actually put "
-                  + "together watchable content before we hand over a key. No portfolio, no key. This isn't negotiable, and it's "
-                  + "the fastest way to get denied if you skip it.",
+                value: "Open a ticket and tell us which path you want to take (going live or posting videos). We'll take it from there.",
                 inline: false,
               },
               {
@@ -6180,7 +6177,7 @@ ${rows || '<div class="ct">No messages.</div>'}
               },
               {
                 name: "Ready?",
-                value: "Open a support ticket in <#1528634344174780589> with your 2-3 videos linked and we'll take it from there.",
+                value: "Open a support ticket in <#1528634344174780589> to apply.",
                 inline: false,
               },
             ],
