@@ -12575,9 +12575,27 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     const subnetOnlyMatch = mode === "verify" && !exactFingerprintMatch && !exactIpMatch && priorLinks.subnet.length > 0;
     const asnOnlyMatch = mode === "verify" && !exactFingerprintMatch && !exactIpMatch && !subnetOnlyMatch && priorLinks.asn.length > 0;
 
-    const mustBlockForFingerprint = exactFingerprintMatch && verificationIpReusePolicy === "block";
-    const mustBlockForIp = exactIpMatch && verificationIpReusePolicy === "block";
-    const mustBlockForSubnet = subnetOnlyMatch && verificationSubnetPolicy === "block";
+    /* Sharing a device/IP/subnet with another account isn't itself against
+       the rules - roommates, family, a second legitimate account, etc. An
+       alt match should only actually block verification if the account it
+       matches is currently banned (real ban evasion), not just because a
+       match exists. */
+    async function anyMatchIsBanned(matches) {
+      const ids = [...new Set((matches || []).map((row) => row.discord_id).filter(Boolean))];
+      if (!ids.length) return false;
+      const results = await Promise.all(ids.map((id) => isDiscordGuildBanned(id)));
+      return results.some(Boolean);
+    }
+
+    const [fingerprintMatchBanned, ipMatchBanned, subnetMatchBanned] = await Promise.all([
+      exactFingerprintMatch ? anyMatchIsBanned(priorLinks.fingerprint) : Promise.resolve(false),
+      exactIpMatch ? anyMatchIsBanned(priorLinks.ip) : Promise.resolve(false),
+      subnetOnlyMatch ? anyMatchIsBanned(priorLinks.subnet) : Promise.resolve(false),
+    ]);
+
+    const mustBlockForFingerprint = exactFingerprintMatch && fingerprintMatchBanned && verificationIpReusePolicy === "block";
+    const mustBlockForIp = exactIpMatch && ipMatchBanned && verificationIpReusePolicy === "block";
+    const mustBlockForSubnet = subnetOnlyMatch && subnetMatchBanned && verificationSubnetPolicy === "block";
     const mustBlockForProxy = mode === "verify" && proxyRisk.detected && verificationProxyPolicy === "block";
 
     if (mustBlockForFingerprint || mustBlockForIp || mustBlockForSubnet || mustBlockForProxy) {
