@@ -141,6 +141,105 @@ function escapeHtml(value) {
   });
 }
 
+function starsHtml(count) {
+  const parsed = Number.parseInt(count, 10);
+  const n = Number.isFinite(parsed) ? Math.max(0, Math.min(5, parsed)) : 5;
+  return "&#9733;".repeat(n) + "&#9734;".repeat(5 - n);
+}
+
+function formatReviewDate(value) {
+  if (!value) return "";
+  try {
+    return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(value));
+  } catch {
+    return "";
+  }
+}
+
+let allReviewsPromise = null;
+function loadAllReviews() {
+  if (!allReviewsPromise) {
+    allReviewsPromise = fetch("/api/reviews")
+      .then((res) => res.json())
+      .then((data) => data.reviews || [])
+      .catch(() => []);
+  }
+  return allReviewsPromise;
+}
+
+async function renderProductReviews(product) {
+  const modal = document.querySelector("[data-variant-modal]");
+  const listEl = modal?.querySelector("[data-reviews-list]");
+  const countEl = modal?.querySelector("[data-reviews-count]");
+  const ratingEl = modal?.querySelector("[data-variant-rating]");
+
+  if (!listEl) return;
+
+  listEl.innerHTML = '<div class="member-empty">Loading reviews...</div>';
+  if (ratingEl) ratingEl.hidden = true;
+
+  const all = await loadAllReviews();
+
+  /* Product switched while the fetch was in flight — don't paint stale reviews. */
+  if (activeProduct !== product) return;
+
+  const mine = all.filter((review) => review.product_name === product.name);
+
+  if (!mine.length) {
+    listEl.innerHTML =
+      '<div class="member-empty">No reviews yet for this product. <a href="/reviews/">Leave one</a> after your purchase.</div>';
+    if (countEl) countEl.textContent = "";
+    return;
+  }
+
+  const avg = mine.reduce((sum, review) => sum + (Number(review.rating) || 0), 0) / mine.length;
+
+  if (countEl) {
+    countEl.textContent = `(${mine.length} ${mine.length === 1 ? "review" : "reviews"})`;
+  }
+
+  if (ratingEl) {
+    ratingEl.hidden = false;
+    ratingEl.innerHTML = `${starsHtml(Math.round(avg))} <b>${avg.toFixed(1)}</b>`;
+  }
+
+  const cards = mine
+    .slice(0, 6)
+    .map((review) => {
+      const isDiscord = review.source === "discord";
+      const avatarHtml = review.avatar
+        ? `<img class="review-avatar-img" src="${escapeHtml(review.avatar)}" alt="" />`
+        : `<span class="review-avatar">${escapeHtml((review.username || "?")[0].toUpperCase())}</span>`;
+      const verifiedLabel = isDiscord ? "&#10003; Discord Review" : "&#10003; Verified Purchase";
+
+      return `
+        <div class="review-card">
+          <div class="review-header">
+            <div class="review-user">
+              ${avatarHtml}
+              <div class="review-user-info">
+                <span class="review-username">${escapeHtml(review.username || "Anonymous")}</span>
+                <span class="review-verified">${verifiedLabel}</span>
+              </div>
+            </div>
+            <span class="review-stars">${starsHtml(review.rating)}</span>
+          </div>
+          <p class="review-body">${escapeHtml(review.review_text)}</p>
+          <div class="review-footer">
+            <span class="review-date">${formatReviewDate(review.created_at)}</span>
+          </div>
+        </div>`;
+    })
+    .join("");
+
+  const moreLink =
+    mine.length > 6
+      ? `<a class="variant-reviews-more" href="/reviews/">See all ${mine.length} reviews &rarr;</a>`
+      : "";
+
+  listEl.innerHTML = cards + moreLink;
+}
+
 function groupProducts(products) {
   return products.reduce((groups, product) => {
     const category = product.category || product.game || "Catalog";
@@ -514,6 +613,7 @@ function ensureVariantModal() {
           <span>Verified listing</span>
         </div>
         <h3 id="variant-title" data-variant-title></h3>
+        <div class="variant-rating" data-variant-rating hidden></div>
         <div class="variant-status-row">
           <span class="variant-dot"></span>
           <strong data-variant-status></strong>
@@ -569,6 +669,10 @@ function ensureVariantModal() {
         <section class="variant-requirements-section" id="product-requirements">
           <h4>System Requirements</h4>
           <div class="variant-requirements" data-detail-requirements></div>
+        </section>
+        <section class="variant-reviews-section" id="product-reviews">
+          <h4>Customer Reviews <span class="variant-reviews-count" data-reviews-count></span></h4>
+          <div class="variant-reviews-list" data-reviews-list></div>
         </section>
       </div>
     </section>
@@ -1022,6 +1126,7 @@ function openVariantModal(product, { updateUrl = true } = {}) {
     document.body.classList.add("modal-open");
   }
   selectVariant(activeVariant?.slug);
+  renderProductReviews(product);
 
   if (updateUrl && new URLSearchParams(window.location.search).get("product") !== product.slug) {
     updateProductUrl(product.slug);

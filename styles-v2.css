@@ -2064,6 +2064,25 @@ textarea:focus {
   color: var(--ink-soft);
 }
 
+.variant-rating {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  color: #e49a18;
+  font: 700 0.85rem var(--font-display);
+  letter-spacing: 0.06em;
+}
+
+.variant-rating[hidden] {
+  display: none;
+}
+
+.variant-rating b {
+  color: var(--ink);
+  font-weight: 800;
+}
+
 .variant-status-row {
   display: flex;
   align-items: center;
@@ -2424,6 +2443,53 @@ textarea:focus {
 .variant-requirements > div::before {
   top: 50%;
   transform: translateY(-50%);
+}
+
+.variant-reviews-section h4 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.variant-reviews-count {
+  color: var(--ink-faint);
+  font: 700 0.78rem var(--font-body);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.variant-reviews-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.variant-reviews-list .member-empty {
+  grid-column: 1 / -1;
+}
+
+.variant-reviews-list .review-card {
+  padding: 18px;
+}
+
+.variant-reviews-more {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  color: var(--red-dark);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper-soft);
+  font: 700 0.82rem var(--font-display);
+  text-decoration: none;
+  transition: border-color 180ms ease, background 180ms ease;
+}
+
+.variant-reviews-more:hover {
+  border-color: rgba(216, 32, 40, 0.3);
+  background: var(--red-soft);
 }
 
 /* Dedicated product pages have more room than the quick-view modal. */
@@ -3951,7 +4017,8 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .variant-trust-row span:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
   .variant-feature-grid,
   .variant-info-list,
-  .variant-requirements { grid-template-columns: 1fr; }
+  .variant-requirements,
+  .variant-reviews-list { grid-template-columns: 1fr; }
 
   .auth-card { padding: 20px 16px; }
   .auth-entry-side { padding: 20px; }
