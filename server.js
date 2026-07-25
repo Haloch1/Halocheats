@@ -1566,6 +1566,28 @@ async function banDiscordVerificationAttempt(discordId, reason) {
   }
 }
 
+/* Verification results are private to the member who attempted them, so they
+   go out as a DM rather than a message in the shared #verification channel -
+   nobody else in the server should be able to see who got blocked or why. */
+async function sendVerificationBlockedDm(discordId, message) {
+  if (!discordBot) return;
+  try {
+    const user = await discordBot.users.fetch(discordId);
+    await user.send({
+      embeds: [{
+        title: "Verification not allowed",
+        description: message,
+        color: 0xd82028,
+        footer: { text: "XenCheats | Secure verification" },
+      }],
+    });
+  } catch (error) {
+    // Most common cause: the user has server/DMs closed to non-friends - not
+    // worth alerting on, the account-page banner still covers this case.
+    console.warn(`[Verification security] Could not DM ${discordId}: ${error.message}`);
+  }
+}
+
 function trimField(value, maxLength = 500) {
   return String(value || "")
     .trim()
@@ -12204,7 +12226,8 @@ app.get("/api/auth/discord/callback", async (req, res) => {
        the Discord server. */
     if (await isDiscordGuildBanned(discordUser.id)) {
       console.warn(`[Verification security] Blocked banned Discord user ${discordUser.id}.`);
-      return res.redirect("/account/?discord=blocked");
+      await sendVerificationBlockedDm(discordUser.id, "This Discord account is banned from the server, so verification can't complete. Contact support if you think this is a mistake.");
+      return res.redirect("/verify/closed?discord=blocked");
     }
 
     const verificationIp = getVerificationIp(req);
@@ -12245,7 +12268,8 @@ app.get("/api/auth/discord/callback", async (req, res) => {
         { name: "Discord user", value: `<@${discordUser.id}>`, inline: true },
         { name: "Match", value: "Matched a blocked IP, subnet, or device fingerprint", inline: true },
       ]).catch(() => {});
-      return res.redirect("/account/?discord=blocked");
+      await sendVerificationBlockedDm(discordUser.id, "This device or network is linked to an existing ban, so this account has been banned as well. Contact support if you think this is a mistake.");
+      return res.redirect("/verify/closed?discord=blocked");
     }
 
     /* Alt-detection confidence tiers, strongest first. An exact device
@@ -12276,7 +12300,8 @@ app.get("/api/auth/discord/callback", async (req, res) => {
         { name: "Discord user", value: `<@${discordUser.id}>`, inline: true },
         { name: "Reason", value: reason, inline: false },
       ]).catch(() => {});
-      return res.redirect("/account/?discord=blocked");
+      await sendVerificationBlockedDm(discordUser.id, `Verification wasn't allowed from this network or device (${reason.toLowerCase()}). Contact support if you think this is a mistake.`);
+      return res.redirect("/verify/closed?discord=blocked");
     }
 
     if (mode === "verify" && (
@@ -14111,6 +14136,7 @@ const pageRoutes = new Map([
   ["/status", "status/index.html"],
   ["/stripe-landing", "stripe-landing/index.html"],
   ["/verify", "verify/index.html"],
+  ["/verify/closed", "verify/closed/index.html"],
 ]);
 
 pageRoutes.forEach((relativePath, route) => {
