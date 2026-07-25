@@ -499,15 +499,14 @@ const xAccessSecret = process.env.X_ACCESS_SECRET || "";
 
 /* ── Wholesale cost map (cents) — what we pay the reseller per key ── */
 const WHOLESALE_COSTS = {
-  // R6
-  "crusader-r6-day": 399, "crusader-r6-week": 1599, "crusader-r6-month": 3199,
-  "vega-r6-external-day": 399, "vega-r6-external-three-day": 799, "vega-r6-external-week": 1999, "vega-r6-external-month": 3999,
-  "r6-frost-day": 719, "r6-frost-week": 2239, "r6-frost-month": 3999,
-  "r6-frost-lite-day": 479, "r6-frost-lite-week": 1599, "r6-frost-lite-month": 3199,
-  "r6-ancient-day": 549, "r6-ancient-week": 1499, "r6-ancient-month": 2999, "r6-ancient-lifetime": 30199,
-  "r6-recoil-private-day": 159, "r6-recoil-private-week": 479, "r6-recoil-private-month": 1599, "r6-recoil-private-lifetime": 2399,
-  "invision-chams-day": 239, "invision-chams-week": 1039, "invision-chams-month": 1999,
-  "r6-unlock-all-month": 2399, "r6-unlock-all-lifetime": 5599,
+  // R6S — TODO: these are placeholders (0). Fill in the real per-key cost
+  // you pay the reseller for each of these before relying on margin reports.
+  "r6s-ancient-license": 0,
+  "r6s-crusader-license": 0,
+  "r6s-vega-license": 0,
+  "r6s-chams-license": 0,
+  "r6s-lethal-license": 0,
+  "r6s-no-recoil-license": 0,
   // Fortnite
   "fortnite-full-day": 479, "fortnite-full-week": 1039, "fortnite-full-month": 1999,
   "fortnite-ancient-day": 399, "fortnite-ancient-week": 1999, "fortnite-ancient-month": 3999,
@@ -2515,7 +2514,7 @@ if (isConfiguredValue(discordBotToken)) {
         new SlashCommandBuilder()
           .setName("testorder")
           .setDescription("Test order fulfillment flow without buying (admin only)")
-          .addStringOption(o => o.setName("product").setDescription("Product slug (e.g. crusader-r6)").setRequired(true))
+          .addStringOption(o => o.setName("product").setDescription("Product slug (e.g. r6s-ancient)").setRequired(true))
           .addStringOption(o => o.setName("type").setDescription("Test type: fulfilled or unfulfilled").setRequired(false).addChoices({ name: "Fulfilled (key delivered)", value: "fulfilled" }, { name: "Unfulfilled (no key)", value: "unfulfilled" })),
         new SlashCommandBuilder()
           .setName("customers")

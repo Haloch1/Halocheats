@@ -5,14 +5,8 @@ import rainbowSixCategoryImage from "../assets/r6.webp";
 import fortniteCategoryImage from "../assets/fortnite.webp";
 import rustCategoryImage from "../assets/rust.webp";
 import spooferCategoryImage from "../assets/spoofer.webp";
-// R6 product images
-import productCrusaderImage from "../assets/product-crusader-r6.webp";
-import productVegaImage from "../assets/product-vega-r6-external.webp";
-import productFrostImage from "../assets/product-r6-frost.webp";
-import productRecoilImage from "../assets/product-r6-recoil-private.webp";
-import productInvisionImage from "../assets/product-invision-chams.webp";
-import productFrostLiteImage from "../assets/product-r6-frost-lite.webp";
-import productUnlockAllImage from "../assets/product-r6-unlock-all.webp";
+// R6S products intentionally have no per-product artwork; they fall back to
+// the Rainbow Six category image below.
 // Fortnite product images
 import productFortniteFullImage from "../assets/product-fortnite-full.webp";
 import productDisconnectFortniteImage from "../assets/product-disconnect-fortnite-external.webp";
@@ -80,14 +74,7 @@ const excludedCatalogTerms = [];
    promos are enabled; individual codes are validated via POST /api/promo/validate. */
 let promoEnabled = false;
 const productArtwork = {
-  // R6
-  "crusader-r6": productCrusaderImage,
-  "vega-r6-external": productVegaImage,
-  "r6-frost": productFrostImage,
-  "r6-recoil-private": productRecoilImage,
-  "invision-chams": productInvisionImage,
-  "r6-frost-lite": productFrostLiteImage,
-  "r6-unlock-all": productUnlockAllImage,
+  // R6S products intentionally omitted — they fall back to the category image.
   // Fortnite
   "fortnite-full": productFortniteFullImage,
   "disconnect-fortnite-external": productDisconnectFortniteImage,
