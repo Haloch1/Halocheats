@@ -1,4 +1,5 @@
 import { getCurrentSession } from "./supabase-client.js";
+import noxLogoImage from "../assets/nox-logo.png";
 
 const BRAND_NAME = "XenCheats";
 
@@ -591,7 +592,7 @@ function initSharedFooter() {
     inner.innerHTML = `
       <div class="footer-about">
         <div class="footer-brand">
-          <img src="/assets/nox-logo.png" alt="XenCheats logo" />
+          <img src="${noxLogoImage}" alt="XenCheats logo" />
           <strong>XenCheats</strong>
         </div>
         <p>Premium game enhancements with <strong>instant delivery</strong>, protected access, and support that responds.</p>
@@ -607,7 +608,7 @@ function initSharedFooter() {
   // Keep the logo and brand together even on pages with a hand-written footer.
   const footerBrand = inner.querySelector(".footer-brand");
   if (footerBrand && !footerBrand.querySelector("img")) {
-    footerBrand.insertAdjacentHTML("afterbegin", '<img src="/assets/nox-logo.png" alt="XenCheats logo" />');
+    footerBrand.insertAdjacentHTML("afterbegin", `<img src="${noxLogoImage}" alt="XenCheats logo" />`);
   }
 
   inner.querySelectorAll("[data-year]").forEach((year) => {
@@ -956,8 +957,8 @@ function initWallet() {
         .map((it, i) => `
           <div class="cart-item">
             <div class="cart-item-media">
-              <img class="cart-item-media-blur" src="${haloEscape(it.imageSrc || "/assets/nox-logo.png")}" alt="" aria-hidden="true" />
-              <img src="${haloEscape(it.imageSrc || "/assets/nox-logo.png")}" alt="${haloEscape(it.productName)}" />
+              <img class="cart-item-media-blur" src="${haloEscape(it.imageSrc || noxLogoImage)}" alt="" aria-hidden="true" />
+              <img src="${haloEscape(it.imageSrc || noxLogoImage)}" alt="${haloEscape(it.productName)}" />
             </div>
             <div class="cart-item-info">
               <strong>${haloEscape(it.productName)}</strong>
