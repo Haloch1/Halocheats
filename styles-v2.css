@@ -3773,7 +3773,13 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
 
   .docs-content { padding: 25px 18px; }
   .cart-panel { padding: 17px; }
-  .social-proof { left: 10px; bottom: 10px; width: min(260px, calc(100% - 90px)); }
+
+  /* Hidden on mobile: too little screen room next to the chat bubble, and
+     it read as clutter on small viewports. */
+  .social-proof,
+  .social-proof-toast {
+    display: none !important;
+  }
 }
 
 @media (hover: none), (pointer: coarse) {
