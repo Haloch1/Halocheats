@@ -122,6 +122,14 @@ const verificationProxyPolicy = ["allow", "review", "block"].includes(process.en
   : "review";
 const verificationRequireSecurityTables = process.env.DISCORD_VERIFICATION_REQUIRE_SECURITY_TABLES === "true";
 const ipQualityScoreApiKey = process.env.IPQUALITYSCORE_API_KEY || "";
+/* Subnet-level alt detection: same ISP block (different dynamic IP) is a weaker
+   signal than an exact IP match, so it gets its own policy. */
+const verificationSubnetPolicy = ["allow", "review", "block"].includes(process.env.DISCORD_VERIFICATION_SUBNET_POLICY)
+  ? process.env.DISCORD_VERIFICATION_SUBNET_POLICY
+  : "review";
+const verificationFraudScoreThreshold = Number.isFinite(Number(process.env.DISCORD_VERIFICATION_FRAUD_SCORE_THRESHOLD))
+  ? Number(process.env.DISCORD_VERIFICATION_FRAUD_SCORE_THRESHOLD)
+  : 85;
 const discordMemberCategoryIds = (
   process.env.DISCORD_MEMBER_CATEGORY_IDS
   || "1528634343910674503,1528634343910674508,1528634343910674510,1528634344174780588,1528634344174780591"
@@ -1260,6 +1268,32 @@ function hashVerificationIp(ip) {
   return crypto.createHmac("sha256", verificationIpHashSecret).update(ip).digest("hex");
 }
 
+/* Same-network alt detection without storing the raw IP: hash the /24 (IPv4) or
+   /48 (IPv6) network prefix separately from the exact IP. Two different but
+   nearby dynamic IPs from the same ISP block will match on this even when the
+   exact IP hash doesn't, which catches "same house, different IP" alt attempts
+   that a plain IP-reuse check misses. */
+function getVerificationSubnet(ip) {
+  if (!ip) return "";
+  if (ip.includes(".")) {
+    const octets = ip.split(".");
+    if (octets.length !== 4) return "";
+    return `v4:${octets[0]}.${octets[1]}.${octets[2]}.0/24`;
+  }
+  if (ip.includes(":")) {
+    const groups = ip.split(":").filter((g, i, arr) => !(g === "" && arr.length > 8));
+    if (groups.length < 3) return "";
+    return `v6:${groups.slice(0, 3).join(":")}::/48`;
+  }
+  return "";
+}
+
+function hashVerificationSubnet(ip) {
+  const subnet = getVerificationSubnet(ip);
+  if (!verificationIpHashSecret || !subnet) return "";
+  return crypto.createHmac("sha256", verificationIpHashSecret).update(subnet).digest("hex");
+}
+
 function isPrivateVerificationIp(ip) {
   return ip === "127.0.0.1" || ip === "::1" || ip.startsWith("10.") || ip.startsWith("192.168.")
     || /^172\.(1[6-9]|2\d|3[01])\./.test(ip) || ip.startsWith("fc") || ip.startsWith("fd");
@@ -1277,42 +1311,89 @@ async function queryVerificationTable(operation, fallback) {
   }
 }
 
-async function checkVerificationIpBan(ipHash) {
-  if (!ipHash || !supabaseAdmin) return false;
+async function checkVerificationIpBan(ipHash, subnetHash) {
+  if ((!ipHash && !subnetHash) || !supabaseAdmin) return false;
   const { data, error } = await queryVerificationTable(
     () => supabaseAdmin
       .from("discord_verification_ip_bans")
       .select("expires_at")
-      .eq("ip_hash", ipHash)
-      .limit(5),
+      .or([ipHash && `ip_hash.eq.${ipHash}`, subnetHash && `subnet_hash.eq.${subnetHash}`].filter(Boolean).join(","))
+      .limit(10),
     { data: [], error: null },
   );
   if (error) throw error;
   return (data || []).some((entry) => !entry.expires_at || new Date(entry.expires_at).getTime() > Date.now());
 }
 
-async function findPriorVerificationIps(ipHash, discordId) {
-  if (!ipHash || !supabaseAdmin) return [];
-  const { data, error } = await queryVerificationTable(
-    () => supabaseAdmin
-      .from("discord_verification_ips")
-      .select("discord_id")
-      .eq("ip_hash", ipHash)
-      .neq("discord_id", discordId)
-      .limit(5),
-    { data: [], error: null },
-  );
-  if (error) throw error;
-  return data || [];
+/* Alt-account correlation with confidence tiers:
+   - "ip": exact IP hash match — same device/network, very high confidence.
+   - "subnet": same /24 (or /48 for IPv6) network but a different exact IP —
+     typical of a home ISP handing out a new dynamic address. Medium confidence.
+   - "asn": same ISP/network operator (ASN) but a different subnet entirely —
+     weak on its own (huge ISPs share one ASN across a whole region), only
+     useful as a secondary signal alongside other risk flags. */
+async function findPriorVerificationIps(ipHash, subnetHash, asn, discordId) {
+  if (!supabaseAdmin) return { ip: [], subnet: [], asn: [] };
+
+  const [ipMatches, subnetMatches, asnMatches] = await Promise.all([
+    ipHash
+      ? queryVerificationTable(
+          () => supabaseAdmin
+            .from("discord_verification_ips")
+            .select("discord_id")
+            .eq("ip_hash", ipHash)
+            .neq("discord_id", discordId)
+            .limit(5),
+          { data: [], error: null },
+        )
+      : Promise.resolve({ data: [], error: null }),
+    subnetHash
+      ? queryVerificationTable(
+          () => supabaseAdmin
+            .from("discord_verification_ips")
+            .select("discord_id")
+            .eq("subnet_hash", subnetHash)
+            .neq("discord_id", discordId)
+            .limit(5),
+          { data: [], error: null },
+        )
+      : Promise.resolve({ data: [], error: null }),
+    asn
+      ? queryVerificationTable(
+          () => supabaseAdmin
+            .from("discord_verification_ips")
+            .select("discord_id")
+            .eq("asn", asn)
+            .neq("discord_id", discordId)
+            .limit(5),
+          { data: [], error: null },
+        )
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (ipMatches.error) throw ipMatches.error;
+  if (subnetMatches.error) throw subnetMatches.error;
+  if (asnMatches.error) throw asnMatches.error;
+
+  return {
+    ip: ipMatches.data || [],
+    subnet: subnetMatches.data || [],
+    asn: asnMatches.data || [],
+  };
 }
 
-async function recordVerificationIp({ ipHash, discordId, userId, proxyDetected }) {
+async function recordVerificationIp({ ipHash, subnetHash, asn, isp, connectionType, fraudScore, discordId, userId, proxyDetected }) {
   if (!ipHash || !supabaseAdmin) return;
   const { error } = await queryVerificationTable(
     () => supabaseAdmin
       .from("discord_verification_ips")
       .upsert({
         ip_hash: ipHash,
+        subnet_hash: subnetHash || null,
+        asn: Number.isFinite(asn) ? asn : null,
+        isp: isp ? String(isp).slice(0, 200) : null,
+        connection_type: connectionType ? String(connectionType).slice(0, 60) : null,
+        fraud_score: Number.isFinite(fraudScore) ? fraudScore : null,
         discord_id: discordId,
         user_id: userId || null,
         proxy_detected: Boolean(proxyDetected),
@@ -1328,7 +1409,7 @@ async function blockKnownVerificationIps(discordId, reason, createdBy) {
   const { data, error } = await queryVerificationTable(
     () => supabaseAdmin
       .from("discord_verification_ips")
-      .select("ip_hash")
+      .select("ip_hash, subnet_hash")
       .eq("discord_id", discordId)
       .limit(20),
     { data: [], error: null },
@@ -1336,25 +1417,46 @@ async function blockKnownVerificationIps(discordId, reason, createdBy) {
   if (error) throw error;
 
   const hashes = [...new Set((data || []).map((entry) => entry.ip_hash).filter(Boolean))];
+  const subnetHashes = [...new Set((data || []).map((entry) => entry.subnet_hash).filter(Boolean))];
   if (!hashes.length) return 0;
+
+  const trimmedReason = String(reason || "Discord ban").slice(0, 500);
+  const trimmedCreatedBy = String(createdBy || "Discord moderation").slice(0, 120);
 
   const { error: banError } = await queryVerificationTable(
     () => supabaseAdmin
       .from("discord_verification_ip_bans")
       .upsert(hashes.map((ipHash) => ({
         ip_hash: ipHash,
-        reason: String(reason || "Discord ban").slice(0, 500),
-        created_by: String(createdBy || "Discord moderation").slice(0, 120),
+        reason: trimmedReason,
+        created_by: trimmedCreatedBy,
       })), { onConflict: "ip_hash" }),
     { error: null },
   );
   if (banError) throw banError;
+
+  /* Also block the known subnets so switching to a nearby dynamic IP on the
+     same network doesn't immediately bypass the ban. This only blocks a /24
+     or /48 range, not the whole ISP, so collateral impact stays contained. */
+  if (subnetHashes.length) {
+    await queryVerificationTable(
+      () => supabaseAdmin
+        .from("discord_verification_ip_bans")
+        .upsert(subnetHashes.map((subnetHash) => ({
+          subnet_hash: subnetHash,
+          reason: trimmedReason,
+          created_by: trimmedCreatedBy,
+        })), { onConflict: "subnet_hash" }),
+      { error: null },
+    ).catch(() => {});
+  }
+
   return hashes.length;
 }
 
 async function checkVerificationProxy(ip) {
   if (!ipQualityScoreApiKey || !ip || isPrivateVerificationIp(ip)) {
-    return { checked: false, detected: false };
+    return { checked: false, detected: false, reasons: [] };
   }
 
   try {
@@ -1364,14 +1466,31 @@ async function checkVerificationProxy(ip) {
     const response = await fetch(endpoint, { signal: AbortSignal.timeout(3500) });
     if (!response.ok) throw new Error(`IP reputation request returned ${response.status}`);
     const result = await response.json();
+
+    const fraudScore = Number(result.fraud_score) || 0;
+    const connectionType = String(result.connection_type || "");
+    const isHostingOrDatacenter = connectionType === "Data Center" || Boolean(result.hosting);
+    const reasons = [];
+    if (result.active_vpn || result.vpn) reasons.push("VPN");
+    if (result.active_tor || result.tor) reasons.push("Tor");
+    if (result.proxy) reasons.push("Proxy");
+    if (isHostingOrDatacenter) reasons.push("Hosting/Datacenter IP");
+    if (result.recent_abuse) reasons.push("Recent abuse reports");
+    if (result.bot_status) reasons.push("Bot activity");
+    if (fraudScore >= verificationFraudScoreThreshold) reasons.push(`High fraud score (${fraudScore})`);
+
     return {
       checked: true,
-      detected: Boolean(result.proxy || result.vpn || result.tor),
-      fraudScore: Number(result.fraud_score) || 0,
+      detected: reasons.length > 0,
+      reasons,
+      fraudScore,
+      asn: Number.isFinite(Number(result.ASN)) ? Number(result.ASN) : null,
+      isp: result.ISP || result.organization || "",
+      connectionType,
     };
   } catch (error) {
     console.error(`[Verification security] VPN/proxy lookup failed: ${error.message}`);
-    return { checked: false, detected: false };
+    return { checked: false, detected: false, reasons: [] };
   }
 }
 
@@ -12029,37 +12148,66 @@ app.get("/api/auth/discord/callback", async (req, res) => {
 
     const verificationIp = getVerificationIp(req);
     const verificationIpHash = hashVerificationIp(verificationIp);
-    const [ipIsBanned, priorIpLinks, proxyRisk] = await Promise.all([
-      checkVerificationIpBan(verificationIpHash),
-      mode === "verify" ? findPriorVerificationIps(verificationIpHash, discordUser.id) : Promise.resolve([]),
-      mode === "verify" ? checkVerificationProxy(verificationIp) : Promise.resolve({ checked: false, detected: false }),
+    const verificationSubnetHash = hashVerificationSubnet(verificationIp);
+    const [ipIsBanned, proxyRisk] = await Promise.all([
+      checkVerificationIpBan(verificationIpHash, verificationSubnetHash),
+      mode === "verify" ? checkVerificationProxy(verificationIp) : Promise.resolve({ checked: false, detected: false, reasons: [] }),
     ]);
+    const priorLinks = mode === "verify"
+      ? await findPriorVerificationIps(verificationIpHash, verificationSubnetHash, proxyRisk.asn, discordUser.id)
+      : { ip: [], subnet: [], asn: [] };
 
     if (ipIsBanned) {
       await banDiscordVerificationAttempt(discordUser.id, "banned network");
       await sendSecurityDiscordAlert("Verification blocked: banned network", [
         { name: "Discord user", value: `<@${discordUser.id}>`, inline: true },
-        { name: "IP association", value: "Matched a blocked network", inline: true },
+        { name: "IP association", value: "Matched a blocked IP or subnet", inline: true },
       ]).catch(() => {});
       return res.redirect("/account/?discord=blocked");
     }
 
-    const sharedIpDetected = mode === "verify" && priorIpLinks.length > 0;
-    const mustBlockForSharedIp = sharedIpDetected && verificationIpReusePolicy === "block";
+    /* Alt-detection confidence tiers, strongest first. Exact IP reuse uses the
+       existing reuse policy; a subnet-only match (same ISP block, different
+       dynamic IP) uses its own, separately configurable policy since it's a
+       weaker signal on its own. ASN-only matches are informational — logged
+       in the alert but never block by themselves. */
+    const exactIpMatch = mode === "verify" && priorLinks.ip.length > 0;
+    const subnetOnlyMatch = mode === "verify" && !exactIpMatch && priorLinks.subnet.length > 0;
+    const asnOnlyMatch = mode === "verify" && !exactIpMatch && !subnetOnlyMatch && priorLinks.asn.length > 0;
+
+    const mustBlockForIp = exactIpMatch && verificationIpReusePolicy === "block";
+    const mustBlockForSubnet = subnetOnlyMatch && verificationSubnetPolicy === "block";
     const mustBlockForProxy = mode === "verify" && proxyRisk.detected && verificationProxyPolicy === "block";
-    if (mustBlockForSharedIp || mustBlockForProxy) {
+
+    if (mustBlockForIp || mustBlockForSubnet || mustBlockForProxy) {
+      const reason = mustBlockForProxy
+        ? `VPN/proxy risk detected (${proxyRisk.reasons.join(", ") || "flagged"})`
+        : mustBlockForIp
+          ? "Network already verified another Discord account (exact IP match)"
+          : "Same network block already verified another Discord account (subnet match)";
       await sendSecurityDiscordAlert("Verification blocked by fraud policy", [
         { name: "Discord user", value: `<@${discordUser.id}>`, inline: true },
-        { name: "Reason", value: mustBlockForProxy ? "VPN/proxy detected" : "Network already verified another Discord account", inline: true },
+        { name: "Reason", value: reason, inline: false },
       ]).catch(() => {});
       return res.redirect("/account/?discord=blocked");
     }
 
-    if (mode === "verify" && ((sharedIpDetected && verificationIpReusePolicy === "review")
-      || (proxyRisk.detected && verificationProxyPolicy === "review"))) {
+    if (mode === "verify" && (
+      (exactIpMatch && verificationIpReusePolicy === "review")
+      || (subnetOnlyMatch && verificationSubnetPolicy === "review")
+      || (asnOnlyMatch)
+      || (proxyRisk.detected && verificationProxyPolicy === "review")
+    )) {
+      const signals = [
+        exactIpMatch && "exact IP reused from another account",
+        subnetOnlyMatch && "same network block as another account",
+        asnOnlyMatch && "same ISP/ASN as another account",
+        proxyRisk.detected && `VPN/proxy risk (${proxyRisk.reasons.join(", ") || "flagged"})`,
+      ].filter(Boolean).join("; ");
       await sendSecurityDiscordAlert("Verification needs review", [
         { name: "Discord user", value: `<@${discordUser.id}>`, inline: true },
-        { name: "Signals", value: [sharedIpDetected && "previous verified network", proxyRisk.detected && "VPN/proxy"].filter(Boolean).join(", "), inline: true },
+        { name: "Signals", value: signals || "Low-confidence match", inline: false },
+        ...(proxyRisk.checked ? [{ name: "Network", value: [proxyRisk.isp, proxyRisk.connectionType, `fraud score ${proxyRisk.fraudScore}`].filter(Boolean).join(" · "), inline: false }] : []),
       ]).catch(() => {});
     }
 
@@ -12162,6 +12310,11 @@ app.get("/api/auth/discord/callback", async (req, res) => {
 
     await recordVerificationIp({
       ipHash: verificationIpHash,
+      subnetHash: verificationSubnetHash,
+      asn: proxyRisk.asn,
+      isp: proxyRisk.isp,
+      connectionType: proxyRisk.connectionType,
+      fraudScore: proxyRisk.fraudScore,
       discordId: discordUser.id,
       userId: linkedUserId,
       proxyDetected: proxyRisk.detected,
