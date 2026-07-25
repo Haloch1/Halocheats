@@ -522,28 +522,28 @@ const WHOLESALE_COSTS = {
   "r6s-chams-license": 0,
   "r6s-lethal-license": 0,
   "r6s-no-recoil-license": 0,
-  // Fortnite — TODO: placeholders (0) until real reseller cost is provided
-  "fortnite-dullwave-day": 0, "fortnite-dullwave-three-day": 0, "fortnite-dullwave-week": 0, "fortnite-dullwave-month": 0,
+  // Fortnite — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  "fortnite-dullwave-day": 326, "fortnite-dullwave-three-day": 651, "fortnite-dullwave-week": 1295, "fortnite-dullwave-month": 2503,
   "fortnite-ancient-day": 399, "fortnite-ancient-week": 1999, "fortnite-ancient-month": 3999,
-  "fortnite-arcane-day": 0, "fortnite-arcane-week": 0, "fortnite-arcane-month": 0,
-  // Rust — TODO: placeholders (0) until real reseller cost is provided
-  "rust-dullwave-day": 0, "rust-dullwave-week": 0, "rust-dullwave-month": 0,
-  "rust-mason-lite-day": 0, "rust-mason-lite-week": 0, "rust-mason-lite-month": 0,
-  "rust-mason-full-day": 0, "rust-mason-full-week": 0, "rust-mason-full-month": 0,
-  "rust-mrpro-day": 0, "rust-mrpro-week": 0, "rust-mrpro-month": 0,
-  // Apex Legends — TODO: placeholders (0) until real reseller cost is provided
-  "apex-mason-day": 0, "apex-mason-week": 0, "apex-mason-month": 0,
-  "apex-ancient-day": 0, "apex-ancient-week": 0, "apex-ancient-month": 0,
-  "apex-dullwave-day": 0, "apex-dullwave-week": 0, "apex-dullwave-month": 0,
-  "apex-arcane-day": 0, "apex-arcane-week": 0, "apex-arcane-month": 0,
-  // Spoofer — TODO: placeholders (0) until real reseller cost is provided
-  "spoofer-lunar-day": 0, "spoofer-lunar-week": 0, "spoofer-lunar-month": 0,
-  "spoofer-shadow-day": 0, "spoofer-shadow-week": 0, "spoofer-shadow-month": 0,
-  "eac-be-spoofer-day": 0, "eac-be-spoofer-week": 0, "eac-be-spoofer-month": 0,
-  // Accounts — TODO: placeholders (0) until real reseller cost is provided
-  "r6s-nfa-account-level-50-99": 0, "r6s-nfa-account-level-100-plus": 0,
-  "r6s-nfa-account-previous-platinum": 0, "r6s-nfa-account-black-ices-20": 0,
-  "r6s-nfa-account-previous-emerald": 0,
+  "fortnite-arcane-day": 490, "fortnite-arcane-week": 2450, "fortnite-arcane-month": 4200,
+  // Rust — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  "rust-dullwave-day": 511, "rust-dullwave-week": 2317, "rust-dullwave-month": 3248,
+  "rust-mason-lite-day": 189, "rust-mason-lite-week": 777, "rust-mason-lite-month": 1460,
+  "rust-mason-full-day": 389, "rust-mason-full-week": 1558, "rust-mason-full-month": 3500,
+  "rust-mrpro-day": 448, "rust-mrpro-week": 2254, "rust-mrpro-month": 4508,
+  // Apex Legends — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  "apex-mason-day": 280, "apex-mason-week": 1750, "apex-mason-month": 2296,
+  "apex-ancient-day": 210, "apex-ancient-week": 1050, "apex-ancient-month": 2100,
+  "apex-dullwave-day": 273, "apex-dullwave-week": 1110, "apex-dullwave-month": 2100,
+  "apex-arcane-day": 350, "apex-arcane-week": 1400, "apex-arcane-month": 2800,
+  // Spoofer — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  "spoofer-lunar-day": 350, "spoofer-lunar-week": 1050, "spoofer-lunar-month": 2100,
+  "spoofer-shadow-day": 112, "spoofer-shadow-week": 518, "spoofer-shadow-month": 952,
+  "eac-be-spoofer-day": 279, "eac-be-spoofer-week": 699, "eac-be-spoofer-month": 1399,
+  // Accounts — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  "r6s-nfa-account-level-50-99": 280, "r6s-nfa-account-level-100-plus": 350,
+  "r6s-nfa-account-previous-platinum": 420, "r6s-nfa-account-black-ices-20": 525,
+  "r6s-nfa-account-previous-emerald": 595,
   // Legacy (removed products — kept for historical profit calc on past orders)
   "exodus-r6-three-day": 479,
   "xim-spoofer-day": 399, "xim-spoofer-three-day": 650, "xim-spoofer-week": 1376, "xim-spoofer-month": 2826, "xim-spoofer-lifetime": 9170,
