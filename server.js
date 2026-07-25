@@ -11860,7 +11860,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
       || !expectedState
       || !stateRecord
       || !timingSafeCompare(stateRecord.state, expectedState)) {
-      return res.redirect("/account/?discord=error");
+      return res.redirect("/account/?discord=session_expired");
     }
     const userId = stateRecord.userId || "";
     const mode = stateRecord.mode || "signin";
@@ -11882,8 +11882,9 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     });
 
     if (!tokenRes.ok) {
-      console.error("[Discord OAuth] Token exchange failed:", await tokenRes.text());
-      return res.redirect("/account/?discord=error");
+      const oauthError = await tokenRes.text();
+      console.error("[Discord OAuth] Token exchange failed:", oauthError);
+      return res.redirect("/account/?discord=oauth_configuration");
     }
 
     const tokenData = await tokenRes.json();
@@ -12119,7 +12120,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     return res.redirect("/account/?discord=linked");
   } catch (err) {
     console.error("[Discord OAuth] Callback error:", err.message);
-    return res.redirect("/account/?discord=error");
+    return res.redirect("/account/?discord=callback_error");
   }
 });
 

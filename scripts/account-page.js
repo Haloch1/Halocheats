@@ -130,14 +130,21 @@ async function fetchAccountRole(session) {
 }
 
 function showStatusMessage(message, tone = "info") {
-  [statusBox, cardStatusBox].forEach((target) => {
-    if (!target) {
-      return;
-    }
+  // The guest card already contains its own message location. Showing the
+  // same OAuth result above and inside the card creates two error banners on
+  // phones and pushes the form below the fold.
+  const target = guestView && !guestView.hidden
+    ? (cardStatusBox || statusBox)
+    : (statusBox || cardStatusBox);
 
+  [statusBox, cardStatusBox].forEach((box) => {
+    if (box && box !== target) box.hidden = true;
+  });
+
+  if (target) {
     target.hidden = false;
     renderMessage(target, message, tone);
-  });
+  }
 
   if (window.matchMedia("(max-width: 760px)").matches) {
     cardStatusBox?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -843,8 +850,16 @@ if (discordResult === "linked" || discordResult === "verified") {
   setTimeout(() => showStatusMessage(msg, "success"), 300);
   window.history.replaceState({}, "", window.location.pathname);
 }
-if (discordResult === "error") {
+if (discordResult === "error" || discordResult === "callback_error") {
   setTimeout(() => showStatusMessage("Failed to link Discord. Please try again.", "error"), 300);
+  window.history.replaceState({}, "", window.location.pathname);
+}
+if (discordResult === "session_expired") {
+  setTimeout(() => showStatusMessage("Discord sign-in expired before it finished. Please try again.", "error"), 300);
+  window.history.replaceState({}, "", window.location.pathname);
+}
+if (discordResult === "oauth_configuration") {
+  setTimeout(() => showStatusMessage("Discord linking is temporarily unavailable. Please contact support.", "error"), 300);
   window.history.replaceState({}, "", window.location.pathname);
 }
 if (discordResult === "email_required") {

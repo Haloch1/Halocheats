@@ -4076,6 +4076,18 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
 .ai-widget-form button:disabled { opacity: 0.5; cursor: default; }
 
 @media (max-width: 480px) {
-  .ai-widget { right: 14px; bottom: 14px; }
-  .ai-widget-panel { width: calc(100vw - 28px); height: min(72vh, 620px); bottom: 70px; }
+  .ai-widget { right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); }
+  .ai-widget-panel {
+    width: min(340px, calc(100vw - 24px));
+    height: min(54svh, 500px);
+    max-height: calc(100dvh - 310px);
+    bottom: 62px;
+    border-radius: 18px;
+  }
+  .ai-widget-head { padding: 12px 14px; }
+  .ai-widget-body { min-height: 0; }
+  .ai-widget-messages { gap: 8px; padding: 12px; }
+  .ai-widget-form { gap: 7px; padding: 9px; }
+  .ai-widget-form textarea { max-height: 64px; padding: 9px 10px; font-size: 0.84rem; }
+  .ai-widget-form button { width: 36px; height: 36px; }
 }
