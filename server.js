@@ -1382,8 +1382,20 @@ async function findPriorVerificationIps(ipHash, subnetHash, asn, discordId) {
   };
 }
 
+/* Discord IDs listed here (comma-separated in Render) are skipped entirely by
+   IP logging — useful for testing fraud signals (e.g. VPN detection) without
+   polluting your own account's real network history or triggering alt-match
+   false positives against yourself. Never hardcode IDs here directly. */
+const verificationIpLogExcludeIds = new Set(
+  String(process.env.DISCORD_VERIFICATION_IP_LOG_EXCLUDE_IDS || "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean),
+);
+
 async function recordVerificationIp({ ipHash, subnetHash, asn, isp, connectionType, fraudScore, discordId, userId, proxyDetected }) {
   if (!ipHash || !supabaseAdmin) return;
+  if (verificationIpLogExcludeIds.has(String(discordId))) return;
   const { error } = await queryVerificationTable(
     () => supabaseAdmin
       .from("discord_verification_ips")
