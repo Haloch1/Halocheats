@@ -12499,6 +12499,28 @@ app.get("/api/auth/discord/callback", async (req, res) => {
       ? await findPriorVerificationIps(verificationIpHash, verificationSubnetHash, proxyRisk.asn, deviceFingerprint, discordUser.id)
       : { ip: [], subnet: [], asn: [], fingerprint: [] };
 
+    /* Log every attempt here, before any block check returns early - otherwise
+       a blocked attempt never leaves a row, and /ips can't look up a user who
+       was blocked before ever completing verification. The successful-path
+       call further down re-upserts the same row (same discord_id+ip_hash key)
+       once the real linked account ID is known. */
+    try {
+      await recordVerificationIp({
+        ipHash: verificationIpHash,
+        subnetHash: verificationSubnetHash,
+        asn: proxyRisk.asn,
+        isp: proxyRisk.isp,
+        connectionType: proxyRisk.connectionType,
+        fraudScore: proxyRisk.fraudScore,
+        fingerprintHash: deviceFingerprint,
+        discordId: discordUser.id,
+        userId: userId || null,
+        proxyDetected: proxyRisk.detected,
+      });
+    } catch (logError) {
+      console.error("[Verification security] Could not log attempt:", logError.message);
+    }
+
     if (ipIsBanned) {
       // Ban is keyed by IP, subnet, OR device fingerprint - any one of these
       // matching a network/device tied to an existing ban is enough, since
