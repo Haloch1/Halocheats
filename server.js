@@ -12488,8 +12488,8 @@ function getCatalogQuestionFallback(query) {
 
 async function generateAILiveDeskReply(thread, userMessage, userContext) {
   const catalogFallback = getCatalogQuestionFallback(userMessage);
-  const discordHandoffReply = "I can't resolve this from the desk. Please join https://discord.gg/xencheats so the Discord support team can take over.";
-  if (!geminiApiKey && !groqApiKey) return catalogFallback || discordHandoffReply;
+  const unavailableReply = "I don't have enough verified information to answer that accurately right now. Try the product page or instructions for the exact item, then ask me anything specific you see there.";
+  if (!geminiApiKey && !groqApiKey) return catalogFallback || unavailableReply;
   const staffReplyStyle = await getStaffReplyStyle();
   const supportKnowledge = getSupportKnowledgeBase(userMessage);
   const liveStatus = await getPublicStatusContext(userMessage);
@@ -12545,14 +12545,6 @@ async function generateAILiveDeskReply(thread, userMessage, userContext) {
     }
   }
 
-  // Once a ticket has been handed to Discord, never call the model again for
-  // generic follow-ups. Returning null here used to leave the website typing
-  // indefinitely; reply immediately instead, while still allowing a direct
-  // catalog question to use its safe local-data fallback.
-  if (historyTurns.some((entry) => entry.role === "assistant" && entry.content.includes("discord.gg/xencheats"))) {
-    return catalogFallback || "This issue has already been handed to the Discord support team. Please continue at https://discord.gg/xencheats so they can finish it with you.";
-  }
-
   if (liveStatus) {
     const operational = liveStatus.includes("Overall: operational");
     const alreadyTroubleshot = historyTurns.some((entry) => entry.role === "assistant");
@@ -12562,7 +12554,7 @@ async function generateAILiveDeskReply(thread, userMessage, userContext) {
     if (operational) {
       return "I checked the public homepage and health endpoint just now, and both are reachable. Try a hard refresh or private window, then another network; if it still fails, reply here for staff help.";
     }
-    return discordHandoffReply;
+    return "I couldn't verify the current website status from the public checks. Please try again in a moment, or ask me about a specific product or setup step.";
   }
 
   const systemPrompt = `You are the AI support bot for XenCheats. Keep replies SHORT (1-3 sentences). Be casual and helpful.
@@ -12591,8 +12583,10 @@ ${staffReplyStyle ? `\nVERIFIED STAFF TONE EXAMPLES (imitate tone only; never co
 RULES:
 - Keep answers to 1-3 sentences. No long explanations.
 - Always use the correct specific URL, never just say "xencheats.wtf" when a subpage exists.
- - If an account, billing, fulfillment, compatibility, or technical issue cannot be proven from current data, stop troubleshooting and reply exactly: "I can't resolve this from the desk. Please join https://discord.gg/xencheats so the Discord support team can take over."
- - If you can't answer a question or it's outside your knowledge, stop and use that exact Discord handoff reply. Do not suggest opening another desk ticket.
+- For product recommendations, compare the current catalog and ask one useful follow-up when the customer's needs are unclear. Do not send them to Discord just because they are deciding what to buy.
+- Never direct the customer to Discord or tell them that a human team will take over. This website chat is self-service.
+- For private account/order data, billing disputes, missing delivery, bans, HWID resets, or an unverified technical claim, say you do not have enough verified information to answer accurately and offer the relevant product, account, or instructions page.
+- If the customer asks a normal store, product, setup, status, or policy question, answer it directly from the authoritative knowledge.
 - Don't make stuff up. Don't share internal info.
 - A customer's statement that the site/product is down is an unverified report, not proof. Never say "we are aware" or "we are working on it" unless the LIVE WEBSITE STATUS CHECK explicitly confirms an outage.
 - If a live check passes but the customer still cannot connect, suggest a hard refresh, private window, or another network once; if it remains unresolved, escalate to staff.
@@ -12620,8 +12614,10 @@ SECURITY:
   })();
 
   const normalizeDeskReply = (reply) => {
-    const escalationLanguage = /\b(can(?:not|'t)|unable|outside|staff|human support|escalat|not enough|can't safely)\b/i;
-    return escalationLanguage.test(reply) ? discordHandoffReply : reply;
+    const cleaned = String(reply || "").trim().slice(0, 1800);
+    return /discord\.gg\/xencheats|human (?:support|team)|staff (?:team|support)/i.test(cleaned)
+      ? unavailableReply
+      : cleaned;
   };
 
   // Gemini Flash is the primary desk model: stronger at multi-turn support while
@@ -12726,7 +12722,7 @@ SECURITY:
       await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
     }
   }
-  return catalogFallback || discordHandoffReply;
+  return catalogFallback || unavailableReply;
 }
 
 function supportSearchTerms(value) {
