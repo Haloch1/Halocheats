@@ -12486,7 +12486,17 @@ function getCatalogQuestionFallback(query) {
   return `For R6, the current options are ${r6Products.join(", ")}. Check the live options at https://xencheats.wtf/products, then tell me whether you want a setup focused on visuals, aim settings, or simple setup and I can narrow it down.`;
 }
 
+function getLiveDeskSmallTalkReply(query) {
+  const text = String(query || "").trim().toLowerCase().replace(/[!?.]+$/g, "");
+  if (/^(bye|goodbye|cya|see you|later)$/.test(text)) return "Bye! Come back anytime if you need a hand.";
+  if (/^(thanks|thank you|thx|ty|appreciate it)$/.test(text)) return "You're welcome!";
+  if (/^(hi|hello|hey|yo)$/.test(text)) return "Hey! What can I help you with today?";
+  return null;
+}
+
 async function generateAILiveDeskReply(thread, userMessage, userContext) {
+  const smallTalkReply = getLiveDeskSmallTalkReply(userMessage);
+  if (smallTalkReply) return smallTalkReply;
   const catalogFallback = getCatalogQuestionFallback(userMessage);
   const unavailableReply = "I don't have enough verified information to answer that accurately right now. Try the product page or instructions for the exact item, then ask me anything specific you see there.";
   if (!geminiApiKey && !groqApiKey) return catalogFallback || unavailableReply;
