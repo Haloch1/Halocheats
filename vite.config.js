@@ -38,7 +38,6 @@ export default defineConfig({
         stripeLanding: path.resolve(__dirname, "stripe-landing/index.html"),
         status: path.resolve(__dirname, "status/index.html"),
         verify: path.resolve(__dirname, "verify/index.html"),
-        verifyClosed: path.resolve(__dirname, "verify/closed/index.html"),
         notFound: path.resolve(__dirname, "404.html"),
       },
     },

@@ -12227,7 +12227,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
     if (await isDiscordGuildBanned(discordUser.id)) {
       console.warn(`[Verification security] Blocked banned Discord user ${discordUser.id}.`);
       await sendVerificationBlockedDm(discordUser.id, "This Discord account is banned from the server, so verification can't complete. Contact support if you think this is a mistake.");
-      return res.redirect("/verify/closed?discord=blocked");
+      return res.redirect("/account/?discord=blocked");
     }
 
     const verificationIp = getVerificationIp(req);
@@ -12269,7 +12269,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
         { name: "Match", value: "Matched a blocked IP, subnet, or device fingerprint", inline: true },
       ]).catch(() => {});
       await sendVerificationBlockedDm(discordUser.id, "This device or network is linked to an existing ban, so this account has been banned as well. Contact support if you think this is a mistake.");
-      return res.redirect("/verify/closed?discord=blocked");
+      return res.redirect("/account/?discord=blocked");
     }
 
     /* Alt-detection confidence tiers, strongest first. An exact device
@@ -12301,7 +12301,7 @@ app.get("/api/auth/discord/callback", async (req, res) => {
         { name: "Reason", value: reason, inline: false },
       ]).catch(() => {});
       await sendVerificationBlockedDm(discordUser.id, `Verification wasn't allowed from this network or device (${reason.toLowerCase()}). Contact support if you think this is a mistake.`);
-      return res.redirect("/verify/closed?discord=blocked");
+      return res.redirect("/account/?discord=blocked");
     }
 
     if (mode === "verify" && (
@@ -14136,7 +14136,6 @@ const pageRoutes = new Map([
   ["/status", "status/index.html"],
   ["/stripe-landing", "stripe-landing/index.html"],
   ["/verify", "verify/index.html"],
-  ["/verify/closed", "verify/closed/index.html"],
 ]);
 
 pageRoutes.forEach((relativePath, route) => {

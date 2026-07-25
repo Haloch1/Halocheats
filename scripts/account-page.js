@@ -129,7 +129,7 @@ async function fetchAccountRole(session) {
   }
 }
 
-function showStatusMessage(message, tone = "info") {
+function showStatusMessage(message, tone = "info", { forceScroll = false } = {}) {
   // The guest card already contains its own message location. Showing the
   // same OAuth result above and inside the card creates two error banners on
   // phones and pushes the form below the fold.
@@ -144,9 +144,16 @@ function showStatusMessage(message, tone = "info") {
   if (target) {
     target.hidden = false;
     renderMessage(target, message, tone);
+    // Important results (e.g. a blocked verification) need to be scrolled
+    // into view on every screen size, not just mobile - on desktop the
+    // dashboard renders above the fold and buries the banner otherwise,
+    // which is what made it look like it "flashed and disappeared."
+    if (forceScroll) {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   }
 
-  if (window.matchMedia("(max-width: 760px)").matches) {
+  if (!forceScroll && window.matchMedia("(max-width: 760px)").matches) {
     cardStatusBox?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 }
@@ -867,7 +874,14 @@ if (discordResult === "email_required") {
   window.history.replaceState({}, "", window.location.pathname);
 }
 if (discordResult === "blocked") {
-  setTimeout(() => showStatusMessage("Verification wasn't allowed from this network or account. If you think this is a mistake, contact support in Discord.", "error"), 300);
+  setTimeout(
+    () => showStatusMessage(
+      "Verification wasn't allowed from this network or account. If you think this is a mistake, contact support in Discord.",
+      "error",
+      { forceScroll: true }
+    ),
+    300
+  );
   window.history.replaceState({}, "", window.location.pathname);
 }
 if (googleResult === "linked") {
