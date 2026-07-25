@@ -866,6 +866,10 @@ if (discordResult === "email_required") {
   setTimeout(() => showStatusMessage("Verify an email on Discord, then try signing in again.", "error"), 300);
   window.history.replaceState({}, "", window.location.pathname);
 }
+if (discordResult === "blocked") {
+  setTimeout(() => showStatusMessage("Verification wasn't allowed from this network or account. If you think this is a mistake, contact support in Discord.", "error"), 300);
+  window.history.replaceState({}, "", window.location.pathname);
+}
 if (googleResult === "linked") {
   setTimeout(() => showStatusMessage("Signed in with Google.", "success"), 300);
   window.history.replaceState({}, "", window.location.pathname);
