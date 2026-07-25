@@ -6180,7 +6180,7 @@ ${rows || '<div class="ct">No messages.</div>'}
               },
               {
                 name: "Ready?",
-                value: "Open a support ticket in Discord with your 2-3 videos linked and we'll take it from there.",
+                value: "Open a support ticket in <#1528634344174780589> with your 2-3 videos linked and we'll take it from there.",
                 inline: false,
               },
             ],
