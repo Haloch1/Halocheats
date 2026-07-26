@@ -96,9 +96,17 @@ export function initReveal() {
          area* to be visible, which large sections (hero, FAQ, long lists)
          taller than the viewport can never satisfy -- that combined with
          removing the old scroll-position fallback above is what made
-         reveals silently never fire for anything bigger than the screen. */
+         reveals silently never fire for anything bigger than the screen.
+
+         The -22% bottom margin moves the trigger line well above the
+         actual bottom edge of the screen. Short items (FAQ rows, cards)
+         are only a fraction of the viewport tall, so with a shallow
+         margin they're already 80-90% on screen by the time they cross
+         the line -- the fade technically plays but there's nothing left
+         to visibly animate. Triggering earlier gives the motion room to
+         actually be seen while scrolling. */
       threshold: 0,
-      rootMargin: "0px 0px -10% 0px",
+      rootMargin: "0px 0px -22% 0px",
     }
   );
 
