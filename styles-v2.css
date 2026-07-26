@@ -4185,17 +4185,32 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
     transition-duration: 1ms !important;
   }
 
-  .reveal {
-    opacity: 1;
-    transform: none;
-  }
-
   /* The feature ticker is a decorative scroller, not motion that triggers
      vestibular issues the way parallax/zoom effects can - keep it running
      even with reduced motion enabled, otherwise it freezes mid-scroll and
      looks broken rather than calm. */
   .ticker-track {
     animation-duration: 30s !important;
+    animation-iteration-count: infinite !important;
+  }
+
+  /* Same reasoning for the scroll reveal and the hero "undetected" glow
+     pulse: a small opacity/slide-up fade and a soft text-shadow pulse are
+     not the kind of large parallax/zoom motion this media query exists to
+     protect against. Without these overrides, the blanket
+     "animation-duration: 1ms !important; animation-iteration-count: 1"
+     rule above runs the glow through one imperceptible 1ms cycle (it
+     flashes once, then freezes on whatever frame the animation happened
+     to stop on) and forces every .reveal element to its already-visible
+     end state with no transition at all -- so on a system/browser with
+     "reduce motion" enabled, the fade never plays and the glow looks dead
+     except for an instant flash right at page load. */
+  .reveal {
+    transition-duration: 700ms !important;
+  }
+
+  .hero-accent-glow {
+    animation-duration: 2.6s !important;
     animation-iteration-count: infinite !important;
   }
 }
