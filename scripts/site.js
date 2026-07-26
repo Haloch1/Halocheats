@@ -67,33 +67,17 @@ export function initReveal() {
     }, (Number(delay) || 0) + 1350);
   };
 
-  const remainingItems = new Set(revealItems);
-  let scrollFrame = 0;
-
-  const revealVisibleItems = () => {
-    scrollFrame = 0;
-    const triggerY = window.innerHeight * 0.78;
-
-    remainingItems.forEach((item) => {
-      const rect = item.getBoundingClientRect();
-
-      if (rect.top <= triggerY && rect.bottom >= 0) {
-        showItem(item);
-        remainingItems.delete(item);
-      }
-    });
-
-    if (!remainingItems.size) {
-      window.removeEventListener("scroll", requestRevealCheck);
-      window.removeEventListener("resize", requestRevealCheck);
-    }
-  };
-
-  const requestRevealCheck = () => {
-    if (!scrollFrame) {
-      scrollFrame = window.requestAnimationFrame(revealVisibleItems);
-    }
-  };
+  /* Previously this also ran a parallel scroll/resize + requestAnimationFrame
+     fallback alongside the IntersectionObserver, using a *different* trigger
+     point (78% of viewport) than the observer (~90%). The two mechanisms
+     raced each other on every scroll frame, which is what made the fade-in
+     feel inconsistent/janky, especially on mobile. IntersectionObserver alone
+     is well supported everywhere we need it now, so it's the single source
+     of truth for when an item reveals. */
+  if (!("IntersectionObserver" in window)) {
+    revealItems.forEach(showItem);
+    return;
+  }
 
   const observer = new IntersectionObserver(
     (entries, activeObserver) => {
@@ -103,20 +87,16 @@ export function initReveal() {
         }
 
         showItem(entry.target);
-        remainingItems.delete(entry.target);
         activeObserver.unobserve(entry.target);
       });
     },
     {
-      threshold: 0.18,
-      rootMargin: "0px 0px -18% 0px",
+      threshold: 0.14,
+      rootMargin: "0px 0px -10% 0px",
     }
   );
 
   revealItems.forEach((item) => observer.observe(item));
-  window.addEventListener("scroll", requestRevealCheck, { passive: true });
-  window.addEventListener("resize", requestRevealCheck);
-  requestRevealCheck();
 }
 
 /* ── Highlight the current page in the nav ── */

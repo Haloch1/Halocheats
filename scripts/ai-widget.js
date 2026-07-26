@@ -59,6 +59,9 @@ function buildWidget() {
       </div>
       <div class="ai-widget-body">
         <div class="ai-widget-messages"></div>
+        <button type="button" class="ai-widget-scrollbtn" aria-label="Jump to latest message" hidden>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
       </div>
       <form class="ai-widget-form">
         <textarea rows="1" maxlength="900" placeholder="Ask about a product, order, or key..." required></textarea>
@@ -80,6 +83,7 @@ async function init() {
   const panel = root.querySelector(".ai-widget-panel");
   const closeBtn = root.querySelector(".ai-widget-close");
   const messagesEl = root.querySelector(".ai-widget-messages");
+  const scrollBtn = root.querySelector(".ai-widget-scrollbtn");
   const form = root.querySelector(".ai-widget-form");
   const textarea = form.querySelector("textarea");
   const dot = root.querySelector(".ai-widget-dot");
@@ -98,7 +102,26 @@ async function init() {
 
   function scrollToEnd() {
     messagesEl.scrollTop = messagesEl.scrollHeight;
+    scrollBtn.hidden = true;
   }
+
+  /* Little "jump to latest" button: shows once the member has scrolled up
+     to read earlier messages, so they don't have to manually swipe/scroll
+     all the way back down to see new replies come in. */
+  function isNearBottom() {
+    return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 48;
+  }
+
+  function updateScrollBtn() {
+    var canScroll = messagesEl.scrollHeight > messagesEl.clientHeight + 20;
+    scrollBtn.hidden = !canScroll || isNearBottom();
+  }
+
+  messagesEl.addEventListener("scroll", updateScrollBtn, { passive: true });
+  scrollBtn.addEventListener("click", function () {
+    messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: "smooth" });
+    scrollBtn.hidden = true;
+  });
 
   function renderGate() {
     messagesEl.innerHTML = `
@@ -158,6 +181,7 @@ async function init() {
   function renderThread(thread, { isBaseline = false } = {}) {
     activeThread = thread || activeThread;
     const msgs = thread?.messages || [];
+    const shouldStickToBottom = isBaseline || isNearBottom();
 
     const newIncoming = msgs.filter(
       (m) => m.senderType !== "user" && !knownMessageIds.has(m.id)
@@ -195,7 +219,15 @@ async function init() {
       dot.hidden = false;
     }
 
-    scrollToEnd();
+    /* Only auto-snap to the newest message if the member was already at (or
+       near) the bottom — otherwise a poll landing mid-read would yank them
+       away from what they're reading. If they've scrolled up, leave them be
+       and let the "jump to latest" button do its job instead. */
+    if (shouldStickToBottom) {
+      scrollToEnd();
+    } else {
+      updateScrollBtn();
+    }
   }
 
   async function pollThread() {
