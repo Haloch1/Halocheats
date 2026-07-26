@@ -83,6 +83,7 @@ async function init() {
   const panel = root.querySelector(".ai-widget-panel");
   const closeBtn = root.querySelector(".ai-widget-close");
   const messagesEl = root.querySelector(".ai-widget-messages");
+  const scrollBody = root.querySelector(".ai-widget-body");
   const scrollBtn = root.querySelector(".ai-widget-scrollbtn");
   const form = root.querySelector(".ai-widget-form");
   const textarea = form.querySelector("textarea");
@@ -100,8 +101,14 @@ async function init() {
   let activeThread = null;
   let restoreAttempts = 0;
 
+  /* NOTE: the element that actually scrolls is .ai-widget-body (it has
+     overflow-y: auto) — .ai-widget-messages is just a plain flex column
+     that grows to fit its content, so its own scrollTop/scrollHeight never
+     change. Scroll math has to target scrollBody, not messagesEl, or every
+     "how far from the bottom" check silently reads as "always at the
+     bottom" and the jump button never has a reason to appear. */
   function scrollToEnd() {
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    scrollBody.scrollTop = scrollBody.scrollHeight;
     scrollBtn.hidden = true;
   }
 
@@ -109,17 +116,17 @@ async function init() {
      to read earlier messages, so they don't have to manually swipe/scroll
      all the way back down to see new replies come in. */
   function isNearBottom() {
-    return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 48;
+    return scrollBody.scrollHeight - scrollBody.scrollTop - scrollBody.clientHeight < 48;
   }
 
   function updateScrollBtn() {
-    var canScroll = messagesEl.scrollHeight > messagesEl.clientHeight + 20;
+    var canScroll = scrollBody.scrollHeight > scrollBody.clientHeight + 20;
     scrollBtn.hidden = !canScroll || isNearBottom();
   }
 
-  messagesEl.addEventListener("scroll", updateScrollBtn, { passive: true });
+  scrollBody.addEventListener("scroll", updateScrollBtn, { passive: true });
   scrollBtn.addEventListener("click", function () {
-    messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: "smooth" });
+    scrollBody.scrollTo({ top: scrollBody.scrollHeight, behavior: "smooth" });
     scrollBtn.hidden = true;
   });
 

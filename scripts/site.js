@@ -91,7 +91,13 @@ export function initReveal() {
       });
     },
     {
-      threshold: 0.14,
+      /* threshold: 0 fires as soon as a single pixel crosses into view. A
+         non-zero threshold requires that fraction of the *target's own
+         area* to be visible, which large sections (hero, FAQ, long lists)
+         taller than the viewport can never satisfy -- that combined with
+         removing the old scroll-position fallback above is what made
+         reveals silently never fire for anything bigger than the screen. */
+      threshold: 0,
       rootMargin: "0px 0px -10% 0px",
     }
   );
