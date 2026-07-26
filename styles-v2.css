@@ -64,14 +64,15 @@ body {
   font-family: var(--font-body);
   line-height: 1.65;
   background:
-    radial-gradient(circle at 92% 3%, rgba(255, 45, 56, 0.32), transparent 36rem),
-    radial-gradient(circle at 2% 46%, rgba(216, 32, 40, 0.22), transparent 40rem),
-    radial-gradient(circle at 64% 100%, rgba(180, 15, 24, 0.18), transparent 44rem),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.14), rgba(255, 219, 221, 0.28)),
-    linear-gradient(rgba(216, 32, 40, 0.075) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(216, 32, 40, 0.075) 1px, transparent 1px),
+    radial-gradient(circle at 92% 3%, rgba(255, 45, 56, 0.46), transparent 36rem),
+    radial-gradient(circle at 2% 46%, rgba(216, 32, 40, 0.34), transparent 40rem),
+    radial-gradient(circle at 64% 100%, rgba(180, 15, 24, 0.28), transparent 44rem),
+    radial-gradient(circle at 50% 45%, rgba(255, 90, 98, 0.14), transparent 50rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 200, 203, 0.4)),
+    linear-gradient(rgba(216, 32, 40, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(216, 32, 40, 0.1) 1px, transparent 1px),
     var(--paper);
-  background-size: auto, auto, auto, auto, 42px 42px, 42px 42px, auto;
+  background-size: auto, auto, auto, auto, auto, 42px 42px, 42px 42px, auto;
 }
 
 body::before {
@@ -81,9 +82,9 @@ body::before {
   content: "";
   pointer-events: none;
   background:
-    radial-gradient(circle at 82% 24%, rgba(216, 32, 40, 0.14), transparent 32rem),
-    radial-gradient(circle at 14% 82%, rgba(255, 55, 66, 0.12), transparent 34rem),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 30%, rgba(255, 235, 236, 0.48));
+    radial-gradient(circle at 82% 24%, rgba(216, 32, 40, 0.22), transparent 32rem),
+    radial-gradient(circle at 14% 82%, rgba(255, 55, 66, 0.2), transparent 34rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 30%, rgba(255, 200, 203, 0.62));
 }
 
 body.modal-open {
