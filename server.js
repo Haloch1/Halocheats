@@ -3278,6 +3278,16 @@ if (isConfiguredValue(discordBotToken)) {
           });
         }
         if (aiReply === DISCORD_AI_RATE_LIMITED) {
+          // AI providers are down/rate-limited — try a static catalog
+          // lookup (prices don't need an LLM) before escalating to staff.
+          const staticReply = findStaticPriceReply(cleanMessage);
+          if (staticReply) {
+            await responseChannel.send({
+              content: `${mention} ${staticReply}`,
+              allowedMentions: { users: [message.author.id] },
+            });
+            return;
+          }
           const handoff = await createStaffTicketFromQuestionThread(
             responseChannel,
             message.author,
@@ -14052,6 +14062,47 @@ async function ensureDiscordStaffGuide(guild) {
 }
 
 /* ── AI: Discord bot reply ── */
+
+/* When both AI providers are unavailable/rate-limited, don't immediately
+   escalate a simple "how much is X" to a staff ticket — prices are static
+   catalog data, not something that needs an LLM. Matches on distinctive
+   variant/product words (ignoring generic game/size words) so "crusader
+   price?" resolves without ever calling an AI provider. */
+const STATIC_PRICE_STOPWORDS = new Set([
+  "r6s", "rust", "fortnite", "apex", "full", "lite", "level", "no", "recoil",
+  "wallhack", "script", "plus", "account", "key", "keys", "day", "month",
+  "black", "ices", "previous", "platinum", "emerald", "ranked", "ready",
+  "nfa", "cheats", "cheat", "the", "a", "an",
+]);
+
+function distinctiveWords(name) {
+  return String(name || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length >= 4 && !STATIC_PRICE_STOPWORDS.has(word));
+}
+
+function findStaticPriceReply(text) {
+  const q = String(text || "").toLowerCase();
+  if (!/\b(price|prices|cost|costs|how much|pricing)\b/.test(q)) return null;
+
+  for (const product of products) {
+    if (!product.available) continue;
+    for (const variant of product.variants || []) {
+      if (variant.checkoutBlocked) continue;
+      const words = distinctiveWords(variant.name);
+      const matched = words.some((word) => new RegExp(`\\b${word}\\b`, "i").test(q));
+      if (matched) {
+        return `${product.name} — ${variant.name}: ${variant.priceDisplay}. Buy here: <https://xencheats.wtf/products>`;
+      }
+    }
+    const productWords = distinctiveWords(product.name);
+    if (productWords.some((word) => new RegExp(`\\b${word}\\b`, "i").test(q))) {
+      return `${product.name}: ${product.priceDisplay}. Buy here: <https://xencheats.wtf/products>`;
+    }
+  }
+  return null;
+}
 
 async function generateDiscordAIReply(userMessage, authorTag, history = []) {
   if (!groqApiKey && !geminiApiKey) return null;
