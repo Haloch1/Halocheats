@@ -574,6 +574,14 @@ async function startLoopMessage() {
         return;
     }
 
+    // Send once immediately on arm/startup, then continue on the random interval.
+    console.log(`\n🔁 Sending initial copy of looped message ${loopMessageObj.id}...`);
+    try {
+        await forwardMessage(loopMessageObj);
+    } catch (error) {
+        console.error(`❌ Loop-message initial send failed: ${error.message}`);
+    }
+
     scheduleNextLoopSend(baseMs, jitterMs);
 }
 
