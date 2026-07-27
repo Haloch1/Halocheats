@@ -4055,11 +4055,17 @@ if (isConfiguredValue(discordBotToken)) {
       })(),
       inline: true,
     }));
+    const legendField = {
+      name: "Legend",
+      value: "💚 Undetected  •  💙 Updating  •  🧡 Use at own risk!  •  💛 Testing  •  🖤 Discontinued",
+      inline: false,
+    };
+
     return {
       title: "📌 XenCheats Product Status",
       color: 0xd82028,
       fields: fields.length
-        ? fields
+        ? [...fields, legendField]
         : [{ name: "No data", value: "Couldn't match any tracked products this cycle.", inline: false }],
       description: `**Last updated:** <t:${now}:f> (<t:${now}:R>)`,
       footer: { text: "XenCheats | Live product status" },
