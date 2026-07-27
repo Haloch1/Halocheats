@@ -4069,6 +4069,25 @@ if (isConfiguredValue(discordBotToken)) {
       for (const msg of statusMessages) {
         allRows.push(...parseStatusEmbedFields(msg.embeds[0]));
       }
+
+      if (!allRows.length) {
+        // Nothing parsed at all — dump the raw embed shape so we can see
+        // exactly what the source bot sends (title/description/field
+        // name+value), since 0 parsed rows means our emoji/format
+        // assumptions don't match reality.
+        for (const msg of statusMessages) {
+          const e = msg.embeds[0];
+          console.warn(
+            "[Status sync] RAW EMBED:",
+            JSON.stringify({
+              title: e.title,
+              description: e.description,
+              fields: (e.fields || []).map((f) => ({ name: f.name, value: f.value })),
+            })
+          );
+        }
+      }
+
       const matched = matchOwnedProducts(allRows);
       if (!matched.length) {
         console.warn(
