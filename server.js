@@ -168,6 +168,8 @@ const OWNER_ONLY_COMMANDS = new Set([
 ]);
 const ADMIN_ONLY_COMMANDS = new Set(["orderlookup", "staffactivity", "ips", "media-panel"]);
 const discordStaffGuideChannelId = process.env.DISCORD_STAFF_GUIDE_CHANNEL_ID || "1530269093100388583";
+const discordStatusSourceChannelId = process.env.DISCORD_STATUS_SOURCE_CHANNEL_ID || "1531112552891813949";
+const discordStatusTargetChannelId = process.env.DISCORD_STATUS_TARGET_CHANNEL_ID || "1531148640481972284";
 const pendingSchedules = new Map(); // id -> { timer, title, postAt }
 const resellerBuyLocks = new Map(); // inventorySlug -> Promise that resolves when buy completes
 const slashCooldownByUser = new Map(); // `${command}:${userId}` -> ts of last use
@@ -2643,6 +2645,10 @@ if (isConfiguredValue(discordBotToken)) {
       setInterval(() => maintainDiscordTickets(), 10 * 60 * 1000).unref();
     }
 
+    if (discordStatusSourceChannelId && discordStatusTargetChannelId) {
+      setTimeout(() => reconcileStatusTargets().then(scheduleStatusResync), 20_000);
+    }
+
     // Register slash commands
     try {
       const rest = new REST({ version: "10" }).setToken(discordBotToken);
@@ -3825,6 +3831,127 @@ if (isConfiguredValue(discordBotToken)) {
       console.error("[Discord link/scam filter]", err.message);
     }
   });
+
+  /* ── Product status relay ──
+     Mirrors the "Product Status Overview" embeds posted by a third-party
+     status bot in discordStatusSourceChannelId into our own
+     discordStatusTargetChannelId, editing the same message(s) in place
+     instead of spamming a new post every update. Triggered live off
+     messageCreate/messageUpdate on the source channel, with a periodic
+     (every ~3h, +random jitter up to 30min) safety-net re-sync in case an
+     event is ever missed (bot restart, gateway hiccup, etc). */
+  const statusMessageMap = new Map(); // source message id -> target message id
+
+  function isProductStatusEmbed(embed) {
+    return /product status overview/i.test(embed?.title || "");
+  }
+
+  function buildStatusRelayEmbed(sourceEmbed, isLast) {
+    const embed = {
+      color: 0xd82028,
+      fields: (sourceEmbed.fields || []).map((f) => ({
+        name: f.name,
+        value: f.value.length > 1024 ? `${f.value.slice(0, 1000)}…` : f.value,
+        inline: false,
+      })),
+    };
+    if (isLast) {
+      const now = Math.floor(Date.now() / 1000);
+      embed.description = `**Last updated:** <t:${now}:f> (<t:${now}:R>)`;
+      embed.footer = { text: "XenCheats | Live product status" };
+      embed.timestamp = new Date().toISOString();
+    }
+    return embed;
+  }
+
+  async function relayStatusMessage(sourceMessage) {
+    if (!discordBot) return;
+    try {
+      const sourceEmbed = sourceMessage.embeds?.[0];
+      if (!isProductStatusEmbed(sourceEmbed)) return;
+
+      const targetChannel = await discordBot.channels.fetch(discordStatusTargetChannelId).catch(() => null);
+      if (!targetChannel?.isTextBased?.()) {
+        console.warn("[Status relay] Can't access target channel");
+        return;
+      }
+
+      const knownSourceIds = [...statusMessageMap.keys()];
+      if (!knownSourceIds.includes(sourceMessage.id)) knownSourceIds.push(sourceMessage.id);
+      const isLast = knownSourceIds[knownSourceIds.length - 1] === sourceMessage.id;
+      const builtEmbed = buildStatusRelayEmbed(sourceEmbed, isLast);
+
+      const targetMessageId = statusMessageMap.get(sourceMessage.id);
+      const targetMessage = targetMessageId
+        ? await targetChannel.messages.fetch(targetMessageId).catch(() => null)
+        : null;
+
+      if (targetMessage) {
+        await targetMessage.edit({ embeds: [builtEmbed] });
+      } else {
+        const sent = await targetChannel.send({ embeds: [builtEmbed] });
+        statusMessageMap.set(sourceMessage.id, sent.id);
+      }
+    } catch (err) {
+      console.error("[Status relay] Failed:", err.message);
+    }
+  }
+
+  /* Startup: pair each currently-live source status message with an
+     existing message we already posted in the target channel (if the bot
+     restarted and they're still there), so we keep editing the same
+     messages instead of accumulating duplicates on every deploy. */
+  async function reconcileStatusTargets() {
+    if (!discordBot) return;
+    try {
+      const sourceChannel = await discordBot.channels.fetch(discordStatusSourceChannelId).catch(() => null);
+      const targetChannel = await discordBot.channels.fetch(discordStatusTargetChannelId).catch(() => null);
+      if (!sourceChannel?.isTextBased?.() || !targetChannel?.isTextBased?.()) {
+        console.warn("[Status relay] Missing access to source or target channel");
+        return;
+      }
+
+      const recentSource = await sourceChannel.messages.fetch({ limit: 20 }).catch(() => null);
+      const sourceMessages = recentSource
+        ? [...recentSource.values()].filter((m) => isProductStatusEmbed(m.embeds?.[0])).sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+        : [];
+
+      const recentTarget = await targetChannel.messages.fetch({ limit: 20 }).catch(() => null);
+      const ownTargetMessages = recentTarget
+        ? [...recentTarget.values()].filter((m) => m.author?.id === discordBot.user.id).sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+        : [];
+
+      sourceMessages.forEach((message, i) => {
+        if (ownTargetMessages[i]) statusMessageMap.set(message.id, ownTargetMessages[i].id);
+      });
+
+      for (const message of sourceMessages) {
+        await relayStatusMessage(message);
+      }
+      console.log(`[Status relay] Synced ${sourceMessages.length} status message(s)`);
+    } catch (err) {
+      console.error("[Status relay] Reconcile failed:", err.message);
+    }
+  }
+
+  discordBot.on("messageCreate", (message) => {
+    if (message.channelId === discordStatusSourceChannelId) {
+      relayStatusMessage(message).catch(() => {});
+    }
+  });
+
+  discordBot.on("messageUpdate", (oldMessage, newMessage) => {
+    if (newMessage.channelId === discordStatusSourceChannelId) {
+      relayStatusMessage(newMessage).catch(() => {});
+    }
+  });
+
+  function scheduleStatusResync() {
+    const jitterMs = Math.floor(Math.random() * 30 * 60 * 1000); // up to +30 min
+    setTimeout(() => {
+      reconcileStatusTargets().finally(scheduleStatusResync);
+    }, 3 * 60 * 60 * 1000 + jitterMs).unref();
+  }
 
   /* ── Shared ticket transcript renderer (used by close_ticket and /transcriptdemo) ──
      messages: [{ username, avatarUrl, role: "user"|"staff"|"bot", content, timestamp, attachments:[{name,url}] }] */

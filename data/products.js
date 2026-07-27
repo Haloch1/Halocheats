@@ -219,6 +219,7 @@ const productCatalog = [
   },
   {
     ...r6Meta,
+    badge: "Undetected",
     slug: "r6s-crusader",
     name: "Crusader R6S",
     priceDisplay: `From ${money(400)}`,
@@ -317,6 +318,7 @@ const productCatalog = [
   },
   {
     ...r6Meta,
+    badge: "Undetected",
     slug: "r6s-chams",
     name: "R6S Chams Wallhack",
     priceDisplay: `From ${money(350)}`,
@@ -526,6 +528,7 @@ const productCatalog = [
   },
   {
     ...fortniteMeta,
+    badge: "Undetected",
     slug: "fortnite-ancient",
     name: "Fortnite Ancient",
     priceDisplay: `From ${money(400)}`,
@@ -556,6 +559,7 @@ const productCatalog = [
   },
   {
     ...fortniteMeta,
+    badge: "Undetected",
     slug: "fortnite-arcane",
     name: "Fortnite - Arcane",
     priceDisplay: `From ${money(700)}`,
@@ -587,6 +591,7 @@ const productCatalog = [
   },
   {
     ...apexMeta,
+    badge: "Undetected",
     slug: "apex-mason",
     name: "Apex - Mason",
     priceDisplay: `From ${money(400)}`,
@@ -618,6 +623,7 @@ const productCatalog = [
   },
   {
     ...apexMeta,
+    badge: "Undetected",
     slug: "apex-ancient",
     name: "Apex Ancient",
     priceDisplay: `From ${money(300)}`,
@@ -679,6 +685,7 @@ const productCatalog = [
   },
   {
     ...apexMeta,
+    badge: "Undetected",
     slug: "apex-arcane",
     name: "Apex - Arcane",
     priceDisplay: `From ${money(500)}`,
@@ -841,6 +848,7 @@ const productCatalog = [
   },
   {
     ...rustMeta,
+    badge: "Undetected",
     slug: "rust-mason-lite",
     name: "Rust Mason Lite",
     priceDisplay: `From ${money(270)}`,
@@ -870,6 +878,7 @@ const productCatalog = [
   },
   {
     ...rustMeta,
+    badge: "Undetected",
     slug: "rust-mason-full",
     name: "Rust Mason Full",
     priceDisplay: `From ${money(555)}`,
@@ -900,6 +909,7 @@ const productCatalog = [
   },
   {
     ...rustMeta,
+    badge: "Undetected",
     slug: "rust-mrpro",
     name: "Rust - MrPro",
     priceDisplay: `From ${money(640)}`,
