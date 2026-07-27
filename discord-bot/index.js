@@ -513,37 +513,37 @@ client.on('messageCreate', async message => {
 // ============================================================
 // Loop-message feature: repeatedly re-copy one or more specific messages
 // from a source channel to its mapped target channel, on an interval.
-// Configure via config.json -> "loopMessage". Each message gets its own
-// independent random schedule (so multiple messages don't stay in lockstep).
+// Configure via config.json -> "loopMessage". All messages share ONE
+// schedule, so every cycle sends them all together at the same time.
 // ============================================================
-let loopMessageTimers = []; // active setTimeout handles, one per looped message
+let loopMessageTimer = null; // single shared setTimeout handle
 
 function stopLoopMessage() {
-    if (loopMessageTimers.length > 0) {
-        loopMessageTimers.forEach(t => clearTimeout(t));
-        loopMessageTimers = [];
-        console.log('🛑 Stopped loop-message timers');
+    if (loopMessageTimer) {
+        clearTimeout(loopMessageTimer);
+        loopMessageTimer = null;
+        console.log('🛑 Stopped loop-message timer');
     }
 }
 
-// Schedules the next send of a specific message at baseMs + a random
-// 0..jitterMs on top, then re-schedules itself after each send (so every
+// Schedules the next send of ALL looped messages at baseMs + a random
+// 0..jitterMs on top, then re-schedules itself after each round (so every
 // gap is independently random, not just a fixed interval with one-time jitter).
-function scheduleNextLoopSend(messageObj, baseMs, jitterMs) {
+function scheduleNextLoopSend(messageObjs, baseMs, jitterMs) {
     const delay = baseMs + Math.floor(Math.random() * (jitterMs + 1));
-    console.log(`⏱️ Next looped send of ${messageObj.id} in ~${Math.round(delay / 60000)} min`);
+    console.log(`⏱️ Next looped send of ${messageObjs.length} message(s) in ~${Math.round(delay / 60000)} min`);
 
-    const timer = setTimeout(async () => {
-        console.log(`\n🔁 Re-sending looped message ${messageObj.id}...`);
-        try {
-            await forwardMessage(messageObj);
-        } catch (error) {
-            console.error(`❌ Loop-message send failed: ${error.message}`);
+    loopMessageTimer = setTimeout(async () => {
+        for (const messageObj of messageObjs) {
+            console.log(`\n🔁 Re-sending looped message ${messageObj.id}...`);
+            try {
+                await forwardMessage(messageObj);
+            } catch (error) {
+                console.error(`❌ Loop-message send failed: ${error.message}`);
+            }
         }
-        scheduleNextLoopSend(messageObj, baseMs, jitterMs);
+        scheduleNextLoopSend(messageObjs, baseMs, jitterMs);
     }, delay);
-
-    loopMessageTimers.push(timer);
 }
 
 async function startLoopMessage() {
@@ -581,26 +581,37 @@ async function startLoopMessage() {
         return;
     }
 
+    // Fetch every configured message up front so they can all be sent together.
+    const messageObjs = [];
     for (const messageId of messageIds) {
-        let messageObj;
         try {
-            messageObj = await sourceChannel.messages.fetch(messageId);
-            console.log(`🔁 Loop-message armed: will re-copy message ${messageId} from #${sourceChannel.name} every ${baseMs / 1000}s (+0-${jitterMs / 1000}s random)`);
+            const messageObj = await sourceChannel.messages.fetch(messageId);
+            messageObjs.push(messageObj);
+            console.log(`🔁 Loop-message armed: will re-copy message ${messageId} from #${sourceChannel.name}`);
         } catch (error) {
             console.error(`❌ Failed to fetch loop-message ${messageId}: ${error.message}`);
-            continue;
         }
+    }
 
-        // Send once immediately on arm/startup, then continue on the random interval.
-        console.log(`\n🔁 Sending initial copy of looped message ${messageObj.id}...`);
+    if (messageObjs.length === 0) {
+        console.error('❌ No loop-message(s) could be fetched — nothing armed');
+        return;
+    }
+
+    console.log(`🔁 All ${messageObjs.length} looped message(s) will be sent together, every ${baseMs / 1000}s (+0-${jitterMs / 1000}s random)`);
+
+    // Send all of them together, once immediately on arm/startup, then continue
+    // on the shared random interval.
+    console.log(`\n🔁 Sending initial copy of ${messageObjs.length} looped message(s)...`);
+    for (const messageObj of messageObjs) {
         try {
             await forwardMessage(messageObj);
         } catch (error) {
-            console.error(`❌ Loop-message initial send failed: ${error.message}`);
+            console.error(`❌ Loop-message initial send failed for ${messageObj.id}: ${error.message}`);
         }
-
-        scheduleNextLoopSend(messageObj, baseMs, jitterMs);
     }
+
+    scheduleNextLoopSend(messageObjs, baseMs, jitterMs);
 }
 
 client.login(TOKEN).catch(err => {
