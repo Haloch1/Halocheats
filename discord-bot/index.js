@@ -32,7 +32,8 @@ let config = {
     loopMessage: {
         enabled: false,
         sourceChannelId: '',
-        messageId: '',
+        messageId: '',      // legacy single-message field, still supported
+        messageIds: [],      // preferred: loop multiple messages from the same channel
         intervalSeconds: 60,
         randomJitterSeconds: 0
     }
@@ -510,39 +511,39 @@ client.on('messageCreate', async message => {
 });
 
 // ============================================================
-// Loop-message feature: repeatedly re-copy one specific message
+// Loop-message feature: repeatedly re-copy one or more specific messages
 // from a source channel to its mapped target channel, on an interval.
-// Configure via config.json -> "loopMessage".
+// Configure via config.json -> "loopMessage". Each message gets its own
+// independent random schedule (so multiple messages don't stay in lockstep).
 // ============================================================
-let loopMessageTimer = null;
-let loopMessageObj = null; // cached fetched message
+let loopMessageTimers = []; // active setTimeout handles, one per looped message
 
 function stopLoopMessage() {
-    if (loopMessageTimer) {
-        clearTimeout(loopMessageTimer);
-        loopMessageTimer = null;
-        console.log('🛑 Stopped loop-message timer');
+    if (loopMessageTimers.length > 0) {
+        loopMessageTimers.forEach(t => clearTimeout(t));
+        loopMessageTimers = [];
+        console.log('🛑 Stopped loop-message timers');
     }
-    loopMessageObj = null;
 }
 
-// Schedules the next send at baseMs + a random 0..jitterMs on top, then
-// re-schedules itself after each send (so every gap is independently random,
-// not just a fixed interval with one-time jitter).
-function scheduleNextLoopSend(baseMs, jitterMs) {
+// Schedules the next send of a specific message at baseMs + a random
+// 0..jitterMs on top, then re-schedules itself after each send (so every
+// gap is independently random, not just a fixed interval with one-time jitter).
+function scheduleNextLoopSend(messageObj, baseMs, jitterMs) {
     const delay = baseMs + Math.floor(Math.random() * (jitterMs + 1));
-    console.log(`⏱️ Next looped send in ~${Math.round(delay / 60000)} min`);
+    console.log(`⏱️ Next looped send of ${messageObj.id} in ~${Math.round(delay / 60000)} min`);
 
-    loopMessageTimer = setTimeout(async () => {
-        if (!loopMessageObj) return;
-        console.log(`\n🔁 Re-sending looped message ${loopMessageObj.id}...`);
+    const timer = setTimeout(async () => {
+        console.log(`\n🔁 Re-sending looped message ${messageObj.id}...`);
         try {
-            await forwardMessage(loopMessageObj);
+            await forwardMessage(messageObj);
         } catch (error) {
             console.error(`❌ Loop-message send failed: ${error.message}`);
         }
-        scheduleNextLoopSend(baseMs, jitterMs);
+        scheduleNextLoopSend(messageObj, baseMs, jitterMs);
     }, delay);
+
+    loopMessageTimers.push(timer);
 }
 
 async function startLoopMessage() {
@@ -552,8 +553,15 @@ async function startLoopMessage() {
     if (!cfg || !cfg.enabled) {
         return;
     }
-    if (!cfg.sourceChannelId || !cfg.messageId) {
-        console.error('❌ loopMessage enabled but sourceChannelId/messageId missing in config.json');
+
+    // Support both the legacy single "messageId" field and the new "messageIds" array.
+    const messageIds = [
+        ...(Array.isArray(cfg.messageIds) ? cfg.messageIds : []),
+        ...(cfg.messageId ? [cfg.messageId] : [])
+    ].filter((id, index, arr) => id && arr.indexOf(id) === index); // de-dupe
+
+    if (!cfg.sourceChannelId || messageIds.length === 0) {
+        console.error('❌ loopMessage enabled but sourceChannelId/messageId(s) missing in config.json');
         return;
     }
 
@@ -565,24 +573,34 @@ async function startLoopMessage() {
         sourceChannelIds.push(cfg.sourceChannelId);
     }
 
+    let sourceChannel;
     try {
-        const sourceChannel = await client.channels.fetch(cfg.sourceChannelId);
-        loopMessageObj = await sourceChannel.messages.fetch(cfg.messageId);
-        console.log(`🔁 Loop-message armed: will re-copy message ${cfg.messageId} from #${sourceChannel.name} every ${baseMs / 1000}s (+0-${jitterMs / 1000}s random)`);
+        sourceChannel = await client.channels.fetch(cfg.sourceChannelId);
     } catch (error) {
-        console.error(`❌ Failed to fetch loop-message target: ${error.message}`);
+        console.error(`❌ Failed to fetch loop-message source channel: ${error.message}`);
         return;
     }
 
-    // Send once immediately on arm/startup, then continue on the random interval.
-    console.log(`\n🔁 Sending initial copy of looped message ${loopMessageObj.id}...`);
-    try {
-        await forwardMessage(loopMessageObj);
-    } catch (error) {
-        console.error(`❌ Loop-message initial send failed: ${error.message}`);
-    }
+    for (const messageId of messageIds) {
+        let messageObj;
+        try {
+            messageObj = await sourceChannel.messages.fetch(messageId);
+            console.log(`🔁 Loop-message armed: will re-copy message ${messageId} from #${sourceChannel.name} every ${baseMs / 1000}s (+0-${jitterMs / 1000}s random)`);
+        } catch (error) {
+            console.error(`❌ Failed to fetch loop-message ${messageId}: ${error.message}`);
+            continue;
+        }
 
-    scheduleNextLoopSend(baseMs, jitterMs);
+        // Send once immediately on arm/startup, then continue on the random interval.
+        console.log(`\n🔁 Sending initial copy of looped message ${messageObj.id}...`);
+        try {
+            await forwardMessage(messageObj);
+        } catch (error) {
+            console.error(`❌ Loop-message initial send failed: ${error.message}`);
+        }
+
+        scheduleNextLoopSend(messageObj, baseMs, jitterMs);
+    }
 }
 
 client.login(TOKEN).catch(err => {
