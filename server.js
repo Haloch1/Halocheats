@@ -4049,7 +4049,10 @@ if (isConfiguredValue(discordBotToken)) {
     const now = Math.floor(Date.now() / 1000);
     const fields = [...byGame.entries()].map(([game, rows]) => ({
       name: game,
-      value: rows.map((r) => `${STATUS_EMOJI_LABELS_REVERSE(r.badge)} ${r.variant} — ${r.badge}`).join("\n"),
+      value: (() => {
+        const text = rows.map((r) => `${STATUS_EMOJI_LABELS_REVERSE(r.badge)} ${r.variant}`).join("\n");
+        return text.length > 1024 ? `${text.slice(0, 1000)}…` : text;
+      })(),
       inline: true,
     }));
     return {
@@ -4080,20 +4083,39 @@ if (isConfiguredValue(discordBotToken)) {
       }
 
       const recent = await sourceChannel.messages.fetch({ limit: 20 }).catch(() => null);
-      const statusMessages = recent
-        ? [...recent.values()].filter((m) => isProductStatusEmbed(m.embeds?.[0]))
+      const allStatusMessages = recent
+        ? [...recent.values()]
+            .filter((m) => isProductStatusEmbed(m.embeds?.[0]))
+            .sort((a, b) => b.createdTimestamp - a.createdTimestamp)
         : [];
-      if (!statusMessages.length) {
+      if (!allStatusMessages.length) {
         console.warn("[Status sync] No status embeds found in source channel");
         return;
       }
+
+      // The source bot posts a fresh pair of messages every hour instead of
+      // editing in place, so the channel history can contain several past
+      // batches of the same fields. Only use the most recent batch (within
+      // 10 minutes of the newest matching message) to avoid re-processing
+      // stale duplicates.
+      const newestTimestamp = allStatusMessages[0].createdTimestamp;
+      const statusMessages = allStatusMessages.filter(
+        (m) => newestTimestamp - m.createdTimestamp <= 10 * 60 * 1000
+      );
 
       const allRows = [];
       for (const msg of statusMessages) {
         allRows.push(...parseStatusEmbedFields(msg.embeds[0]));
       }
 
-      const matched = matchOwnedProducts(allRows);
+      // De-dupe by product slug (keep the first/newest hit) in case the
+      // same product ever appears twice within the same batch.
+      const seenSlugs = new Set();
+      const matched = matchOwnedProducts(allRows).filter((row) => {
+        if (seenSlugs.has(row.slug)) return false;
+        seenSlugs.add(row.slug);
+        return true;
+      });
       if (!matched.length) {
         console.warn(
           `[Status sync] Parsed ${allRows.length} row(s) but matched 0. Sample rows:`,
