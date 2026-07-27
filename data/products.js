@@ -790,7 +790,8 @@ const productCatalog = [
   },
   {
     ...accountsMeta,
-    badge: "Online",
+    badge: "Coming soon",
+    available: false,
     slug: "r6s-nfa-account",
     name: "R6S Ranked Ready NFA Account",
     priceDisplay: `From ${money(400)}`,
@@ -806,13 +807,13 @@ const productCatalog = [
       ...universalSetupNotes,
     ],
     requirements: ["Valid contact method for delivery", "Support ticket for replacement requests"],
-    variants: [
-      keyVariant("r6s-nfa-account", "level-50-99", "Level 50-99", 400),
-      keyVariant("r6s-nfa-account", "level-100-plus", "Level 100+", 500),
-      keyVariant("r6s-nfa-account", "previous-platinum", "Previous Platinum", 600),
-      keyVariant("r6s-nfa-account", "black-ices-20", "+20 Black Ices", 750),
-      keyVariant("r6s-nfa-account", "previous-emerald", "Previous Emerald", 850),
-    ],
+    variants: disabledVariants("r6s-nfa-account", [
+      ["level-50-99", "Level 50-99", 400],
+      ["level-100-plus", "Level 100+", 500],
+      ["previous-platinum", "Previous Platinum", 600],
+      ["black-ices-20", "+20 Black Ices", 750],
+      ["previous-emerald", "Previous Emerald", 850],
+    ]),
   },
   {
     ...rustMeta,
