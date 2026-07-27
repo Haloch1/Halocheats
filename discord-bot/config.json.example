@@ -1,0 +1,35 @@
+{
+  "targetGuildId": "your_target_guild_id_here",
+  "sourceGuildId": "",
+
+  "modes": {
+    "fullServerCopy": false,
+    "autoCreateChannels": false
+  },
+
+  "channels": {
+    "source_channel_id_1": "target_channel_id_1",
+    "source_channel_id_2": "target_channel_id_2",
+    "source_channel_id_3": "target_channel_id_3"
+  },
+
+  "categorySettings": {
+    "targetCategoryId": "",
+    "copyCategoryStructure": false
+  },
+
+  "botSettings": {
+    "username": "Bot"
+  },
+
+  "loopMessage": {
+    "enabled": false,
+    "sourceChannelId": "channel_id_the_message_lives_in",
+    "messageId": "the_message_id_to_keep_re-copying",
+    "intervalSeconds": 60
+  }
+
+  // For auto-create mode: set autoCreateChannels:true and use array: ["source_id_1", "source_id_2"]
+  // loopMessage: every intervalSeconds, re-fetches sourceChannelId/messageId and forwards
+  // it to that channel's mapped target, same as live mirroring. Hot-reloaded from config.json.
+}

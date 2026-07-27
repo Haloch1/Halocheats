@@ -1,0 +1,66 @@
+# Environment variables
+.env
+
+# Webhook storage (contains sensitive webhook URLs - regenerated automatically if missing)
+webhooks.json
+
+# Real guild/channel/message IDs and loop settings — keep this private,
+# deploy it via Render's "Secret Files" instead. config.json.example shows the shape.
+config.json
+
+# Scratch/debug files, not part of the app
+__test-*.js
+
+# Node modules
+node_modules/
+
+# Log files
+*.log
+npm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Temporary image files
+*.jpg
+*.png
+*.jpeg
+*.gif
+*.webp
+!watermark.png
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
