@@ -2646,7 +2646,11 @@ if (isConfiguredValue(discordBotToken)) {
     }
 
     if (discordStatusSourceChannelId && discordStatusTargetChannelId) {
-      setTimeout(() => reconcileStatusTargets().then(scheduleStatusResync), 20_000);
+      setTimeout(async () => {
+        await reconcileStatusTarget();
+        await syncProductStatus();
+        scheduleStatusResync();
+      }, 20_000);
     }
 
     // Register slash commands
@@ -3832,124 +3836,275 @@ if (isConfiguredValue(discordBotToken)) {
     }
   });
 
-  /* ── Product status relay ──
-     Mirrors the "Product Status Overview" embeds posted by a third-party
-     status bot in discordStatusSourceChannelId into our own
-     discordStatusTargetChannelId, editing the same message(s) in place
-     instead of spamming a new post every update. Triggered live off
-     messageCreate/messageUpdate on the source channel, with a periodic
+  /* ── Product status sync ──
+     Reads the "Product Status Overview" embeds posted by a third-party
+     status bot in discordStatusSourceChannelId, keeps ONLY the
+     games/variants we actually sell, writes the resolved badge
+     ("Undetected"/"Updating"/etc) into Supabase table
+     product_status_overrides (so the live site's product badges update
+     without a redeploy — see loadProductStatusOverrides), applies it to the
+     in-memory catalog immediately, and posts/edits a single filtered embed
+     in discordStatusTargetChannelId. Triggered live off
+     messageCreate/messageUpdate on the source channel (debounced a few
+     seconds since both source embeds land together), with a periodic
      (every ~3h, +random jitter up to 30min) safety-net re-sync in case an
-     event is ever missed (bot restart, gateway hiccup, etc). */
-  const statusMessageMap = new Map(); // source message id -> target message id
+     event is ever missed (bot restart, gateway hiccup, etc).
+
+     One-time setup required: create the Supabase table by running this SQL
+     once in the Supabase project's SQL editor:
+
+       create table if not exists product_status_overrides (
+         product_slug text primary key,
+         badge text not null,
+         source_game text,
+         source_variant text,
+         updated_at timestamptz not null default now()
+       );
+  */
+
+  // Discord status emoji -> our badge label (see status legend screenshot)
+  const STATUS_EMOJI_LABELS = {
+    "🟢": "Undetected",
+    "🟠": "Use at own risk!",
+    "🔵": "Updating",
+    "⚪": "Updating",
+    "🟡": "Testing",
+    "📝": "Discontinued",
+  };
+
+  // Only games/variants XenCheats actually sells. `game` matches the
+  // embed field name; each variant's `match` is tried in order, so more
+  // specific names (e.g. "Mason Lite") must come before generic ones
+  // (e.g. "Mason").
+  const STATUS_PRODUCT_MAP = [
+    {
+      game: /rainbow|r6s?\b|siege/i,
+      label: "Rainbow Six Siege",
+      variants: [
+        { match: /crusader/i, slug: "r6s-crusader" },
+        { match: /chams/i, slug: "r6s-chams" },
+        { match: /no\s*recoil/i, slug: "r6s-no-recoil" },
+        { match: /vega/i, slug: "r6s-vega" },
+        { match: /lethal/i, slug: "r6s-lethal" },
+        { match: /ancient/i, slug: "r6s-ancient" },
+      ],
+    },
+    {
+      game: /fortnite/i,
+      label: "Fortnite",
+      variants: [
+        { match: /arcane/i, slug: "fortnite-arcane" },
+        { match: /ancient/i, slug: "fortnite-ancient" },
+        { match: /dullwave/i, slug: "fortnite-dullwave" },
+      ],
+    },
+    {
+      game: /apex/i,
+      label: "Apex Legends",
+      variants: [
+        { match: /arcane/i, slug: "apex-arcane" },
+        { match: /ancient/i, slug: "apex-ancient" },
+        { match: /dullwave/i, slug: "apex-dullwave" },
+        { match: /mason/i, slug: "apex-mason" },
+      ],
+    },
+    {
+      game: /rust/i,
+      label: "Rust",
+      variants: [
+        { match: /mason\s*lite/i, slug: "rust-mason-lite" },
+        { match: /mason\s*full|\bmason\b/i, slug: "rust-mason-full" },
+        { match: /mrpro|mr\.?\s*pro/i, slug: "rust-mrpro" },
+        { match: /dullwave/i, slug: "rust-dullwave" },
+      ],
+    },
+  ];
 
   function isProductStatusEmbed(embed) {
     return /product status overview/i.test(embed?.title || "");
   }
 
-  function buildStatusRelayEmbed(sourceEmbed, isLast) {
-    const embed = {
-      color: 0xd82028,
-      fields: (sourceEmbed.fields || []).map((f) => ({
-        name: f.name,
-        value: f.value.length > 1024 ? `${f.value.slice(0, 1000)}…` : f.value,
-        inline: false,
-      })),
-    };
-    if (isLast) {
-      const now = Math.floor(Date.now() / 1000);
-      embed.description = `**Last updated:** <t:${now}:f> (<t:${now}:R>)`;
-      embed.footer = { text: "XenCheats | Live product status" };
-      embed.timestamp = new Date().toISOString();
+  // Pulls "<emoji> Variant Name" lines out of each field's value. We only
+  // have rendered screenshots to go on (not raw markdown from the source
+  // bot), so this is intentionally tolerant of bullets/bold/colons.
+  function parseStatusEmbedFields(embed) {
+    const rows = [];
+    const emojiPattern = /[🟢🟠🔵⚪🟡📝]/u;
+    for (const field of embed.fields || []) {
+      const gameName = (field.name || "").replace(/[_*#:]/g, "").trim();
+      const lines = (field.value || "").split("\n");
+      for (const line of lines) {
+        const emojiMatch = line.match(emojiPattern);
+        if (!emojiMatch) continue;
+        const variantName = line
+          .slice(0, emojiMatch.index)
+          .replace(/^[\s•\-*]+/, "")
+          .replace(/\*+/g, "")
+          .replace(/:\s*$/, "")
+          .trim();
+        if (!variantName) continue;
+        rows.push({ game: gameName, variant: variantName, emoji: emojiMatch[0] });
+      }
     }
-    return embed;
+    return rows;
   }
 
-  async function relayStatusMessage(sourceMessage) {
-    if (!discordBot) return;
+  function matchOwnedProducts(parsedRows) {
+    const matched = [];
+    for (const row of parsedRows) {
+      const gameConfig = STATUS_PRODUCT_MAP.find((g) => g.game.test(row.game));
+      if (!gameConfig) continue;
+      const variantConfig = gameConfig.variants.find((v) => v.match.test(row.variant));
+      if (!variantConfig) continue;
+      matched.push({
+        slug: variantConfig.slug,
+        badge: STATUS_EMOJI_LABELS[row.emoji] || "Unknown",
+        variant: row.variant,
+        displayGame: gameConfig.label,
+      });
+    }
+    return matched;
+  }
+
+  async function applyMatchedProductStatuses(matched) {
+    if (!matched.length) return;
+    for (const row of matched) {
+      const product = products.find((p) => p.slug === row.slug);
+      if (product) product.badge = row.badge;
+    }
+    if (!supabaseAdmin) return;
     try {
-      const sourceEmbed = sourceMessage.embeds?.[0];
-      if (!isProductStatusEmbed(sourceEmbed)) return;
-
-      const targetChannel = await discordBot.channels.fetch(discordStatusTargetChannelId).catch(() => null);
-      if (!targetChannel?.isTextBased?.()) {
-        console.warn("[Status relay] Can't access target channel");
-        return;
-      }
-
-      const knownSourceIds = [...statusMessageMap.keys()];
-      if (!knownSourceIds.includes(sourceMessage.id)) knownSourceIds.push(sourceMessage.id);
-      const isLast = knownSourceIds[knownSourceIds.length - 1] === sourceMessage.id;
-      const builtEmbed = buildStatusRelayEmbed(sourceEmbed, isLast);
-
-      const targetMessageId = statusMessageMap.get(sourceMessage.id);
-      const targetMessage = targetMessageId
-        ? await targetChannel.messages.fetch(targetMessageId).catch(() => null)
-        : null;
-
-      if (targetMessage) {
-        await targetMessage.edit({ embeds: [builtEmbed] });
-      } else {
-        const sent = await targetChannel.send({ embeds: [builtEmbed] });
-        statusMessageMap.set(sourceMessage.id, sent.id);
-      }
+      const upserts = matched.map((row) => ({
+        product_slug: row.slug,
+        badge: row.badge,
+        source_game: row.displayGame,
+        source_variant: row.variant,
+        updated_at: new Date().toISOString(),
+      }));
+      const { error } = await supabaseAdmin
+        .from("product_status_overrides")
+        .upsert(upserts, { onConflict: "product_slug" });
+      if (error) console.error("[Status sync] Supabase upsert failed:", error.message);
     } catch (err) {
-      console.error("[Status relay] Failed:", err.message);
+      console.error("[Status sync] Supabase upsert error:", err.message);
     }
   }
 
-  /* Startup: pair each currently-live source status message with an
-     existing message we already posted in the target channel (if the bot
-     restarted and they're still there), so we keep editing the same
-     messages instead of accumulating duplicates on every deploy. */
-  async function reconcileStatusTargets() {
+  function buildOwnedStatusEmbed(matched) {
+    const byGame = new Map();
+    for (const row of matched) {
+      if (!byGame.has(row.displayGame)) byGame.set(row.displayGame, []);
+      byGame.get(row.displayGame).push(row);
+    }
+    const now = Math.floor(Date.now() / 1000);
+    const fields = [...byGame.entries()].map(([game, rows]) => ({
+      name: game,
+      value: rows.map((r) => `${STATUS_EMOJI_LABELS_REVERSE(r.badge)} ${r.variant} — ${r.badge}`).join("\n"),
+      inline: true,
+    }));
+    return {
+      title: "📌 XenCheats Product Status",
+      color: 0xd82028,
+      fields: fields.length
+        ? fields
+        : [{ name: "No data", value: "Couldn't match any tracked products this cycle.", inline: false }],
+      description: `**Last updated:** <t:${now}:f> (<t:${now}:R>)`,
+      footer: { text: "XenCheats | Live product status" },
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  function STATUS_EMOJI_LABELS_REVERSE(badge) {
+    return Object.entries(STATUS_EMOJI_LABELS).find(([, label]) => label === badge)?.[0] || "❔";
+  }
+
+  let statusTargetMessageId = null;
+
+  async function syncProductStatus() {
     if (!discordBot) return;
     try {
       const sourceChannel = await discordBot.channels.fetch(discordStatusSourceChannelId).catch(() => null);
-      const targetChannel = await discordBot.channels.fetch(discordStatusTargetChannelId).catch(() => null);
-      if (!sourceChannel?.isTextBased?.() || !targetChannel?.isTextBased?.()) {
-        console.warn("[Status relay] Missing access to source or target channel");
+      if (!sourceChannel?.isTextBased?.()) {
+        console.warn("[Status sync] Can't access source channel");
         return;
       }
 
-      const recentSource = await sourceChannel.messages.fetch({ limit: 20 }).catch(() => null);
-      const sourceMessages = recentSource
-        ? [...recentSource.values()].filter((m) => isProductStatusEmbed(m.embeds?.[0])).sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+      const recent = await sourceChannel.messages.fetch({ limit: 20 }).catch(() => null);
+      const statusMessages = recent
+        ? [...recent.values()].filter((m) => isProductStatusEmbed(m.embeds?.[0]))
         : [];
-
-      const recentTarget = await targetChannel.messages.fetch({ limit: 20 }).catch(() => null);
-      const ownTargetMessages = recentTarget
-        ? [...recentTarget.values()].filter((m) => m.author?.id === discordBot.user.id).sort((a, b) => a.createdTimestamp - b.createdTimestamp)
-        : [];
-
-      sourceMessages.forEach((message, i) => {
-        if (ownTargetMessages[i]) statusMessageMap.set(message.id, ownTargetMessages[i].id);
-      });
-
-      for (const message of sourceMessages) {
-        await relayStatusMessage(message);
+      if (!statusMessages.length) {
+        console.warn("[Status sync] No status embeds found in source channel");
+        return;
       }
-      console.log(`[Status relay] Synced ${sourceMessages.length} status message(s)`);
+
+      const allRows = [];
+      for (const msg of statusMessages) {
+        allRows.push(...parseStatusEmbedFields(msg.embeds[0]));
+      }
+      const matched = matchOwnedProducts(allRows);
+      await applyMatchedProductStatuses(matched);
+
+      const targetChannel = await discordBot.channels.fetch(discordStatusTargetChannelId).catch(() => null);
+      if (!targetChannel?.isTextBased?.()) {
+        console.warn("[Status sync] Can't access target channel");
+        return;
+      }
+
+      const embed = buildOwnedStatusEmbed(matched);
+      const targetMessage = statusTargetMessageId
+        ? await targetChannel.messages.fetch(statusTargetMessageId).catch(() => null)
+        : null;
+
+      if (targetMessage) {
+        await targetMessage.edit({ embeds: [embed] });
+      } else {
+        const sent = await targetChannel.send({ embeds: [embed] });
+        statusTargetMessageId = sent.id;
+      }
+      console.log(`[Status sync] Synced ${matched.length} tracked product status row(s)`);
     } catch (err) {
-      console.error("[Status relay] Reconcile failed:", err.message);
+      console.error("[Status sync] Failed:", err.message);
     }
   }
 
-  discordBot.on("messageCreate", (message) => {
-    if (message.channelId === discordStatusSourceChannelId) {
-      relayStatusMessage(message).catch(() => {});
+  /* Startup: reuse our own last status message in the target channel (if
+     the bot restarted and it's still there) instead of posting a new one. */
+  async function reconcileStatusTarget() {
+    if (!discordBot) return;
+    try {
+      const targetChannel = await discordBot.channels.fetch(discordStatusTargetChannelId).catch(() => null);
+      if (!targetChannel?.isTextBased?.()) return;
+      const recentTarget = await targetChannel.messages.fetch({ limit: 20 }).catch(() => null);
+      const ownMessage = recentTarget
+        ? [...recentTarget.values()].find(
+            (m) => m.author?.id === discordBot.user.id && /product status/i.test(m.embeds?.[0]?.title || "")
+          )
+        : null;
+      if (ownMessage) statusTargetMessageId = ownMessage.id;
+    } catch (err) {
+      console.error("[Status sync] Reconcile failed:", err.message);
     }
+  }
+
+  let statusSyncDebounce = null;
+  function scheduleStatusSync(delayMs = 5000) {
+    clearTimeout(statusSyncDebounce);
+    statusSyncDebounce = setTimeout(() => syncProductStatus().catch(() => {}), delayMs);
+  }
+
+  discordBot.on("messageCreate", (message) => {
+    if (message.channelId === discordStatusSourceChannelId) scheduleStatusSync();
   });
 
   discordBot.on("messageUpdate", (oldMessage, newMessage) => {
-    if (newMessage.channelId === discordStatusSourceChannelId) {
-      relayStatusMessage(newMessage).catch(() => {});
-    }
+    if (newMessage.channelId === discordStatusSourceChannelId) scheduleStatusSync();
   });
 
   function scheduleStatusResync() {
     const jitterMs = Math.floor(Math.random() * 30 * 60 * 1000); // up to +30 min
     setTimeout(() => {
-      reconcileStatusTargets().finally(scheduleStatusResync);
+      syncProductStatus().finally(scheduleStatusResync);
     }, 3 * 60 * 60 * 1000 + jitterMs).unref();
   }
 
@@ -14958,7 +15113,34 @@ async function loadProductOverrides() {
   }
 }
 
-loadProductOverrides().then(() => {
+/* Live "Undetected/Updating/etc" badges written by the Discord status-sync bot
+   (see the Product status sync block above). Reads from Supabase instead of
+   requiring a redeploy every time a badge changes. Runs once at startup and
+   then on a timer so the site picks up bot-driven changes without a restart. */
+async function loadProductStatusOverrides() {
+  if (!supabaseAdmin) return;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("product_status_overrides")
+      .select("product_slug, badge");
+    if (error) {
+      console.error("[Status sync] Failed to load status overrides:", error.message);
+      return;
+    }
+    if (!data || !data.length) return;
+    for (const row of data) {
+      const product = products.find((p) => p.slug === row.product_slug);
+      if (product && row.badge) product.badge = row.badge;
+    }
+    console.log(`[Status sync] Loaded ${data.length} product status override(s) from database.`);
+  } catch (err) {
+    console.error("[Status sync] Error loading status overrides:", err.message);
+  }
+}
+
+Promise.all([loadProductOverrides(), loadProductStatusOverrides()]).then(() => {
+  setInterval(loadProductStatusOverrides, 5 * 60 * 1000).unref();
+
   const httpServer = app.listen(port, () => {
     console.log(`API server listening on http://localhost:${port}`);
   });
