@@ -4,7 +4,14 @@ const path = require('path');
 require('dotenv').config();
 
 const WEBHOOKS_FILE = path.join(__dirname, 'webhooks.json');
-const CONFIG_FILE = path.join(__dirname, 'config.json');
+
+// Render's "Secret Files" feature (used to keep config.json out of git) mounts
+// files at /etc/secrets/<filename>, not into the app's own directory. Check the
+// local path first (works when running on your own machine), then fall back to
+// Render's secret-file location (works when deployed).
+const LOCAL_CONFIG_FILE = path.join(__dirname, 'config.json');
+const RENDER_SECRET_CONFIG_FILE = '/etc/secrets/config.json';
+const CONFIG_FILE = fs.existsSync(LOCAL_CONFIG_FILE) ? LOCAL_CONFIG_FILE : RENDER_SECRET_CONFIG_FILE;
 
 // Load configuration from config.json
 let config = {
@@ -26,7 +33,8 @@ let config = {
         enabled: false,
         sourceChannelId: '',
         messageId: '',
-        intervalSeconds: 60
+        intervalSeconds: 60,
+        randomJitterSeconds: 0
     }
 };
 
@@ -506,16 +514,35 @@ client.on('messageCreate', async message => {
 // from a source channel to its mapped target channel, on an interval.
 // Configure via config.json -> "loopMessage".
 // ============================================================
-let loopMessageInterval = null;
+let loopMessageTimer = null;
 let loopMessageObj = null; // cached fetched message
 
 function stopLoopMessage() {
-    if (loopMessageInterval) {
-        clearInterval(loopMessageInterval);
-        loopMessageInterval = null;
-        console.log('🛑 Stopped loop-message interval');
+    if (loopMessageTimer) {
+        clearTimeout(loopMessageTimer);
+        loopMessageTimer = null;
+        console.log('🛑 Stopped loop-message timer');
     }
     loopMessageObj = null;
+}
+
+// Schedules the next send at baseMs + a random 0..jitterMs on top, then
+// re-schedules itself after each send (so every gap is independently random,
+// not just a fixed interval with one-time jitter).
+function scheduleNextLoopSend(baseMs, jitterMs) {
+    const delay = baseMs + Math.floor(Math.random() * (jitterMs + 1));
+    console.log(`⏱️ Next looped send in ~${Math.round(delay / 60000)} min`);
+
+    loopMessageTimer = setTimeout(async () => {
+        if (!loopMessageObj) return;
+        console.log(`\n🔁 Re-sending looped message ${loopMessageObj.id}...`);
+        try {
+            await forwardMessage(loopMessageObj);
+        } catch (error) {
+            console.error(`❌ Loop-message send failed: ${error.message}`);
+        }
+        scheduleNextLoopSend(baseMs, jitterMs);
+    }, delay);
 }
 
 async function startLoopMessage() {
@@ -530,7 +557,8 @@ async function startLoopMessage() {
         return;
     }
 
-    const intervalMs = Math.max(1, cfg.intervalSeconds || 60) * 1000;
+    const baseMs = Math.max(1, cfg.intervalSeconds || 60) * 1000;
+    const jitterMs = Math.max(0, cfg.randomJitterSeconds || 0) * 1000;
 
     // Make sure this channel is tracked so getOrCreateWebhook can map it
     if (!sourceChannelIds.includes(cfg.sourceChannelId)) {
@@ -540,21 +568,13 @@ async function startLoopMessage() {
     try {
         const sourceChannel = await client.channels.fetch(cfg.sourceChannelId);
         loopMessageObj = await sourceChannel.messages.fetch(cfg.messageId);
-        console.log(`🔁 Loop-message armed: will re-copy message ${cfg.messageId} from #${sourceChannel.name} every ${intervalMs / 1000}s`);
+        console.log(`🔁 Loop-message armed: will re-copy message ${cfg.messageId} from #${sourceChannel.name} every ${baseMs / 1000}s (+0-${jitterMs / 1000}s random)`);
     } catch (error) {
         console.error(`❌ Failed to fetch loop-message target: ${error.message}`);
         return;
     }
 
-    loopMessageInterval = setInterval(async () => {
-        if (!loopMessageObj) return;
-        console.log(`\n🔁 Re-sending looped message ${loopMessageObj.id}...`);
-        try {
-            await forwardMessage(loopMessageObj);
-        } catch (error) {
-            console.error(`❌ Loop-message send failed: ${error.message}`);
-        }
-    }, intervalMs);
+    scheduleNextLoopSend(baseMs, jitterMs);
 }
 
 client.login(TOKEN).catch(err => {
