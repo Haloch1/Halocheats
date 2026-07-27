@@ -4056,7 +4056,7 @@ if (isConfiguredValue(discordBotToken)) {
       inline: true,
     }));
     const legendField = {
-      name: "Legend",
+      name: "Status Code:",
       value: "💚 Undetected  •  💙 Updating  •  🧡 Use at own risk!  •  💛 Testing  •  🖤 Discontinued",
       inline: false,
     };
