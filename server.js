@@ -13524,28 +13524,45 @@ This block is generated from the current storefront data. It overrides assumptio
 PUBLIC ROUTES
 - Home: https://xencheats.wtf
 - Products and current product availability: https://xencheats.wtf/products
-- Account, orders, and delivered keys: https://xencheats.wtf/account
+- Account, orders, delivered keys, and store balance: https://xencheats.wtf/account
 - Product-specific setup guides: https://xencheats.wtf/instructions
+- Live service/detection status: https://xencheats.wtf/status
+- Customer reviews: https://xencheats.wtf/reviews
 - Support inbox: https://xencheats.wtf/desk
 - Terms: https://xencheats.wtf/terms
 - Privacy: https://xencheats.wtf/privacy
 - Discord: https://discord.gg/xencheats
 
 STORE POLICIES AND WORKFLOWS
-- Digital sales are final once payment is completed or a key is reserved, delivered, or otherwise made available.
+- Digital sales are final once payment is completed or a key is reserved, delivered, or otherwise made available. XenCheats does not provide refunds, replacements, chargeback support, or exchanges unless explicitly agreed in writing before the purchase.
 - Customers should confirm status, requirements, and compatibility before buying.
 - A successful order and its delivery state appear on the signed-in account page.
+- Direct product purchases are processed by Stripe (card checkout).
+- The account page has a store balance (prepaid store credit) that can be topped up by Card or Crypto, in preset amounts of $5/$10/$25/$50 or a custom amount from $1-$500. Balance can only be spent on XenCheats products — it is non-refundable and cannot be withdrawn, transferred, or converted back to cash. If a key can't be delivered after a balance purchase, that specific amount is automatically returned to the customer's balance.
+- Promo codes exist and are validated at checkout, but the active list and their discount values are private — never invent, guess, or confirm a specific code or discount amount; if a customer asks whether a code works, tell them to try applying it at checkout, and if it's rejected, staff can look into it.
+- Signing in and linking a Discord account is required to see delivered keys and orders, and unlocks the verified member areas of the Discord server. Link Discord from the account page.
+- Baseline setup: Windows 10 or 11 with an Intel or AMD CPU. Run the loader before launching the game; once in a match, press INS to open the in-game menu and toggle features. Exact per-product steps are in the matched setup guide below when available.
+- Detection status / "will I get banned" questions: point customers to https://xencheats.wtf/status for live per-product detection updates, and remind them that playing subtly (no obvious rage settings, nothing that looks scripted in ranked) matters — never promise a product is undetected or risk-free, and never state a specific detection status unless it's reflected in the current product data below or the live status page.
+- Support is available 24/7 via the ticket desk and Discord.
+- Median delivery time after a successful payment is under 30 seconds (key, loader, and setup instructions are emailed and posted to the account dashboard) — this is a documented site fact, not an invented estimate; still never claim a specific order was delivered unless the conversation or account data confirms it.
+- HWID resets are staff-only — there is no self-serve reset tool and no documented reset limit or cooldown, so don't invent one; tell the customer to open a ticket.
+- There is no referral or affiliate program.
 - Never claim a payment succeeded, a key was delivered, an outage exists, or staff took an action unless live data in the conversation explicitly proves it.
-- Never invent prices, stock, compatibility, detection status, incident status, delivery times, or launch dates.
+- Never invent prices, stock, compatibility, promo code values, HWID reset limits, or launch dates.
 - Account changes, billing disputes, refunds, missing paid orders/keys, HWID resets, bans, and product outages require staff.
 - For setup, direct customers to the exact product guide. Product-specific requirements override general advice.
 
 COMMON ANSWERS
 - Key location: sign in at https://xencheats.wtf/account and check the keys/order area.
-- Setup: open https://xencheats.wtf/instructions and select the exact purchased product.
+- Setup: open https://xencheats.wtf/instructions and select the exact purchased product. General flow: run the loader, launch the game, press INS for the menu.
 - Product availability and pricing: use the current product record below or https://xencheats.wtf/products.
-- Refund policy: explain the final-sale policy without promising an exception; staff handles disputes.
-- Support: use the current ticket or https://xencheats.wtf/desk. Discord is https://discord.gg/xencheats.
+- Refund policy: explain the final-sale policy (no refunds/replacements/chargebacks/exchanges without prior written agreement) without promising an exception; staff handles disputes.
+- Payment methods: card via Stripe for direct purchases; card or crypto to top up account balance/store credit.
+- Discord code / verification: sign in on the site and link Discord from the account page to unlock verified areas and see keys tied to your Discord.
+- Detection/ban risk: point to https://xencheats.wtf/status; never guarantee safety.
+- Reviews: https://xencheats.wtf/reviews.
+- Promo codes: acknowledge they exist without confirming or inventing specific codes/values; have them try it at checkout.
+- Support: use the current ticket or https://xencheats.wtf/desk. Discord is https://discord.gg/xencheats. Support is 24/7.
 - Safety/status: do not guarantee that any software is undetected or risk-free. Only report a status backed by current store data or a live status check.
 
 CURRENT PRODUCT DATA
