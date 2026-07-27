@@ -3924,26 +3924,53 @@ if (isConfiguredValue(discordBotToken)) {
     return /product status overview/i.test(embed?.title || "");
   }
 
-  // Pulls "<emoji> Variant Name" lines out of each field's value. We only
-  // have rendered screenshots to go on (not raw markdown from the source
-  // bot), so this is intentionally tolerant of bullets/bold/colons.
+  // Pulls "<emoji> Variant Name" (or "Variant Name <emoji>") lines out of
+  // each field's value. Handles both plain unicode status emoji and custom
+  // Discord emoji (<:name:id>), since we can't be sure which the source bot
+  // uses just from screenshots.
   function parseStatusEmbedFields(embed) {
     const rows = [];
     const emojiPattern = /[🟢🟠🔵⚪🟡📝]/u;
+    const customEmojiPattern = /<a?:(\w+):\d+>/;
+    const customEmojiToUnicode = (name) => {
+      const n = name.toLowerCase();
+      if (/green/.test(n)) return "🟢";
+      if (/orange/.test(n)) return "🟠";
+      if (/blue/.test(n)) return "🔵";
+      if (/white|gray|grey/.test(n)) return "⚪";
+      if (/yellow/.test(n)) return "🟡";
+      if (/memo|discontinu/.test(n)) return "📝";
+      return null;
+    };
+
     for (const field of embed.fields || []) {
       const gameName = (field.name || "").replace(/[_*#:]/g, "").trim();
       const lines = (field.value || "").split("\n");
-      for (const line of lines) {
-        const emojiMatch = line.match(emojiPattern);
-        if (!emojiMatch) continue;
-        const variantName = line
-          .slice(0, emojiMatch.index)
-          .replace(/^[\s•\-*]+/, "")
-          .replace(/\*+/g, "")
-          .replace(/:\s*$/, "")
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) continue;
+
+        let emoji = null;
+        let remainder = line;
+
+        const unicodeMatch = line.match(emojiPattern);
+        const customMatch = line.match(customEmojiPattern);
+        if (unicodeMatch) {
+          emoji = unicodeMatch[0];
+          remainder = line.replace(emojiPattern, "");
+        } else if (customMatch) {
+          emoji = customEmojiToUnicode(customMatch[1]);
+          if (emoji) remainder = line.replace(customEmojiPattern, "");
+        }
+        if (!emoji) continue;
+
+        const variantName = remainder
+          .replace(/[_*]/g, "")
+          .replace(/^[\s•\-:]+|[\s•\-:]+$/g, "")
           .trim();
         if (!variantName) continue;
-        rows.push({ game: gameName, variant: variantName, emoji: emojiMatch[0] });
+
+        rows.push({ game: gameName, variant: variantName, emoji });
       }
     }
     return rows;
@@ -4043,6 +4070,12 @@ if (isConfiguredValue(discordBotToken)) {
         allRows.push(...parseStatusEmbedFields(msg.embeds[0]));
       }
       const matched = matchOwnedProducts(allRows);
+      if (!matched.length) {
+        console.warn(
+          `[Status sync] Parsed ${allRows.length} row(s) but matched 0. Sample rows:`,
+          JSON.stringify(allRows.slice(0, 15))
+        );
+      }
       await applyMatchedProductStatuses(matched);
 
       const targetChannel = await discordBot.channels.fetch(discordStatusTargetChannelId).catch(() => null);
