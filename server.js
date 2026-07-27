@@ -3862,14 +3862,23 @@ if (isConfiguredValue(discordBotToken)) {
        );
   */
 
-  // Discord status emoji -> our badge label (see status legend screenshot)
+  // Discord status emoji -> our badge label. The source bot actually uses
+  // colored hearts (💚/💙/🖤), not the colored circles from the legend
+  // screenshot — confirmed 2026-07-26 from a raw embed dump. Circle
+  // variants are kept too in case the bot ever switches formats.
   const STATUS_EMOJI_LABELS = {
     "🟢": "Undetected",
+    "💚": "Undetected",
     "🟠": "Use at own risk!",
+    "🧡": "Use at own risk!",
     "🔵": "Updating",
+    "💙": "Updating",
     "⚪": "Updating",
+    "🤍": "Updating",
     "🟡": "Testing",
+    "💛": "Testing",
     "📝": "Discontinued",
+    "🖤": "Discontinued",
   };
 
   // Only games/variants XenCheats actually sells. `game` matches the
@@ -3912,8 +3921,8 @@ if (isConfiguredValue(discordBotToken)) {
       game: /rust/i,
       label: "Rust",
       variants: [
-        { match: /mason\s*lite/i, slug: "rust-mason-lite" },
-        { match: /mason\s*full|\bmason\b/i, slug: "rust-mason-full" },
+        { match: /mason[\s-]*lite/i, slug: "rust-mason-lite" },
+        { match: /mason[\s-]*full|\bmason\b/i, slug: "rust-mason-full" },
         { match: /mrpro|mr\.?\s*pro/i, slug: "rust-mrpro" },
         { match: /dullwave/i, slug: "rust-dullwave" },
       ],
@@ -3924,13 +3933,14 @@ if (isConfiguredValue(discordBotToken)) {
     return /product status overview/i.test(embed?.title || "");
   }
 
-  // Pulls "<emoji> Variant Name" (or "Variant Name <emoji>") lines out of
-  // each field's value. Handles both plain unicode status emoji and custom
-  // Discord emoji (<:name:id>), since we can't be sure which the source bot
-  // uses just from screenshots.
+  // Pulls "• Variant: <emoji> • [links...]" lines out of each field's
+  // value (the source bot's actual format, confirmed from a raw embed
+  // dump 2026-07-26). Falls back to "<emoji> Variant" (emoji leading) and
+  // custom Discord emoji (<:name:id>) in case the source bot's format
+  // ever changes.
   function parseStatusEmbedFields(embed) {
     const rows = [];
-    const emojiPattern = /[🟢🟠🔵⚪🟡📝]/u;
+    const emojiPattern = /[🟢🟠🔵⚪🟡📝💚🧡💙🤍💛🖤]/u;
     const customEmojiPattern = /<a?:(\w+):\d+>/;
     const customEmojiToUnicode = (name) => {
       const n = name.toLowerCase();
@@ -3942,6 +3952,11 @@ if (isConfiguredValue(discordBotToken)) {
       if (/memo|discontinu/.test(n)) return "📝";
       return null;
     };
+    const clean = (s) =>
+      s
+        .replace(/[_*]/g, "")
+        .replace(/^[\s•\-:]+|[\s•\-:]+$/g, "")
+        .trim();
 
     for (const field of embed.fields || []) {
       const gameName = (field.name || "").replace(/[_*#:]/g, "").trim();
@@ -3951,23 +3966,31 @@ if (isConfiguredValue(discordBotToken)) {
         if (!line) continue;
 
         let emoji = null;
-        let remainder = line;
+        let emojiIndex = -1;
+        let emojiLength = 0;
 
         const unicodeMatch = line.match(emojiPattern);
         const customMatch = line.match(customEmojiPattern);
         if (unicodeMatch) {
           emoji = unicodeMatch[0];
-          remainder = line.replace(emojiPattern, "");
+          emojiIndex = unicodeMatch.index;
+          emojiLength = unicodeMatch[0].length;
         } else if (customMatch) {
           emoji = customEmojiToUnicode(customMatch[1]);
-          if (emoji) remainder = line.replace(customEmojiPattern, "");
+          if (emoji) {
+            emojiIndex = customMatch.index;
+            emojiLength = customMatch[0].length;
+          }
         }
         if (!emoji) continue;
 
-        const variantName = remainder
-          .replace(/[_*]/g, "")
-          .replace(/^[\s•\-:]+|[\s•\-:]+$/g, "")
-          .trim();
+        // Real format is "Variant: <emoji> ...links", so prefer the text
+        // BEFORE the emoji; fall back to text after it (up to the next
+        // bullet/link) for a leading-emoji format.
+        let variantName = clean(line.slice(0, emojiIndex));
+        if (!variantName) {
+          variantName = clean(line.slice(emojiIndex + emojiLength).split(/[•\[]/)[0]);
+        }
         if (!variantName) continue;
 
         rows.push({ game: gameName, variant: variantName, emoji });
@@ -4068,24 +4091,6 @@ if (isConfiguredValue(discordBotToken)) {
       const allRows = [];
       for (const msg of statusMessages) {
         allRows.push(...parseStatusEmbedFields(msg.embeds[0]));
-      }
-
-      if (!allRows.length) {
-        // Nothing parsed at all — dump the raw embed shape so we can see
-        // exactly what the source bot sends (title/description/field
-        // name+value), since 0 parsed rows means our emoji/format
-        // assumptions don't match reality.
-        for (const msg of statusMessages) {
-          const e = msg.embeds[0];
-          console.warn(
-            "[Status sync] RAW EMBED:",
-            JSON.stringify({
-              title: e.title,
-              description: e.description,
-              fields: (e.fields || []).map((f) => ({ name: f.name, value: f.value })),
-            })
-          );
-        }
       }
 
       const matched = matchOwnedProducts(allRows);
