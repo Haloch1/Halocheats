@@ -166,7 +166,7 @@ const OWNER_ONLY_COMMANDS = new Set([
   "ticket-panel", "invest", "investments", "uninvest", "accountstats",
   "leaderboard", "reinvite-all",
 ]);
-const ADMIN_ONLY_COMMANDS = new Set(["orderlookup", "staffactivity", "ips", "media-panel"]);
+const ADMIN_ONLY_COMMANDS = new Set(["orderlookup", "staffactivity", "ips", "media-panel", "msglookup"]);
 const discordStaffGuideChannelId = process.env.DISCORD_STAFF_GUIDE_CHANNEL_ID || "1530269093100388583";
 const pendingSchedules = new Map(); // id -> { timer, title, postAt }
 const resellerBuyLocks = new Map(); // inventorySlug -> Promise that resolves when buy completes
@@ -2824,6 +2824,12 @@ if (isConfiguredValue(discordBotToken)) {
           .setName("media-panel")
           .setDescription("Post the media/content creator program rules (admin only)")
           .addChannelOption(o => o.setName("channel").setDescription("Channel to post in (default: media channel)").setRequired(false)),
+        new SlashCommandBuilder()
+          .setName("msglookup")
+          .setDescription("Look up a message by link or ID and show its content (admin only)")
+          .addStringOption(o => o.setName("link").setDescription("Full message link (right-click a message > Copy Message Link)").setRequired(false))
+          .addStringOption(o => o.setName("message_id").setDescription("Message ID (use with the channel option)").setRequired(false))
+          .addChannelOption(o => o.setName("channel").setDescription("Channel the message is in (defaults to this channel)").setRequired(false)),
       ];
 
       const commands = commandBuilders.map((command) => {
@@ -5417,6 +5423,84 @@ ${rows || '<div class="ct">No messages.</div>'}
         });
       } catch (err) {
         console.error("[Slash /ips]", err.message);
+        return interaction.editReply({ embeds: [{ description: `Lookup failed: ${err.message}`, color: 0xff4444 }] });
+      }
+    }
+
+    if (interaction.commandName === "msglookup") {
+      if (!isDiscordAdminInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const link = interaction.options.getString("link")?.trim() || "";
+        const rawId = interaction.options.getString("message_id")?.trim() || "";
+        const channelOption = interaction.options.getChannel("channel");
+
+        let channelId = channelOption?.id || "";
+        let messageId = "";
+
+        if (link) {
+          const match = link.match(/channels\/\d+\/(\d+)\/(\d+)/);
+          if (!match) {
+            return interaction.editReply({ embeds: [{ description: "That doesn't look like a valid message link. Right-click a message and use Copy Message Link.", color: 0xff4444 }] });
+          }
+          [, channelId, messageId] = match;
+        } else if (rawId) {
+          messageId = rawId;
+          channelId = channelId || interaction.channelId;
+        } else {
+          return interaction.editReply({ embeds: [{ description: "Provide a message link, or a message ID (optionally with a channel).", color: 0xff4444 }] });
+        }
+
+        if (!/^\d{15,25}$/.test(messageId)) {
+          return interaction.editReply({ embeds: [{ description: "That message ID doesn't look valid.", color: 0xff4444 }] });
+        }
+
+        const channel = await discordBot.channels.fetch(channelId).catch(() => null);
+        if (!channel || !channel.isTextBased?.()) {
+          return interaction.editReply({ embeds: [{ description: "Can't access that channel — wrong ID, or I'm not in it.", color: 0xff4444 }] });
+        }
+
+        const message = await channel.messages.fetch(messageId).catch(() => null);
+        if (!message) {
+          return interaction.editReply({ embeds: [{ description: "Couldn't find that message. Double-check the link/ID and that I can see that channel.", color: 0xff4444 }] });
+        }
+
+        const attachments = [...message.attachments.values()];
+        const imageAttachment = attachments.find((a) => a.contentType?.startsWith("image/"));
+        const content = message.content?.trim() || "*(no text — embed, attachment, or system message only)*";
+
+        const fields = [
+          { name: "Channel", value: `<#${channel.id}>`, inline: true },
+          { name: "Sent", value: `<t:${Math.floor(message.createdTimestamp / 1000)}:R>`, inline: true },
+        ];
+        if (attachments.length) {
+          fields.push({
+            name: `Attachments (${attachments.length})`,
+            value: attachments.map((a) => `[${a.name}](${a.url})`).join("\n").slice(0, 1024),
+            inline: false,
+          });
+        }
+
+        await interaction.editReply({
+          embeds: [{
+            title: "Message found",
+            description: content.length > 4000 ? `${content.slice(0, 4000)}…` : content,
+            color: 0xd82028,
+            author: { name: `${message.author.tag} (${message.author.id})`, icon_url: message.author.displayAvatarURL?.() },
+            fields,
+            image: imageAttachment ? { url: imageAttachment.url } : undefined,
+            footer: { text: "Use the button below to jump to it" },
+          }],
+          components: [
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel("Jump to message").setURL(message.url),
+            ),
+          ],
+        });
+      } catch (err) {
+        console.error("[Slash /msglookup]", err.message);
         return interaction.editReply({ embeds: [{ description: `Lookup failed: ${err.message}`, color: 0xff4444 }] });
       }
     }
