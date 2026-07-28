@@ -64,13 +64,13 @@ body {
   font-family: var(--font-body);
   line-height: 1.65;
   background:
-    radial-gradient(circle at 92% 3%, rgba(255, 45, 56, 0.6), transparent 36rem),
-    radial-gradient(circle at 2% 46%, rgba(216, 32, 40, 0.46), transparent 40rem),
-    radial-gradient(circle at 64% 100%, rgba(180, 15, 24, 0.38), transparent 44rem),
-    radial-gradient(circle at 50% 45%, rgba(255, 90, 98, 0.2), transparent 50rem),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 180, 184, 0.5)),
-    linear-gradient(rgba(216, 32, 40, 0.14) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(216, 32, 40, 0.14) 1px, transparent 1px),
+    radial-gradient(circle at 92% 3%, rgba(255, 45, 56, 0.8), transparent 30rem),
+    radial-gradient(circle at 2% 46%, rgba(216, 32, 40, 0.62), transparent 34rem),
+    radial-gradient(circle at 64% 100%, rgba(180, 15, 24, 0.52), transparent 38rem),
+    radial-gradient(circle at 50% 45%, rgba(255, 90, 98, 0.3), transparent 44rem),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.04), rgba(255, 110, 116, 0.65)),
+    linear-gradient(rgba(216, 32, 40, 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(216, 32, 40, 0.18) 1px, transparent 1px),
     var(--paper);
   background-size: auto, auto, auto, auto, auto, 42px 42px, 42px 42px, auto;
 }
@@ -82,9 +82,9 @@ body::before {
   content: "";
   pointer-events: none;
   background:
-    radial-gradient(circle at 82% 24%, rgba(216, 32, 40, 0.3), transparent 32rem),
-    radial-gradient(circle at 14% 82%, rgba(255, 55, 66, 0.28), transparent 34rem),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 30%, rgba(255, 180, 184, 0.72));
+    radial-gradient(circle at 82% 24%, rgba(216, 32, 40, 0.42), transparent 28rem),
+    radial-gradient(circle at 14% 82%, rgba(255, 55, 66, 0.4), transparent 30rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 30%, rgba(255, 110, 116, 0.85));
 }
 
 body.modal-open {
@@ -4041,13 +4041,13 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   body {
     background-size: auto, auto, auto, auto, auto, 64px 64px, 64px 64px, auto;
     background-image:
-      radial-gradient(circle at 92% 3%, rgba(255, 45, 56, 0.4), transparent 30rem),
-      radial-gradient(circle at 2% 46%, rgba(216, 32, 40, 0.28), transparent 34rem),
-      radial-gradient(circle at 64% 100%, rgba(180, 15, 24, 0.22), transparent 36rem),
-      radial-gradient(circle at 50% 45%, rgba(255, 90, 98, 0.1), transparent 40rem),
-      linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 200, 203, 0.32)),
-      linear-gradient(rgba(216, 32, 40, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(216, 32, 40, 0.05) 1px, transparent 1px);
+      radial-gradient(circle at 92% 3%, rgba(255, 45, 56, 0.55), transparent 30rem),
+      radial-gradient(circle at 2% 46%, rgba(216, 32, 40, 0.4), transparent 34rem),
+      radial-gradient(circle at 64% 100%, rgba(180, 15, 24, 0.32), transparent 36rem),
+      radial-gradient(circle at 50% 45%, rgba(255, 90, 98, 0.16), transparent 40rem),
+      linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(255, 140, 145, 0.5)),
+      linear-gradient(rgba(216, 32, 40, 0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(216, 32, 40, 0.07) 1px, transparent 1px);
   }
 
   .reveal {
