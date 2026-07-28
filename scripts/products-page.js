@@ -421,7 +421,6 @@ function renderCategoryCard(category, products) {
       <img src="${imageSrc}" alt="${escapeHtml(category)}" loading="lazy" />
     </div>
     <div class="category-card-body">
-      <h3 class="category-card-title">${escapeHtml(category)}</h3>
       <span class="category-card-count">${products.length} ${products.length === 1 ? "product" : "products"}</span>
     </div>
   `;
