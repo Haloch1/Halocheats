@@ -58,11 +58,11 @@ import("./ai-widget.js").catch(function (err) {
     var shell = nav.querySelector('.topbar-shell');
     window.addEventListener('scroll', function () {
       if (window.scrollY > 12) {
-        shell.style.background = 'rgba(255,255,255,0.95)';
-        shell.style.boxShadow = '0 12px 40px rgba(28,25,23,0.10)';
+        shell.style.background = 'rgba(23,16,15,0.92)';
+        shell.style.boxShadow = '0 12px 40px rgba(0,0,0,0.35)';
       } else {
-        shell.style.background = 'rgba(255,255,255,0.82)';
-        shell.style.boxShadow = '0 8px 32px rgba(28,25,23,0.06)';
+        shell.style.background = 'rgba(23,16,15,0.72)';
+        shell.style.boxShadow = '0 8px 32px rgba(0,0,0,0.2)';
       }
     }, { passive: true });
   }

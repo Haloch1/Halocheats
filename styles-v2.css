@@ -1,25 +1,26 @@
 :root {
-  /* Prevent Opera GX's Force Dark Pages feature from recoloring the storefront. */
-  color-scheme: only light;
-  --ink: #171213;
-  --ink-soft: #61595b;
-  --ink-faint: #8d8385;
-  --paper: #fffdfc;
-  --paper-soft: #fff7f5;
-  --paper-warm: #f9efed;
-  --line: #eadfdd;
-  --line-strong: #d8c7c4;
-  --red: #d82028;
-  --red-dark: #a90f16;
-  --red-bright: #ff3742;
-  --red-soft: #fff0f0;
-  --green: #159957;
-  --amber: #b86d08;
-  --blue: #2469d8;
+  /* Full dark theme. Force-dark browser extensions/features should leave
+     this alone since the page already declares itself dark. */
+  color-scheme: only dark;
+  --ink: #f5eeee;
+  --ink-soft: #c9bcbb;
+  --ink-faint: #8f8180;
+  --paper: #17100f;
+  --paper-soft: #1e1615;
+  --paper-warm: #251a18;
+  --line: #3a2b29;
+  --line-strong: #4d3835;
+  --red: #ff3742;
+  --red-dark: #d82028;
+  --red-bright: #ff5a63;
+  --red-soft: #2c1614;
+  --green: #3ecb85;
+  --amber: #e6a23c;
+  --blue: #5b93e8;
   --discord: #5865f2;
-  --shadow-sm: 0 10px 30px rgba(58, 20, 22, 0.07);
-  --shadow-md: 0 24px 64px rgba(58, 20, 22, 0.11);
-  --shadow-lg: 0 38px 90px rgba(58, 20, 22, 0.16);
+  --shadow-sm: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 24px 64px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 38px 90px rgba(0, 0, 0, 0.55);
   --radius-sm: 12px;
   --radius-md: 18px;
   --radius-lg: 26px;
@@ -63,13 +64,10 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   line-height: 1.65;
-  /* Quiet, near-neutral canvas — the red brand color lives in buttons,
-     badges, and the hero glow instead of the page background itself. Grid
-     lines use two visibly distinct reds (deep red vertical, bright
-     red-orange horizontal) instead of near-identical faint hairlines. */
+  /* Dark canvas, grid lines in the two brand reds for texture. */
   background:
-    linear-gradient(rgba(169, 15, 22, 0.4) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(245, 56, 24, 0.3) 1px, transparent 1px),
+    linear-gradient(rgba(255, 55, 66, 0.14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 56, 24, 0.1) 1px, transparent 1px),
     var(--paper);
   background-size: 42px 42px, 42px 42px, auto;
 }
@@ -128,13 +126,13 @@ a {
 }
 
 ::-webkit-scrollbar-track {
-  background: #f4e9e7;
+  background: var(--paper-soft);
 }
 
 ::-webkit-scrollbar-thumb {
-  border: 2px solid #f4e9e7;
+  border: 2px solid var(--paper-soft);
   border-radius: 999px;
-  background: #c9b5b2;
+  background: var(--line-strong);
 }
 
 .scroll-progress {
@@ -188,7 +186,7 @@ a {
   pointer-events: auto;
   border: 1px solid rgba(133, 79, 80, 0.2);
   border-radius: 24px;
-  background: rgba(255, 253, 252, 0.9);
+  background: rgba(23, 16, 15, 0.9);
   box-shadow: 0 16px 50px rgba(80, 29, 31, 0.1);
   backdrop-filter: blur(18px) saturate(135%);
   transition: min-height 240ms ease, box-shadow 240ms ease, border-color 240ms ease;
@@ -264,7 +262,7 @@ a {
   min-height: 42px;
   padding: 0 13px;
   overflow: hidden;
-  color: #62595a;
+  color: var(--ink-soft);
   border-radius: 12px;
   font-family: var(--font-display);
   font-size: 0.82rem;
@@ -309,7 +307,7 @@ a {
   border: 1px solid var(--line-strong);
   border-radius: 13px;
   color: var(--ink);
-  background: #fff;
+  background: var(--paper-soft);
   font-family: var(--font-display);
   font-size: 0.8rem;
   font-weight: 800;
@@ -331,7 +329,7 @@ a {
   box-shadow: 0 14px 32px rgba(216, 32, 40, 0.3);
 }
 
-/* Mobile hamburger — hidden on desktop, shown at the 820px breakpoint
+/* Mobile hamburger Ã¢â‚¬â€ hidden on desktop, shown at the 820px breakpoint
    where the nav switches from an inline row to a dropdown panel. */
 .nav-toggle {
   display: none;
@@ -539,7 +537,7 @@ summary:focus-visible,
 .button-secondary {
   color: var(--ink);
   border-color: var(--line-strong);
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(23, 16, 15, 0.9);
 }
 
 .button-secondary:hover:not(:disabled) {
@@ -694,7 +692,7 @@ button:disabled {
   width: min(545px, 100%);
 }
 
-/* Mobile-only stat grid (phones <=580px) — hidden everywhere else. */
+/* Mobile-only stat grid (phones <=580px) Ã¢â‚¬â€ hidden everywhere else. */
 .hero-stats {
   display: none;
 }
@@ -711,8 +709,8 @@ button:disabled {
   background: #16090c;
   box-shadow:
     0 38px 80px rgba(83, 12, 18, 0.26),
-    0 0 0 8px rgba(255, 255, 255, 0.48),
-    inset 0 1px rgba(255, 255, 255, 0.04);
+    0 0 0 8px rgba(23, 16, 15, 0.48),
+    inset 0 1px rgba(23, 16, 15, 0.04);
 }
 
 .cheat-ui-head,
@@ -870,7 +868,7 @@ button:disabled {
   height: 16px;
   content: "";
   border-radius: 50%;
-  background: #fff;
+  background: var(--paper-soft);
   transition: transform 180ms ease;
 }
 
@@ -1024,7 +1022,7 @@ button:disabled {
   width: 100%;
   overflow: hidden;
   border-block: 1px solid rgba(216, 32, 40, 0.14);
-  background: rgba(255, 255, 255, 0.74);
+  background: rgba(23, 16, 15, 0.74);
 }
 
 .ticker-track {
@@ -1075,7 +1073,7 @@ button:disabled {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(23, 16, 15, 0.92);
   box-shadow: var(--shadow-sm);
 }
 
@@ -1096,7 +1094,7 @@ button:disabled {
   height: 230%;
   content: "";
   pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+  background: linear-gradient(90deg, transparent, rgba(23, 16, 15, 0.7), transparent);
   filter: blur(1px);
   transform: rotate(28deg) translateX(-260%);
   transition: transform 720ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -1117,7 +1115,7 @@ button:disabled {
   }
 }
 
-/* Touch devices don't have real hover — a tap triggers :hover/:focus-within
+/* Touch devices don't have real hover Ã¢â‚¬â€ a tap triggers :hover/:focus-within
    via "sticky hover" and it stays stuck until something else is tapped, so
    the sweep looked glitchy on mobile. Disable it there entirely. */
 @media (hover: none), (pointer: coarse) {
@@ -1178,7 +1176,7 @@ button:disabled {
 .category-card-count {
   flex: 0 0 auto;
   padding: 7px 11px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
   background: rgba(19, 11, 12, 0.46);
   backdrop-filter: blur(10px);
@@ -1221,12 +1219,12 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.product-status-badge.tone-green { color: #08723d; background: rgba(232, 248, 240, 0.92); }
-.product-status-badge.tone-amber { color: #8a5a00; background: rgba(255, 244, 219, 0.92); }
-.product-status-badge.tone-blue { color: #1d4fa3; background: rgba(224, 235, 255, 0.92); }
-.product-status-badge.tone-muted { color: var(--ink-soft); background: rgba(255, 255, 255, 0.88); }
+.product-status-badge.tone-green { color: #4ade95; background: rgba(62, 203, 133, 0.18); }
+.product-status-badge.tone-amber { color: #f0b429; background: rgba(230, 162, 60, 0.2); }
+.product-status-badge.tone-blue { color: #7db0f0; background: rgba(91, 147, 232, 0.2); }
+.product-status-badge.tone-muted { color: var(--ink-soft); background: rgba(255, 255, 255, 0.08); }
 
-/* Per-product status list on /status — same tone colors as the catalog
+/* Per-product status list on /status Ã¢â‚¬â€ same tone colors as the catalog
    badges above, just laid out as a static pill in a row instead of an
    absolutely positioned overlay on a thumbnail. */
 .status-product-groups {
@@ -1270,10 +1268,10 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.status-pill.tone-green { color: #08723d; background: rgba(232, 248, 240, 0.92); }
-.status-pill.tone-amber { color: #8a5a00; background: rgba(255, 244, 219, 0.92); }
-.status-pill.tone-blue { color: #1d4fa3; background: rgba(224, 235, 255, 0.92); }
-.status-pill.tone-muted { color: var(--ink-soft); background: rgba(255, 255, 255, 0.88); }
+.status-pill.tone-green { color: #4ade95; background: rgba(62, 203, 133, 0.18); }
+.status-pill.tone-amber { color: #f0b429; background: rgba(230, 162, 60, 0.2); }
+.status-pill.tone-blue { color: #7db0f0; background: rgba(91, 147, 232, 0.2); }
+.status-pill.tone-muted { color: var(--ink-soft); background: rgba(255, 255, 255, 0.08); }
 
 .product-card-info {
   display: flex;
@@ -1407,7 +1405,7 @@ button:disabled {
   border-radius: var(--radius-xl);
   background:
     radial-gradient(circle at 100% 0, rgba(216, 32, 40, 0.14), transparent 44%),
-    rgba(255, 253, 252, 0.93);
+    rgba(23, 16, 15, 0.93);
   box-shadow: var(--shadow-md);
 }
 
@@ -1428,7 +1426,7 @@ button:disabled {
 .user-directory-panel {
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(23, 16, 15, 0.94);
   box-shadow: var(--shadow-sm);
 }
 
@@ -1580,7 +1578,7 @@ textarea {
   border: 1px solid var(--line-strong);
   border-radius: 12px;
   outline: 0;
-  background: #fff;
+  background: var(--paper-soft);
   transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
@@ -1600,7 +1598,7 @@ select:focus,
 textarea:focus {
   border-color: rgba(216, 32, 40, 0.7);
   box-shadow: 0 0 0 4px rgba(216, 32, 40, 0.09);
-  background: #fffdfd;
+  background: var(--paper-soft);
 }
 
 /* Keep the interactive preview isolated from the storefront's light form theme. */
@@ -1641,7 +1639,7 @@ textarea:focus {
   border: 1px solid var(--line);
   border-radius: 13px;
   color: var(--ink-soft);
-  background: #fff;
+  background: var(--paper-soft);
   font-size: 0.85rem;
 }
 
@@ -1651,32 +1649,32 @@ textarea:focus {
 
 .inline-message.info,
 .info-box {
-  color: #245282;
-  border-color: #bed9ef;
-  background: #f2f9ff;
+  color: #7db0f0;
+  border-color: #2f4870;
+  background: rgba(91, 147, 232, 0.14);
 }
 
 .inline-message.warn,
 .warn-box,
 .variant-promo-message.warn {
-  color: #89520d;
-  border-color: #efcf9d;
-  background: #fff9eb;
+  color: #f0b429;
+  border-color: #5c4520;
+  background: #2e2410;
 }
 
 .inline-message.error,
 .variant-promo-message.error,
 .login-error {
-  color: #a0151c;
-  border-color: #f1b9bc;
-  background: #fff2f2;
+  color: var(--red-bright);
+  border-color: rgba(255, 55, 66, 0.3);
+  background: var(--red-soft);
 }
 
 .inline-message.success,
 .variant-promo-message.success {
-  color: #08723d;
-  border-color: #b4e2cc;
-  background: #effbf5;
+  color: #4ade95;
+  border-color: #245c40;
+  background: rgba(62, 203, 133, 0.14);
 }
 
 .home-reviews-section {
@@ -1760,7 +1758,7 @@ textarea:focus {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(23, 16, 15, 0.9);
   box-shadow: var(--shadow-sm);
 }
 
@@ -1863,7 +1861,7 @@ textarea:focus {
   color: var(--ink-soft);
   border: 1px solid var(--line-strong);
   border-radius: 999px;
-  background: #fff;
+  background: var(--paper-soft);
   font: 700 0.75rem var(--font-display);
   white-space: nowrap;
   transition: color 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
@@ -1898,14 +1896,14 @@ textarea:focus {
 .card-stock.in-stock,
 .member-chip,
 .member-chip-resolved {
-  color: #08723d;
-  background: #e8f8f0;
+  color: #4ade95;
+  background: rgba(62, 203, 133, 0.16);
 }
 
 .card-stock.out-of-stock,
 .member-chip-closed {
   color: #8a191e;
-  background: #fff0f0;
+  background: var(--red-soft);
 }
 
 .variant-modal {
@@ -1948,7 +1946,7 @@ textarea:focus {
   overflow-y: auto;
   border: 1px solid rgba(216, 32, 40, 0.2);
   border-radius: 30px;
-  background: #fff;
+  background: var(--paper-soft);
   box-shadow: var(--shadow-lg);
 }
 
@@ -1980,7 +1978,7 @@ textarea:focus {
   color: var(--ink);
   border: 1px solid var(--line);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(23, 16, 15, 0.9);
   font-size: 1.35rem;
 }
 
@@ -2077,7 +2075,7 @@ textarea:focus {
   object-fit: contain;
 }
 
-/* Fallback (category) artwork is a wide screenshot, not portrait box-art —
+/* Fallback (category) artwork is a wide screenshot, not portrait box-art Ã¢â‚¬â€
    "contain" left it tiny and floating in a dark void. Cover the whole panel
    instead so it reads as an intentional hero photo, not a placeholder. */
 .variant-art.variant-art-cover .variant-product-image {
@@ -2199,8 +2197,8 @@ textarea:focus {
 
 .variant-status-row em {
   color: var(--blue);
-  border: 1px solid #b7d0f6;
-  background: #f1f6ff;
+  border: 1px solid #2f4870;
+  background: rgba(91, 147, 232, 0.14);
   font-style: normal;
 }
 
@@ -2225,7 +2223,7 @@ textarea:focus {
   color: var(--ink);
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: #fff;
+  background: var(--paper-soft);
   text-align: left;
   transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
@@ -2280,9 +2278,9 @@ textarea:focus {
   margin-top: 16px;
   padding: 13px 14px;
   color: var(--ink-soft);
-  border: 1px solid #f0b6b9;
+  border: 1px solid rgba(255, 55, 66, 0.3);
   border-radius: 13px;
-  background: #fff5f5;
+  background: var(--red-soft);
   font-size: 0.74rem;
   font-weight: 600;
   line-height: 1.45;
@@ -2313,7 +2311,7 @@ textarea:focus {
   margin-top: 17px;
 }
 
-/* One clear "Buy now" action instead of four same-weight buttons — Pay with
+/* One clear "Buy now" action instead of four same-weight buttons Ã¢â‚¬â€ Pay with
    Card (and the Notify substitute) take the full row as the primary CTA,
    the alternate payment methods sit underneath as smaller secondary picks. */
 .variant-actions .button-primary {
@@ -2358,7 +2356,7 @@ textarea:focus {
   background:
     linear-gradient(rgba(216, 32, 40, 0.025) 1px, transparent 1px),
     linear-gradient(90deg, rgba(216, 32, 40, 0.025) 1px, transparent 1px),
-    #fffdfd;
+    var(--paper-soft);
   background-size: 32px 32px;
 }
 
@@ -2390,7 +2388,7 @@ textarea:focus {
   border: 1px solid rgba(216, 32, 40, 0.12);
   border-left: 4px solid var(--red);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.86);
+  background: rgba(23, 16, 15, 0.86);
 }
 
 .variant-feature-grid {
@@ -2406,7 +2404,7 @@ textarea:focus {
   padding: 17px;
   border: 1px solid var(--line);
   border-radius: 15px;
-  background: #fff;
+  background: var(--paper-soft);
   box-shadow: 0 8px 24px rgba(80, 29, 31, 0.045);
   transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
@@ -2520,7 +2518,7 @@ textarea:focus {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 15px;
-  background: #fff;
+  background: var(--paper-soft);
   box-shadow: 0 8px 24px rgba(80, 29, 31, 0.045);
 }
 
@@ -2611,7 +2609,7 @@ textarea:focus {
   color: var(--ink);
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: #fff;
+  background: var(--paper-soft);
   text-decoration: none;
   transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
@@ -2725,7 +2723,7 @@ textarea:focus {
   padding: 42px;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: #fff;
+  background: var(--paper-soft);
   box-shadow: var(--shadow-md);
   text-align: center;
 }
@@ -2767,9 +2765,9 @@ textarea:focus {
 
 .auth-entry-side {
   padding: 28px;
-  border: 1px solid rgba(216, 32, 40, 0.16);
+  border: 1px solid rgba(216, 32, 40, 0.22);
   border-radius: 20px;
-  background: linear-gradient(145deg, #fff7f5, #fff);
+  background: linear-gradient(145deg, var(--paper-warm), var(--paper-soft));
 }
 
 .auth-entry-side h3 {
@@ -2804,7 +2802,7 @@ textarea:focus {
 
 .auth-switch-button.is-active {
   color: var(--red-dark);
-  background: #fff;
+  background: var(--paper-soft);
   box-shadow: 0 6px 18px rgba(80, 29, 31, 0.08);
 }
 
@@ -2848,7 +2846,7 @@ textarea:focus {
   width: 100%;
   color: var(--ink);
   border-color: var(--line-strong);
-  background: #fff;
+  background: var(--paper-soft);
 }
 
 .social-signin-block .button-social-signin {
@@ -2861,7 +2859,7 @@ textarea:focus {
 .social-signin-block .button-google {
   color: #202124;
   border-color: #d8dadd;
-  background: #fff;
+  background: #ffffff;
 }
 
 .social-signin-block .button-google:hover,
@@ -2907,9 +2905,9 @@ textarea:focus {
 .auth-tip-card {
   margin: 22px 0;
   padding: 17px;
-  border: 1px solid #efc4c5;
+  border: 1px solid rgba(255, 55, 66, 0.25);
   border-radius: 15px;
-  background: #fff;
+  background: var(--paper-soft);
 }
 
 .auth-tip-label {
@@ -3250,7 +3248,7 @@ textarea:focus {
   width: min(560px, 100%);
   padding: 28px;
   border-radius: 22px;
-  background: #fff;
+  background: var(--paper-soft);
   box-shadow: var(--shadow-lg);
 }
 
@@ -3292,7 +3290,7 @@ textarea:focus {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: #fff;
+  background: var(--paper-soft);
   box-shadow: var(--shadow-md);
 }
 
@@ -3337,7 +3335,7 @@ textarea:focus {
 .docs-sidebar nav a:hover,
 .docs-sidebar nav a.is-active {
   color: var(--red-dark);
-  background: #fff;
+  background: var(--paper-soft);
 }
 
 .docs-content {
@@ -3436,7 +3434,7 @@ main.admin-shell {
   padding: 28px;
   border: 1px solid var(--line);
   border-radius: 22px;
-  background: #fff;
+  background: var(--paper-soft);
   box-shadow: var(--shadow-md);
 }
 
@@ -3448,7 +3446,7 @@ main.admin-shell {
 .product-edit-card {
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: #fff;
+  background: var(--paper-soft);
   box-shadow: var(--shadow-sm);
 }
 
@@ -3483,7 +3481,7 @@ main.admin-shell {
   overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: #fff;
+  background: var(--paper-soft);
 }
 
 .admin-table,
@@ -3537,7 +3535,7 @@ main.admin-shell {
   padding: 24px;
   overflow-y: auto;
   border-radius: 22px;
-  background: #fff;
+  background: var(--paper-soft);
   box-shadow: var(--shadow-lg);
 }
 
@@ -3608,7 +3606,7 @@ body.cart-open .cart-drawer { pointer-events: auto; }
   width: min(440px, 100%);
   height: 100%;
   padding: 22px;
-  background: #fff;
+  background: var(--paper-soft);
   box-shadow: -24px 0 70px rgba(55, 17, 20, 0.2);
   transform: translateX(105%);
   transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -3706,7 +3704,7 @@ body.cart-open .cart-panel { transform: translateX(0); }
   min-height: 32px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--paper-soft);
 }
 
 .cart-remove {
@@ -3749,7 +3747,7 @@ body.cart-open .cart-panel { transform: translateX(0); }
   padding: 12px 34px 12px 13px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(23, 16, 15, 0.94);
   box-shadow: var(--shadow-md);
   backdrop-filter: blur(12px);
 }
@@ -3795,7 +3793,7 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   margin-top: 72px;
   color: var(--ink);
   border-top: 1px solid var(--line);
-  background: #fff;
+  background: var(--paper-soft);
 }
 
 .footer-inner {
@@ -4155,13 +4153,13 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .section-heading p { font-size: 0.92rem; }
 
   /* Same fixed 42px cell size reads as a handful of big, obvious bars on
-     a narrow phone instead of a fine texture — scale the grid up and fade
+     a narrow phone instead of a fine texture Ã¢â‚¬â€ scale the grid up and fade
      it back so it stays subtle rather than a visible checkerboard. */
   body {
     background-size: 64px 64px, 64px 64px, auto;
     background-image:
-      linear-gradient(rgba(169, 15, 22, 0.3) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(245, 56, 24, 0.22) 1px, transparent 1px);
+      linear-gradient(rgba(255, 55, 66, 0.12) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245, 56, 24, 0.08) 1px, transparent 1px);
   }
 
   .ticker-track span { padding: 12px 32px; }
@@ -4207,7 +4205,7 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .hero-stat {
     padding: 14px 10px;
     text-align: center;
-    background: rgba(255, 255, 255, 0.7);
+    background: rgba(23, 16, 15, 0.7);
     border: 1px solid var(--line);
     border-radius: 14px;
   }
@@ -4313,9 +4311,9 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
 }
 
 /* On the narrowest phones, side-by-side CTA rows get cramped and awkward
-   to tap. Stack them full-width instead — bigger tap targets, cleaner
+   to tap. Stack them full-width instead Ã¢â‚¬â€ bigger tap targets, cleaner
    rhythm, reads more intentional than two squeezed buttons.
-   Exception: the hero buttons stay side-by-side here (not stacked) — the
+   Exception: the hero buttons stay side-by-side here (not stacked) Ã¢â‚¬â€ the
    product cards need to peek onto the first screen right under the hero,
    and a stacked pair of 48px buttons was the single biggest chunk of
    avoidable height in that budget. */
@@ -4457,7 +4455,7 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* ═══ Floating AI support widget ═══ */
+/* Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â Floating AI support widget Ã¢â€¢ÂÃ¢â€¢ÂÃ¢â€¢Â */
 .ai-widget {
   position: fixed;
   right: 20px;
@@ -4549,7 +4547,7 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   align-items: center;
   gap: 6px;
   font: 600 0.72rem var(--font-body);
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(23, 16, 15, 0.85);
 }
 
 .ai-widget-status i {
@@ -4658,8 +4656,8 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
 }
 
 /* .ai-widget-messages (not .ai-widget-body) is the actual scrolling
-   element. This keeps .ai-widget-scrollbtn — an absolutely positioned
-   sibling, not a descendant of the scroll area — visually pinned to the
+   element. This keeps .ai-widget-scrollbtn Ã¢â‚¬â€ an absolutely positioned
+   sibling, not a descendant of the scroll area Ã¢â‚¬â€ visually pinned to the
    corner of the chat window while messages scroll underneath it, instead
    of scrolling away with the content. */
 .ai-widget-messages {
@@ -4721,7 +4719,7 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
 .ai-widget-msg p { margin: 0; padding: 10px 13px; border-radius: 14px; font-size: 0.87rem; line-height: 1.48; white-space: pre-wrap; word-break: break-word; }
 
 .ai-widget-msg-bot p, .ai-widget-msg-admin p {
-  background: #fff;
+  background: var(--paper-soft);
   color: var(--ink);
   border: 1px solid var(--line);
   border-bottom-left-radius: 4px;
@@ -4738,7 +4736,7 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
 
 .ai-widget-msg-error p { background: var(--red-soft); color: var(--red-dark); border: 1px solid var(--line-strong); }
 
-.ai-widget-typing { display: flex; align-items: center; gap: 5px; padding: 10px 13px; width: fit-content; max-width: 84%; background: #fff; border: 1px solid var(--line); border-radius: 14px; }
+.ai-widget-typing { display: flex; align-items: center; gap: 5px; padding: 10px 13px; width: fit-content; max-width: 84%; background: var(--paper-soft); border: 1px solid var(--line); border-radius: 14px; }
 .ai-widget-typing span { margin-right: 2px; color: var(--ink-faint); font: 600 0.72rem var(--font-body); }
 .ai-widget-typing i { display: inline-block; width: 6px; height: 6px; flex: 0 0 6px; background: var(--red); border-radius: 50%; animation: ai-widget-bounce 1.05s ease-in-out infinite both; }
 .ai-widget-typing i:nth-of-type(2) { animation-delay: 0.15s; }
@@ -4754,7 +4752,7 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   align-items: flex-end;
   gap: 8px;
   padding: 12px;
-  background: #fff;
+  background: var(--paper-soft);
   border-top: 1px solid var(--line);
   flex-shrink: 0;
 }
