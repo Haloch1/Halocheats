@@ -3972,12 +3972,10 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
     padding: 56px 0 40px;
     gap: 0;
   }
-  /* Previously clamp(3rem, 14vw, 5.1rem) — at tablet widths that rendered
-     well over 60px, so "Cheats built to" (the text before the hard <br>
-     in the markup) wrapped a second time on its own and the whole
-     headline broke across 3-4 short lines instead of the intended 2.
-     Sized so "Cheats built to" reliably fits on one line down to ~600px. */
-  .hero h1 { font-size: clamp(2.6rem, 8vw, 4rem); }
+  /* The headline is now just the single word "XenCheats" (no wrap risk
+     the way the old two-line tagline had), so it can run noticeably
+     bigger than before at tablet widths. */
+  .hero h1 { font-size: clamp(3.2rem, 10vw, 5rem); }
   .hero-visual { display: none; }
   .trust-row { margin-top: 20px !important; }
 
@@ -4136,11 +4134,9 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .cart-button { width: 40px; min-height: 40px; }
 
   .hero { padding: 36px 0 22px; }
-  /* Was clamp(2.85rem, 15vw, 4rem) — still too large to keep "Cheats built
-     to" on one line at common phone widths (360-430px), which is what
-     forced the headline into 4 broken lines and pushed a wall of empty
-     background below the buttons before the next section. */
-  .hero h1 { font-size: clamp(2.1rem, 9.5vw, 3.1rem); }
+  /* Single word now ("XenCheats"), so it can run bigger and bolder than
+     the old two-line tagline could without wrapping badly. */
+  .hero h1 { font-size: clamp(2.8rem, 15vw, 4.2rem); }
   .hero-text { margin-block: 12px; }
 
   /* Centered mobile hero layout, closer to the reference the user liked:

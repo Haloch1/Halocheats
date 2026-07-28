@@ -35,7 +35,8 @@ async function loadProductStatus() {
   try {
     const response = await fetch("/api/products", { cache: "no-store" });
     if (!response.ok) throw new Error("Products unavailable");
-    const products = await response.json();
+    const payload = await response.json();
+    const products = Array.isArray(payload) ? payload : payload.products || [];
 
     const groups = new Map();
     for (const product of products) {
