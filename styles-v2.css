@@ -671,6 +671,11 @@ button:disabled {
   width: min(545px, 100%);
 }
 
+/* Mobile-only stat grid (phones <=580px) — hidden everywhere else. */
+.hero-stats {
+  display: none;
+}
+
 @keyframes orbit-pulse {
   50% { transform: scale(1.035); opacity: 0.72; }
 }
@@ -4088,7 +4093,44 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
      background below the buttons before the next section. */
   .hero h1 { font-size: clamp(2.1rem, 9.5vw, 3.1rem); }
   .hero-text { margin-block: 12px; }
-  .hero-actions .button { flex: 1; min-width: 150px; }
+
+  /* Centered mobile hero layout, closer to the reference the user liked:
+     badge/rating pill, heading, copy and CTAs all centered rather than
+     left-aligned, with compact (not full-width-stretched) buttons. */
+  .hero-copy { text-align: center; }
+  .rating-pill { margin-inline: auto; }
+  .hero-text { margin-inline: auto; }
+  .hero-actions { justify-content: center; }
+  .hero-actions .button { flex: 0 1 auto; min-width: 140px; }
+
+  .hero-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    max-width: 420px;
+    margin: 22px auto 0;
+  }
+
+  .hero-stat {
+    padding: 14px 10px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+  }
+
+  .hero-stat strong {
+    display: block;
+    font: 800 1.5rem var(--font-display);
+    letter-spacing: -0.03em;
+    color: var(--red-dark);
+  }
+
+  .hero-stat span {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
 
   /* Repeats what the paragraph above already says, and costs real height
      right where the catalog needs to peek onto the first screen. */
