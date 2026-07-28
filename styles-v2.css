@@ -63,16 +63,16 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   line-height: 1.65;
+  /* Flat diagonal wash instead of overlapping radial "glow circle" blobs —
+     keeps the red brand color and the grid-line texture without the soft
+     spotlight look. */
   background:
-    radial-gradient(circle at 92% 3%, rgba(255, 45, 56, 0.8), transparent 30rem),
-    radial-gradient(circle at 2% 46%, rgba(216, 32, 40, 0.62), transparent 34rem),
-    radial-gradient(circle at 64% 100%, rgba(180, 15, 24, 0.52), transparent 38rem),
-    radial-gradient(circle at 50% 45%, rgba(255, 90, 98, 0.3), transparent 44rem),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.04), rgba(255, 110, 116, 0.65)),
+    linear-gradient(155deg, rgba(255, 60, 68, 0.28), rgba(255, 255, 255, 0) 42%),
+    linear-gradient(-25deg, rgba(216, 32, 40, 0.16), rgba(255, 255, 255, 0) 48%),
     linear-gradient(rgba(216, 32, 40, 0.18) 1px, transparent 1px),
     linear-gradient(90deg, rgba(216, 32, 40, 0.18) 1px, transparent 1px),
     var(--paper);
-  background-size: auto, auto, auto, auto, auto, 42px 42px, 42px 42px, auto;
+  background-size: auto, auto, 42px 42px, 42px 42px, auto;
 }
 
 body::before {
@@ -81,10 +81,7 @@ body::before {
   inset: 0;
   content: "";
   pointer-events: none;
-  background:
-    radial-gradient(circle at 82% 24%, rgba(216, 32, 40, 0.42), transparent 28rem),
-    radial-gradient(circle at 14% 82%, rgba(255, 55, 66, 0.4), transparent 30rem),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 30%, rgba(255, 110, 116, 0.85));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 40%, rgba(255, 110, 116, 0.4));
 }
 
 body.modal-open {
@@ -1045,6 +1042,7 @@ button:disabled {
 .ticker-track span {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 18px;
   padding: 17px 38px;
   color: #73696b;
@@ -4170,13 +4168,10 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
      width to spread them across. Scale the grid up and fade it back so it
      stays a subtle texture instead of a visible checkerboard. */
   body {
-    background-size: auto, auto, auto, auto, auto, 64px 64px, 64px 64px, auto;
+    background-size: auto, auto, 64px 64px, 64px 64px, auto;
     background-image:
-      radial-gradient(circle at 92% 3%, rgba(255, 45, 56, 0.55), transparent 30rem),
-      radial-gradient(circle at 2% 46%, rgba(216, 32, 40, 0.4), transparent 34rem),
-      radial-gradient(circle at 64% 100%, rgba(180, 15, 24, 0.32), transparent 36rem),
-      radial-gradient(circle at 50% 45%, rgba(255, 90, 98, 0.16), transparent 40rem),
-      linear-gradient(145deg, rgba(255, 255, 255, 0.06), rgba(255, 140, 145, 0.5)),
+      linear-gradient(155deg, rgba(255, 60, 68, 0.22), rgba(255, 255, 255, 0) 42%),
+      linear-gradient(-25deg, rgba(216, 32, 40, 0.13), rgba(255, 255, 255, 0) 48%),
       linear-gradient(rgba(216, 32, 40, 0.07) 1px, transparent 1px),
       linear-gradient(90deg, rgba(216, 32, 40, 0.07) 1px, transparent 1px);
   }
