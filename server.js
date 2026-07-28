@@ -10253,6 +10253,61 @@ app.post("/api/live-desk/reply", async (req, res) => {
   }
 });
 
+/* Let a signed-in member close their own live-desk thread (e.g. from the
+   website chat widget's "close conversation" control), mirroring the
+   staff-side close action already available in the admin panel/Discord. */
+app.post("/api/live-desk/close", async (req, res) => {
+  try {
+    const member = await getAuthenticatedUser(req, res);
+    const threadId = trimField(req.body?.threadId, 80);
+    if (!threadId) {
+      return res.status(400).json({ error: "Thread is required." });
+    }
+
+    const threadLookup = await supabaseAdmin
+      .from("support_threads")
+      .select("id, user_id, status, discord_thread_id")
+      .eq("id", threadId)
+      .eq("user_id", member.id)
+      .maybeSingle();
+
+    if (threadLookup.error) throw threadLookup.error;
+    if (!threadLookup.data) {
+      return res.status(404).json({ error: "That support thread was not found on your account." });
+    }
+
+    const threadUpdate = await supabaseAdmin
+      .from("support_threads")
+      .update({ status: "closed", updated_at: new Date().toISOString() })
+      .eq("id", threadId)
+      .eq("user_id", member.id)
+      .select("id, subject, status, created_at, updated_at, last_message_at, contact_name, contact_method")
+      .single();
+
+    if (threadUpdate.error) throw threadUpdate.error;
+
+    mirrorToSupportThread(threadId, threadLookup.data.discord_thread_id, null, "🔒 Customer closed this conversation from the website.");
+
+    return res.json({
+      ok: true,
+      thread: {
+        id: threadUpdate.data.id,
+        subject: threadUpdate.data.subject,
+        status: threadUpdate.data.status,
+        createdAt: threadUpdate.data.created_at,
+        updatedAt: threadUpdate.data.updated_at,
+        lastMessageAt: threadUpdate.data.last_message_at,
+        contactName: threadUpdate.data.contact_name,
+        contactMethod: threadUpdate.data.contact_method,
+      },
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: "Unable to close that conversation.",
+    });
+  }
+});
+
 app.post("/api/admin/access-request", async (req, res) => {
   try {
     checkRateLimit(

@@ -53,9 +53,13 @@ function buildWidget() {
           <strong>Nox Support</strong>
           <span class="ai-widget-status"><i></i>AI + live team</span>
         </div>
-        <button type="button" class="ai-widget-close" aria-label="Close chat">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
+        <div class="ai-widget-headactions">
+          <button type="button" class="ai-widget-headbtn ai-widget-newchat" hidden>New chat</button>
+          <button type="button" class="ai-widget-headbtn ai-widget-endchat" hidden>Close</button>
+          <button type="button" class="ai-widget-close" aria-label="Close chat">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
       </div>
       <div class="ai-widget-body">
         <div class="ai-widget-messages"></div>
@@ -82,6 +86,8 @@ async function init() {
   const bubble = root.querySelector(".ai-widget-bubble");
   const panel = root.querySelector(".ai-widget-panel");
   const closeBtn = root.querySelector(".ai-widget-close");
+  const newChatBtn = root.querySelector(".ai-widget-newchat");
+  const endChatBtn = root.querySelector(".ai-widget-endchat");
   const messagesEl = root.querySelector(".ai-widget-messages");
   const scrollBody = root.querySelector(".ai-widget-body");
   const scrollBtn = root.querySelector(".ai-widget-scrollbtn");
@@ -107,26 +113,42 @@ async function init() {
      change. Scroll math has to target scrollBody, not messagesEl, or every
      "how far from the bottom" check silently reads as "always at the
      bottom" and the jump button never has a reason to appear. */
-  function scrollToEnd() {
-    scrollBody.scrollTop = scrollBody.scrollHeight;
-    scrollBtn.hidden = true;
-  }
 
   /* Little "jump to latest" button: shows once the member has scrolled up
      to read earlier messages, so they don't have to manually swipe/scroll
-     all the way back down to see new replies come in. */
+     all the way back down to see new replies come in. Tracked as an
+     explicit flag (not re-derived from geometry on every render) so it
+     stays visible/sticky the whole time the member is scrolled up, instead
+     of a background poll or AI-thinking re-render silently snapping the
+     view back down and hiding it mid-read. */
+  let userScrolledUp = false;
+
   function isNearBottom() {
     return scrollBody.scrollHeight - scrollBody.scrollTop - scrollBody.clientHeight < 48;
   }
 
-  function updateScrollBtn() {
-    var canScroll = scrollBody.scrollHeight > scrollBody.clientHeight + 20;
-    scrollBtn.hidden = !canScroll || isNearBottom();
+  function scrollToEnd() {
+    scrollBody.scrollTop = scrollBody.scrollHeight;
+    userScrolledUp = false;
+    scrollBtn.hidden = true;
   }
 
-  scrollBody.addEventListener("scroll", updateScrollBtn, { passive: true });
+  function updateScrollBtn() {
+    var canScroll = scrollBody.scrollHeight > scrollBody.clientHeight + 20;
+    scrollBtn.hidden = !canScroll || !userScrolledUp;
+  }
+
+  scrollBody.addEventListener(
+    "scroll",
+    function () {
+      userScrolledUp = !isNearBottom();
+      updateScrollBtn();
+    },
+    { passive: true }
+  );
   scrollBtn.addEventListener("click", function () {
     scrollBody.scrollTo({ top: scrollBody.scrollHeight, behavior: "smooth" });
+    userScrolledUp = false;
     scrollBtn.hidden = true;
   });
 
@@ -143,6 +165,13 @@ async function init() {
       <div class="ai-widget-greet">
         <p>Hey! I'm the Nox AI assistant. Ask me about products, orders, or key delivery &mdash; a human can jump in any time.</p>
       </div>`;
+  }
+
+  /* "New chat" only makes sense once a conversation exists; "Close" only
+     makes sense while one is active. Keep both hidden otherwise. */
+  function updateHeadActions() {
+    newChatBtn.hidden = !threadId;
+    endChatBtn.hidden = !threadId;
   }
 
   function startAiThinking() {
@@ -188,7 +217,7 @@ async function init() {
   function renderThread(thread, { isBaseline = false } = {}) {
     activeThread = thread || activeThread;
     const msgs = thread?.messages || [];
-    const shouldStickToBottom = isBaseline || isNearBottom();
+    const shouldStickToBottom = isBaseline || !userScrolledUp;
 
     const newIncoming = msgs.filter(
       (m) => m.senderType !== "user" && !knownMessageIds.has(m.id)
@@ -235,6 +264,25 @@ async function init() {
     } else {
       updateScrollBtn();
     }
+
+    updateHeadActions();
+  }
+
+  /* Resets the widget to a blank slate, ready for a new conversation.
+     Called both when the member closes/starts a new chat locally, and when
+     a poll finds the thread was closed from the admin panel/Discord side. */
+  function resetToFreshConversation({ notice } = {}) {
+    threadId = null;
+    activeThread = null;
+    knownMessageIds = new Set();
+    userScrolledUp = false;
+    stopPolling();
+    if (notice) {
+      messagesEl.innerHTML = `<div class="ai-widget-greet"><p>${esc(notice)}</p></div>`;
+    } else {
+      renderStarter();
+    }
+    updateHeadActions();
   }
 
   async function pollThread() {
@@ -246,7 +294,14 @@ async function init() {
       if (!res.ok) return;
       const data = await res.json();
       const thread = (data.threads || []).find((t) => t.id === threadId);
-      if (thread) renderThread(thread);
+      if (!thread) return;
+      if (thread.status === "closed") {
+        // Closed from the admin panel/Discord side — drop back to a fresh
+        // conversation instead of continuing to poll a dead thread.
+        resetToFreshConversation({ notice: "This conversation was closed by support. Send a message to start a new one." });
+        return;
+      }
+      renderThread(thread);
     } catch {
       /* silent — retry on next tick */
     }
@@ -276,11 +331,16 @@ async function init() {
       });
       if (!res.ok) return;
       const data = await res.json();
-      const open = (data.threads || []).find((t) => t.status === "open") || data.threads?.[0];
+      // Only auto-resume a thread that's still OPEN. A closed conversation
+      // (member closed it, or staff did) should not be silently re-adopted
+      // as "the" conversation — the member starts fresh instead.
+      const open = (data.threads || []).find((t) => t.status === "open");
       if (open) {
         threadId = open.id;
         renderThread(open, { isBaseline: true });
         startPolling(POLL_MS_BACKGROUND);
+      } else {
+        updateHeadActions();
       }
     } catch {
       // A refreshed server cookie can arrive a moment after the page. Retry a
@@ -321,8 +381,14 @@ async function init() {
     } else if (!messagesEl.childElementCount) {
       renderStarter();
     }
+    updateHeadActions();
 
-    textarea.focus();
+    // Don't auto-focus on touch devices — it pops the on-screen keyboard
+    // immediately on open, which is jarring on mobile. Desktop/mouse users
+    // still get the convenience of landing in the input.
+    if (!window.matchMedia("(pointer: coarse)").matches) {
+      textarea.focus();
+    }
   }
 
   function closePanel() {
@@ -343,6 +409,43 @@ async function init() {
   closeBtn.addEventListener("click", closePanel);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && isOpen) closePanel();
+  });
+
+  /* Ends the current conversation server-side so it stops showing as the
+     account's "open" thread. Shared by both the Close and New chat
+     buttons — a new chat is just "close the old one, then start blank". */
+  async function endCurrentConversation() {
+    if (!threadId || !session?.access_token) return;
+    const closingId = threadId;
+    try {
+      await fetch("/api/live-desk/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ threadId: closingId }),
+      });
+    } catch {
+      /* If the request fails the thread just stays open server-side; the
+         member can try again. Reset the local view regardless so they're
+         not stuck. */
+    }
+  }
+
+  endChatBtn.addEventListener("click", async () => {
+    if (!threadId) return;
+    if (!window.confirm("Close this conversation? You can start a new one any time.")) return;
+    endChatBtn.disabled = true;
+    await endCurrentConversation();
+    endChatBtn.disabled = false;
+    resetToFreshConversation({ notice: "Conversation closed. Send a message any time to start a new one." });
+  });
+
+  newChatBtn.addEventListener("click", async () => {
+    if (!threadId) return;
+    newChatBtn.disabled = true;
+    await endCurrentConversation();
+    newChatBtn.disabled = false;
+    resetToFreshConversation();
+    textarea.focus();
   });
 
   form.addEventListener("submit", async (event) => {
@@ -366,6 +469,7 @@ async function init() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Unable to send message.");
         threadId = data.threadId;
+        updateHeadActions();
         startAiThinking();
         startPolling(POLL_MS_OPEN);
       } else {
