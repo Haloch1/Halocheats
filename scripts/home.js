@@ -145,9 +145,6 @@ async function loadPopularCategories() {
               <img src="${homeCategoryImage(c.category)}" alt="${escapeHtmlHome(c.category)}" loading="lazy" />
               <span class="category-card-view-overlay" aria-hidden="true"><span>View</span></span>
             </div>
-            <div class="category-card-body">
-              <span class="category-card-count">${count} ${count === 1 ? "product" : "products"}</span>
-            </div>
           </a>
         `;
       })
