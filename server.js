@@ -2548,7 +2548,10 @@ async function maintainDiscordTickets() {
     const activeTickets = guild.channels.cache
       .filter((channel) => channel.type === ChannelType.GuildText && channel.parentId === discordTicketCategoryId && channel.name.startsWith("ticket-"))
       .first(50);
-    const idleMs = discordTicketIdleHours * 60 * 60 * 1000;
+    // TEMP TESTING (Azad asked to verify move-to-inactive behavior quickly):
+    // hardcoded to 10 seconds instead of discordTicketIdleHours. Revert to
+    // `discordTicketIdleHours * 60 * 60 * 1000` once testing is done.
+    const idleMs = 10 * 1000;
     const replyWaitMs = discordTicketReplyWaitMinutes * 60 * 1000;
 
     for (const channel of activeTickets.values()) {
@@ -2652,7 +2655,10 @@ if (isConfiguredValue(discordBotToken)) {
 
     if (discordTicketCategoryId && discordInactiveTicketCategoryId) {
       setTimeout(() => maintainDiscordTickets(), 15_000);
-      setInterval(() => maintainDiscordTickets(), 10 * 60 * 1000).unref();
+      // TEMP TESTING: running every 30s (instead of every 10 min) so the
+      // 10-second idle threshold above is actually observable quickly.
+      // Revert both back together once testing is done.
+      setInterval(() => maintainDiscordTickets(), 30 * 1000).unref();
     }
 
     if (discordStatusSourceChannelId && discordStatusTargetChannelId) {
