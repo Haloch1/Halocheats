@@ -3911,7 +3911,7 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .nav-cta { min-width: 88px; min-height: 42px; padding-inline: 12px; }
   .balance-pill { min-width: 78px; }
 
-  .section { padding: 72px 0; }
+  .section { padding: 52px 0; }
   .hero {
     grid-template-columns: minmax(0, 1fr);
     min-height: auto;
@@ -4038,6 +4038,13 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
 
 @media (max-width: 580px) {
   :root { --shell: calc(100% - 20px); }
+
+  /* Tighten the gap between sections (and between a heading and the
+     content under it) so the product cards after the hero/ticker land
+     closer to the first screen on phones, instead of sitting a full
+     section's worth of padding below the fold. */
+  .section { padding: 40px 0; }
+  .section-heading { margin-bottom: 22px; }
 
   /* The decorative grid lines behind the page use a fixed 42px cell size.
      On a narrow phone screen that same cell size reads as a handful of big,
