@@ -4090,7 +4090,9 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .hero-text { margin-block: 12px; }
   .hero-actions .button { flex: 1; min-width: 150px; }
 
-  .trust-row { gap: 8px 16px !important; margin-top: 14px !important; }
+  /* Repeats what the paragraph above already says, and costs real height
+     right where the catalog needs to peek onto the first screen. */
+  .trust-row { display: none !important; }
 
   .footer-inner.footer-grid {
     grid-template-columns: 1fr;
@@ -4194,8 +4196,6 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   }
 
   .hero-actions .button { min-width: 0; padding-inline: 12px; font-size: 0.78rem; }
-
-  .trust-row { margin-top: 14px !important; }
 
   .topup-actions { flex-direction: column; }
   .topup-actions .button { width: 100%; }
