@@ -4763,12 +4763,16 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── Close ticket button — generate transcript and delete channel ── */
     if (interaction.isButton && interaction.isButton() && interaction.customId === "close_ticket") {
-      // Only allow admins and staff to close
+      // Allow staff/admins, OR the customer who opened this specific ticket.
+      // Ownership is recovered from the channel topic both ticket-creation
+      // paths set: "Opened by <userId> | ...".
       const isAdmin = isDiscordAdminInteraction(interaction) || (interaction.member && interaction.member.permissions.has(PermissionFlagsBits.ManageChannels));
       const isStaffRole = isDiscordStaff(interaction.user.id, interaction.member);
+      const ownerId = interaction.channel?.topic?.match(/^Opened by (\d+)/)?.[1] || null;
+      const isOwner = Boolean(ownerId) && ownerId === interaction.user.id;
 
-      if (!isAdmin && !isStaffRole) {
-        return interaction.reply({ embeds: [{ description: "Only staff can close tickets.", color: 0xff4444 }], ephemeral: true });
+      if (!isAdmin && !isStaffRole && !isOwner) {
+        return interaction.reply({ embeds: [{ description: "Only staff or the person who opened this ticket can close it.", color: 0xff4444 }], ephemeral: true });
       }
 
       await interaction.reply({ embeds: [{ description: "Closing ticket and saving transcript...", color: 0xfbbf24 }] });
