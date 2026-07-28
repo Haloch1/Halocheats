@@ -63,7 +63,11 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   line-height: 1.65;
-  background: linear-gradient(180deg, #f53818, #ffe4dd);
+  /* Quiet, near-neutral canvas — the red brand color lives in buttons,
+     badges, the hero glow, and the ticker dots instead of the page
+     background itself. A saturated full-page background was fighting
+     with the white content cards the whole way down the page. */
+  background: var(--paper);
 }
 
 body::before {
