@@ -3920,6 +3920,7 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   }
   .hero h1 { font-size: clamp(3rem, 14vw, 5.1rem); }
   .hero-visual { display: none; }
+  .trust-row { margin-top: 20px !important; }
 
   .cheat-ui-body { grid-template-columns: 105px 1fr; }
   .cheat-ui-tabs { padding-inline: 8px; }
@@ -4111,12 +4112,12 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .catalog-category-card { min-height: 285px; }
   .product-thumbnail-button { aspect-ratio: 5 / 4; }
 
-  .support { padding: 28px 18px; }
-  .desk-panel { padding: 17px; }
+  .support { padding: 30px 20px; }
+  .desk-panel { padding: 20px; }
   .desk-metrics { grid-template-columns: 1fr; }
   .desk-request-form { grid-template-columns: 1fr; }
 
-  .variant-details { padding: 28px 18px; }
+  .variant-details { padding: 30px 20px; }
   .variant-details h3 { font-size: 2.35rem; }
   .variant-status-row > span[data-variant-price] { margin-left: 0; }
   .variant-actions { grid-template-columns: 1fr; }
@@ -4129,16 +4130,16 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .variant-reviews-list,
   .variant-related-list { grid-template-columns: 1fr; }
 
-  .auth-card { padding: 20px 16px; }
+  .auth-card { padding: 24px 18px; }
   .auth-entry-side { padding: 20px; }
   .auth-panel-switch { flex-direction: column; }
   .discord-link-card { align-items: flex-start; flex-direction: column; }
-  .topup-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .topup-presets { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 
   .desk-inbox-panel,
   .desk-thread-panel,
   .balance-panel,
-  .member-panel { padding: 17px; }
+  .member-panel { padding: 20px; }
 
   .request-admin-grid,
   .stat-grid,
@@ -4153,6 +4154,30 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .social-proof-toast {
     display: none !important;
   }
+}
+
+/* On the narrowest phones, side-by-side CTA rows get cramped and awkward
+   to tap. Stack them full-width instead — bigger tap targets, cleaner
+   rhythm, reads more intentional than two squeezed buttons. */
+@media (max-width: 480px) {
+  .hero-actions,
+  .desk-actions,
+  .dashboard-actions {
+    flex-direction: column;
+  }
+
+  .hero-actions .button,
+  .desk-actions .button,
+  .dashboard-actions .button {
+    width: 100%;
+  }
+
+  .trust-row { margin-top: 18px !important; }
+
+  .topup-actions { flex-direction: column; }
+  .topup-actions .button { width: 100%; }
+
+  .variant-actions .button { width: 100%; }
 }
 
 @media (hover: none), (pointer: coarse) {
