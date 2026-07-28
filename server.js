@@ -4933,6 +4933,44 @@ ${rows || '<div class="ct">No messages.</div>'}
       }
     }
 
+    /* ── Close website-support ticket from its linked Discord thread ──
+       Unlike close_ticket above (a private per-ticket channel that gets
+       deleted), this is a thread inside a shared support channel/forum —
+       closing it marks the underlying support_threads row closed (so the
+       website side reflects it immediately) and archives/locks the thread
+       instead of deleting shared channel history. */
+    if (interaction.isButton && interaction.isButton() && interaction.customId?.startsWith("close_site_ticket:")) {
+      const isAdmin = isDiscordAdminInteraction(interaction) || (interaction.member && interaction.member.permissions.has(PermissionFlagsBits.ManageChannels));
+      const isStaffRole = isDiscordStaff(interaction.user.id, interaction.member);
+      if (!isAdmin && !isStaffRole) {
+        return interaction.reply({ embeds: [{ description: "Only staff can close tickets.", color: 0xff4444 }], ephemeral: true });
+      }
+
+      const siteThreadId = interaction.customId.slice("close_site_ticket:".length);
+      await interaction.reply({ embeds: [{ description: "Closing ticket...", color: 0xfbbf24 }] });
+
+      try {
+        if (supabaseAdmin) {
+          const { error } = await supabaseAdmin
+            .from("support_threads")
+            .update({ status: "closed", updated_at: new Date().toISOString() })
+            .eq("id", siteThreadId);
+          if (error) throw error;
+        }
+
+        const thread = interaction.channel;
+        if (thread?.isThread?.()) {
+          await thread.setLocked(true).catch(() => {});
+          await thread.setArchived(true).catch(() => {});
+        }
+
+        await interaction.followUp({ embeds: [{ description: `🔒 Closed by ${interaction.user.tag}. The customer will see this reflected on the website.`, color: 0x22c55e }] });
+      } catch (err) {
+        console.error("[Discord site ticket close]", err.message);
+        await interaction.followUp({ embeds: [{ description: `Error closing: ${err.message}`, color: 0xff4444 }], ephemeral: true });
+      }
+    }
+
     if (!interaction.isChatInputCommand()) return;
 
     /* ── /transcriptdemo — post an example transcript so you can see the format ── */
@@ -8070,6 +8108,13 @@ async function createSupportDiscordThread(thread, member, firstBody) {
       return null;
     }
     const isForumParent = parent.type === ChannelType.GuildForum || parent.type === ChannelType.GuildMedia;
+    const closeSiteTicketRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`close_site_ticket:${thread.id}`)
+        .setLabel("Close Ticket")
+        .setEmoji("🔒")
+        .setStyle(ButtonStyle.Danger),
+    );
     const forumOpeningMessage = {
       embeds: [{
         title: thread.subject || "Support ticket",
@@ -8082,6 +8127,7 @@ async function createSupportDiscordThread(thread, member, firstBody) {
         footer: { text: "Reply in this thread to answer the customer on the site." },
         timestamp: new Date().toISOString(),
       }],
+      components: [closeSiteTicketRow],
     };
     const name = `${(thread.subject || "Ticket").slice(0, 60)} — ${(thread.contact_name || "member").slice(0, 20)}`;
     let dThread;
@@ -8098,6 +8144,7 @@ async function createSupportDiscordThread(thread, member, firstBody) {
       const starter = await parent.send({
         content: "New website support request. Reply inside the attached thread.",
         embeds: forumOpeningMessage.embeds,
+        components: forumOpeningMessage.components,
       });
       dThread = await parent.threads.create({
         name: name.slice(0, 100),
