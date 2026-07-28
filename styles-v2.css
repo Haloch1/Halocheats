@@ -3915,10 +3915,15 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .hero {
     grid-template-columns: minmax(0, 1fr);
     min-height: auto;
-    padding: 64px 0 56px;
+    padding: 56px 0 40px;
     gap: 0;
   }
-  .hero h1 { font-size: clamp(3rem, 14vw, 5.1rem); }
+  /* Previously clamp(3rem, 14vw, 5.1rem) — at tablet widths that rendered
+     well over 60px, so "Cheats built to" (the text before the hard <br>
+     in the markup) wrapped a second time on its own and the whole
+     headline broke across 3-4 short lines instead of the intended 2.
+     Sized so "Cheats built to" reliably fits on one line down to ~600px. */
+  .hero h1 { font-size: clamp(2.6rem, 8vw, 4rem); }
   .hero-visual { display: none; }
   .trust-row { margin-top: 20px !important; }
 
@@ -4066,9 +4071,13 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .balance-pill { min-width: 68px; padding-inline: 9px; font-size: 0.7rem; }
   .cart-button { width: 40px; min-height: 40px; }
 
-  .hero { padding-top: 46px; }
-  .hero h1 { font-size: clamp(2.85rem, 15vw, 4rem); }
-  .hero-text { margin-block: 20px; }
+  .hero { padding: 44px 0 32px; }
+  /* Was clamp(2.85rem, 15vw, 4rem) — still too large to keep "Cheats built
+     to" on one line at common phone widths (360-430px), which is what
+     forced the headline into 4 broken lines and pushed a wall of empty
+     background below the buttons before the next section. */
+  .hero h1 { font-size: clamp(2.1rem, 9.5vw, 3.1rem); }
+  .hero-text { margin-block: 16px; }
   .hero-actions .button { flex: 1; min-width: 150px; }
 
   .trust-row { gap: 10px 16px !important; }
