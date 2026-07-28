@@ -551,6 +551,7 @@ function initNavIcons() {
     reviews: '<path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9Z"/>',
     help: '<path d="M8.8 9a3.3 3.3 0 1 1 5.7 2.2c-1.5 1.4-2.5 1.7-2.5 3.3"/><path d="M12 18h.01"/><circle cx="12" cy="12" r="9"/>',
     discord: '<circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><path d="M7.5 7.2A17 17 0 0 1 12 6.5c1.6 0 3.1.2 4.5.7M7 16.8c1.4.5 3 .7 5 .7s3.6-.2 5-.7"/><path d="M17.3 6.6S19 7 20.4 9.8c1.3 2.8 1.5 5.6.6 7.2-.8 1.4-2.1 3-3.5 3-.5 0-2-2-2-3M6.7 6.6S5 7 3.6 9.8C2.3 12.6 2.1 15.4 3 17c.8 1.4 2.1 3 3.5 3 .5 0 2-2 2-3"/>',
+    status: '<path d="M3 12h4l3 8 4-16 3 8h4"/>',
     account: '<circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/>',
   };
 
@@ -562,6 +563,7 @@ function initNavIcons() {
     if (/discord/i.test(href)) icon = "discord";
     else if (/products/i.test(href)) icon = "products";
     else if (/reviews/i.test(href)) icon = "reviews";
+    else if (/status/i.test(href)) icon = "status";
     else if (/desk|help/i.test(href)) icon = "help";
     else if (href === "/" || /home/i.test(link.textContent || "")) icon = "home";
 
@@ -593,7 +595,7 @@ function initSharedFooter() {
         <div class="footer-trust"><span>Instant Delivery</span><span>Secure Checkout</span><span>24/7 Desk</span></div>
       </div>
       <nav class="footer-col" aria-label="Store links"><strong>Store</strong><a href="/products/">Products</a><a href="/reviews/">Reviews</a><a href="/instructions/">Setup Guides</a></nav>
-      <nav class="footer-col" aria-label="Support links"><strong>Support</strong><a href="/desk/">Help Desk</a><a href="/account/">Your Account</a><a href="https://discord.gg/xencheats" target="_blank" rel="noreferrer">Discord</a></nav>
+      <nav class="footer-col" aria-label="Support links"><strong>Support</strong><a href="/desk/">Help Desk</a><a href="/account/">Your Account</a><a href="/status/">Status</a><a href="https://discord.gg/xencheats" target="_blank" rel="noreferrer">Discord</a></nav>
       <nav class="footer-col" aria-label="Company links"><strong>Company</strong><a href="/terms/">Terms of Service</a><a href="/privacy/">Privacy Policy</a></nav>
       <div class="footer-copy">&copy; <span data-year></span> XenCheats. All rights reserved.</div>
     `;
@@ -681,52 +683,62 @@ sendVisitorHeartbeat();
 window.setInterval(sendVisitorHeartbeat, VISITOR_HEARTBEAT_MS);
 document.addEventListener("visibilitychange", sendVisitorHeartbeat);
 
-/* ── Nav auto-scroll on mobile ── */
-function initNavAutoScroll() {
-  const nav = document.querySelector(".nav");
-  if (!nav || window.innerWidth > 760) return;
+/* ── Mobile nav: hamburger button that pops the nav open as a dropdown ──
+   Replaces the old auto-scrolling nav strip (bounced left/right on its own,
+   which got worse to use as more links were added). Injects one button per
+   page into .topbar-shell; the CSS at the 820px breakpoint hides .nav by
+   default and only shows it as an absolutely-positioned dropdown while it
+   has the "is-open" class. */
+function initMobileNavToggle() {
+  const shell = document.querySelector(".topbar-shell");
+  const nav = shell?.querySelector(".nav");
+  if (!shell || !nav || shell.querySelector(".nav-toggle")) return;
 
-  let scrollPos = 0;
-  let direction = 1;
-  let paused = false;
-  let pauseTimeout = null;
+  if (!nav.id) nav.id = "primary-nav";
 
-  function step() {
-    if (!paused && nav.scrollWidth > nav.clientWidth) {
-      const maxScroll = nav.scrollWidth - nav.clientWidth;
-      scrollPos += 0.5 * direction;
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "nav-toggle";
+  toggle.setAttribute("aria-label", "Menu");
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.setAttribute("aria-controls", nav.id);
+  toggle.innerHTML = "<span></span><span></span><span></span>";
 
-      if (scrollPos >= maxScroll) {
-        scrollPos = maxScroll;
-        direction = -1;
-      } else if (scrollPos <= 0) {
-        scrollPos = 0;
-        direction = 1;
-      }
+  shell.insertBefore(toggle, nav.nextSibling);
 
-      nav.scrollLeft = scrollPos;
-    }
-    requestAnimationFrame(step);
-  }
+  const closeNav = () => {
+    nav.classList.remove("is-open");
+    toggle.setAttribute("aria-expanded", "false");
+  };
 
-  // Pause on touch
-  nav.addEventListener("touchstart", () => {
-    paused = true;
-    clearTimeout(pauseTimeout);
-  }, { passive: true });
+  toggle.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const open = nav.classList.toggle("is-open");
+    toggle.setAttribute("aria-expanded", String(open));
+  });
 
-  nav.addEventListener("touchend", () => {
-    pauseTimeout = setTimeout(() => {
-      scrollPos = nav.scrollLeft;
-      paused = false;
-    }, 3000);
-  }, { passive: true });
+  // Close after picking a link, so the dropdown doesn't stay open across
+  // a same-page action like the "Help" chat-launcher link.
+  nav.addEventListener("click", (event) => {
+    if (event.target.closest("a")) closeNav();
+  });
 
-  // Start after a short delay
-  setTimeout(() => requestAnimationFrame(step), 1500);
+  document.addEventListener("click", (event) => {
+    if (!nav.classList.contains("is-open")) return;
+    if (nav.contains(event.target) || toggle.contains(event.target)) return;
+    closeNav();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeNav();
+  });
+
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 820) closeNav();
+  });
 }
 
-initNavAutoScroll();
+initMobileNavToggle();
 
 /* ── Site banner (managed via Discord /banner) ── */
 async function initSiteBanner() {
