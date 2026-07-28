@@ -419,6 +419,7 @@ function renderCategoryCard(category, products) {
   card.innerHTML = `
     <div class="category-card-art">
       <img src="${imageSrc}" alt="${escapeHtml(category)}" loading="lazy" />
+      <span class="category-card-view-overlay" aria-hidden="true"><span>View</span></span>
     </div>
     <div class="category-card-body">
       <span class="category-card-count">${products.length} ${products.length === 1 ? "product" : "products"}</span>

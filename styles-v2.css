@@ -1143,8 +1143,44 @@ button:disabled {
 }
 
 .catalog-category-card:hover .category-card-art img {
-  filter: saturate(1.08) contrast(1.03);
+  filter: saturate(1.05) contrast(1.02) brightness(0.72);
   transform: scale(1.035);
+}
+
+.category-card-view-overlay {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity 260ms ease;
+}
+
+.category-card-view-overlay span {
+  display: inline-flex;
+  min-width: 92px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  background: rgba(216, 32, 40, 0.88);
+  box-shadow: 0 12px 26px rgba(30, 9, 10, 0.24);
+  font: 800 0.78rem var(--font-display);
+  transform: translateY(10px) scale(0.96);
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.catalog-category-card:hover .category-card-view-overlay,
+.catalog-category-card:focus-within .category-card-view-overlay {
+  opacity: 1;
+}
+
+.catalog-category-card:hover .category-card-view-overlay span,
+.catalog-category-card:focus-within .category-card-view-overlay span {
+  transform: translateY(0) scale(1);
 }
 
 .category-card-body {

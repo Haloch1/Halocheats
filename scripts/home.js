@@ -143,10 +143,10 @@ async function loadPopularCategories() {
           <a class="catalog-category-card reveal" data-delay="${20 + i * 70}" href="/products/">
             <div class="category-card-art">
               <img src="${homeCategoryImage(c.category)}" alt="${escapeHtmlHome(c.category)}" loading="lazy" />
+              <span class="category-card-view-overlay" aria-hidden="true"><span>View</span></span>
             </div>
             <div class="category-card-body">
               <span class="category-card-count">${count} ${count === 1 ? "product" : "products"}</span>
-              <span class="button button-primary">View</span>
             </div>
           </a>
         `;
