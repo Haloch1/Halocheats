@@ -63,8 +63,7 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   line-height: 1.65;
-  /* Plain flat light red. No grid lines, no gradients, no texture. */
-  background: #fce9e9;
+  background: linear-gradient(180deg, #f53818, #ffe4dd);
 }
 
 body::before {
