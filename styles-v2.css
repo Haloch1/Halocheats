@@ -64,10 +64,14 @@ body {
   font-family: var(--font-body);
   line-height: 1.65;
   /* Quiet, near-neutral canvas — the red brand color lives in buttons,
-     badges, the hero glow, and the ticker dots instead of the page
-     background itself. A saturated full-page background was fighting
-     with the white content cards the whole way down the page. */
-  background: var(--paper);
+     badges, and the hero glow instead of the page background itself. A
+     fine grid on top gives it texture without adding more red coverage;
+     the two line directions use slightly different reds for depth. */
+  background:
+    linear-gradient(rgba(216, 32, 40, 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 56, 24, 0.12) 1px, transparent 1px),
+    var(--paper);
+  background-size: 42px 42px, 42px 42px, auto;
 }
 
 body::before {
@@ -4149,6 +4153,16 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .section { padding: 28px 0; }
   .section-heading { margin-bottom: 16px; }
   .section-heading p { font-size: 0.92rem; }
+
+  /* Same fixed 42px cell size reads as a handful of big, obvious bars on
+     a narrow phone instead of a fine texture — scale the grid up and fade
+     it back so it stays subtle rather than a visible checkerboard. */
+  body {
+    background-size: 64px 64px, 64px 64px, auto;
+    background-image:
+      linear-gradient(rgba(216, 32, 40, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245, 56, 24, 0.08) 1px, transparent 1px);
+  }
 
   .ticker-track span { padding: 12px 32px; }
 
