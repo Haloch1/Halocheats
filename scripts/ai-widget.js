@@ -89,7 +89,10 @@ async function init() {
   const endChatBtn = root.querySelector(".ai-widget-endchat");
   const tabsEl = root.querySelector(".ai-widget-tabs");
   const messagesEl = root.querySelector(".ai-widget-messages");
-  const scrollBody = root.querySelector(".ai-widget-body");
+  // .ai-widget-messages is the actual scrolling element (see styles-v2.css)
+  // — .ai-widget-scrollbtn lives one level up in .ai-widget-body as a
+  // sibling, specifically so it does NOT scroll away with the messages.
+  const scrollBody = messagesEl;
   const scrollBtn = root.querySelector(".ai-widget-scrollbtn");
   const form = root.querySelector(".ai-widget-form");
   const textarea = form.querySelector("textarea");
@@ -108,10 +111,11 @@ async function init() {
   let activeThread = null;
   let restoreAttempts = 0;
 
-  /* NOTE: the element that actually scrolls is .ai-widget-body (it has
-     overflow-y: auto) — .ai-widget-messages is just a plain flex column
-     that grows to fit its content, so its own scrollTop/scrollHeight never
-     change. Scroll math has to target scrollBody, not messagesEl, or every
+  /* NOTE: scrollBody === messagesEl (.ai-widget-messages) — that's the
+     element with overflow-y: auto. .ai-widget-scrollbtn is a sibling of
+     .ai-widget-messages (inside .ai-widget-body, which does NOT scroll),
+     so it stays visually pinned to the corner instead of scrolling away
+     with the message list. Scroll math has to target scrollBody, or every
      "how far from the bottom" check silently reads as "always at the
      bottom" and the jump button never has a reason to appear. */
 

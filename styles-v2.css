@@ -4468,11 +4468,26 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
 .ai-widget-body {
   position: relative;
   flex: 1;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--paper-soft);
 }
 
-.ai-widget-messages { display: flex; flex-direction: column; gap: 10px; padding: 16px; }
+/* .ai-widget-messages (not .ai-widget-body) is the actual scrolling
+   element. This keeps .ai-widget-scrollbtn — an absolutely positioned
+   sibling, not a descendant of the scroll area — visually pinned to the
+   corner of the chat window while messages scroll underneath it, instead
+   of scrolling away with the content. */
+.ai-widget-messages {
+  flex: 1;
+  min-height: 0; /* let this flex item shrink below its content height so overflow-y actually scrolls, instead of the container growing */
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
 
 .ai-widget-scrollbtn[hidden] {
   display: flex;
