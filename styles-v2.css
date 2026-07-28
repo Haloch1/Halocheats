@@ -4418,6 +4418,53 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
 
 .ai-widget-close:hover { background: rgba(255, 255, 255, 0.28); }
 
+.ai-widget-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.ai-widget-tabs::-webkit-scrollbar { display: none; }
+.ai-widget-tabs[hidden] { display: none; }
+
+.ai-widget-tab {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  font: 700 0.72rem var(--font-body);
+  color: var(--ink-soft);
+  background: var(--paper-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.ai-widget-tab:hover { border-color: var(--red); color: var(--ink); }
+
+.ai-widget-tab.is-active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--red-bright), var(--red-dark));
+  border-color: transparent;
+}
+
+.ai-widget-tab.is-closed:not(.is-active) { opacity: 0.55; }
+
+.ai-widget-tab-new {
+  width: 26px;
+  padding: 0;
+  justify-content: center;
+  font: 700 0.9rem var(--font-body);
+  color: var(--red);
+}
+
 .ai-widget-body {
   position: relative;
   flex: 1;

@@ -54,13 +54,13 @@ function buildWidget() {
           <span class="ai-widget-status"><i></i>AI + live team</span>
         </div>
         <div class="ai-widget-headactions">
-          <button type="button" class="ai-widget-headbtn ai-widget-newchat" hidden>New chat</button>
           <button type="button" class="ai-widget-headbtn ai-widget-endchat" hidden>Close</button>
           <button type="button" class="ai-widget-close" aria-label="Close chat">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
         </div>
       </div>
+      <div class="ai-widget-tabs" role="tablist" hidden></div>
       <div class="ai-widget-body">
         <div class="ai-widget-messages"></div>
         <button type="button" class="ai-widget-scrollbtn" aria-label="Jump to latest message" hidden>
@@ -86,8 +86,8 @@ async function init() {
   const bubble = root.querySelector(".ai-widget-bubble");
   const panel = root.querySelector(".ai-widget-panel");
   const closeBtn = root.querySelector(".ai-widget-close");
-  const newChatBtn = root.querySelector(".ai-widget-newchat");
   const endChatBtn = root.querySelector(".ai-widget-endchat");
+  const tabsEl = root.querySelector(".ai-widget-tabs");
   const messagesEl = root.querySelector(".ai-widget-messages");
   const scrollBody = root.querySelector(".ai-widget-body");
   const scrollBtn = root.querySelector(".ai-widget-scrollbtn");
@@ -96,7 +96,8 @@ async function init() {
   const dot = root.querySelector(".ai-widget-dot");
 
   let session = null;
-  let threadId = null;
+  let threads = []; // every thread on the account, newest data from /api/live-desk/mine
+  let threadId = null; // the tab currently being viewed
   let knownMessageIds = new Set();
   let pollTimer = null;
   let pollIntervalMs = POLL_MS_BACKGROUND;
@@ -167,12 +168,70 @@ async function init() {
       </div>`;
   }
 
-  /* "New chat" only makes sense once a conversation exists; "Close" only
-     makes sense while one is active. Keep both hidden otherwise. */
+  /* "Close" only makes sense while an open conversation is active. */
   function updateHeadActions() {
-    newChatBtn.hidden = !threadId;
-    endChatBtn.hidden = !threadId;
+    const active = threads.find((t) => t.id === threadId);
+    endChatBtn.hidden = !active || active.status === "closed";
   }
+
+  function orderedThreads() {
+    // Oldest first, left to right, so tab numbers stay stable as new ones
+    // are appended on the right instead of shuffling around.
+    return [...threads].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  }
+
+  function renderTabs() {
+    const ordered = orderedThreads();
+    if (!ordered.length) {
+      tabsEl.hidden = true;
+      tabsEl.innerHTML = "";
+      return;
+    }
+    tabsEl.hidden = false;
+    tabsEl.innerHTML =
+      ordered
+        .map((t, i) => {
+          const classes = ["ai-widget-tab"];
+          if (t.id === threadId) classes.push("is-active");
+          if (t.status === "closed") classes.push("is-closed");
+          return `<button type="button" class="${classes.join(" ")}" role="tab" aria-selected="${t.id === threadId}" data-thread-id="${esc(t.id)}">Chat ${i + 1}</button>`;
+        })
+        .join("") +
+      `<button type="button" class="ai-widget-tab ai-widget-tab-new" aria-label="Start a new conversation">+</button>`;
+
+    const activeTabEl = tabsEl.querySelector(".ai-widget-tab.is-active");
+    if (activeTabEl) activeTabEl.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+
+  function selectThread(id) {
+    if (id === threadId) return;
+    threadId = id;
+    userScrolledUp = false;
+    const thread = threads.find((t) => t.id === id);
+    renderThread(thread, { isBaseline: true });
+    renderTabs();
+    if (isOpen) startPolling(POLL_MS_OPEN);
+  }
+
+  function startNewTab() {
+    threadId = null;
+    activeThread = null;
+    knownMessageIds = new Set();
+    userScrolledUp = false;
+    renderStarter();
+    renderTabs();
+    updateHeadActions();
+    if (!window.matchMedia("(pointer: coarse)").matches) textarea.focus();
+  }
+
+  tabsEl.addEventListener("click", (e) => {
+    if (e.target.closest(".ai-widget-tab-new")) {
+      startNewTab();
+      return;
+    }
+    const tabBtn = e.target.closest(".ai-widget-tab[data-thread-id]");
+    if (tabBtn) selectThread(tabBtn.dataset.threadId);
+  });
 
   function startAiThinking() {
     aiThinking = true;
@@ -268,40 +327,31 @@ async function init() {
     updateHeadActions();
   }
 
-  /* Resets the widget to a blank slate, ready for a new conversation.
-     Called both when the member closes/starts a new chat locally, and when
-     a poll finds the thread was closed from the admin panel/Discord side. */
-  function resetToFreshConversation({ notice } = {}) {
-    threadId = null;
-    activeThread = null;
-    knownMessageIds = new Set();
-    userScrolledUp = false;
-    stopPolling();
-    if (notice) {
-      messagesEl.innerHTML = `<div class="ai-widget-greet"><p>${esc(notice)}</p></div>`;
-    } else {
-      renderStarter();
-    }
-    updateHeadActions();
+  async function fetchThreads() {
+    const res = await fetch("/api/live-desk/mine", {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.threads || [];
   }
 
+  /* Refreshes the full tab list every tick (so a reopened/closed-elsewhere
+     thread or a new one from another device shows up), and refreshes the
+     currently viewed tab's messages if one is selected. */
   async function pollThread() {
-    if (!session || !threadId) return;
+    if (!session) return;
     try {
-      const res = await fetch("/api/live-desk/mine", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const thread = (data.threads || []).find((t) => t.id === threadId);
-      if (!thread) return;
-      if (thread.status === "closed") {
-        // Closed from the admin panel/Discord side — drop back to a fresh
-        // conversation instead of continuing to poll a dead thread.
-        resetToFreshConversation({ notice: "This conversation was closed by support. Send a message to start a new one." });
-        return;
+      const list = await fetchThreads();
+      if (list) {
+        threads = list;
+        renderTabs();
+        updateHeadActions();
       }
-      renderThread(thread);
+      if (threadId) {
+        const thread = threads.find((t) => t.id === threadId);
+        if (thread) renderThread(thread);
+      }
     } catch {
       /* silent — retry on next tick */
     }
@@ -326,22 +376,20 @@ async function init() {
     if (!session?.access_token) return;
 
     try {
-      const res = await fetch("/api/live-desk/mine", {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      // Only auto-resume a thread that's still OPEN. A closed conversation
-      // (member closed it, or staff did) should not be silently re-adopted
-      // as "the" conversation — the member starts fresh instead.
-      const open = (data.threads || []).find((t) => t.status === "open");
+      const list = await fetchThreads();
+      if (list === null) return;
+      threads = list;
+      // Only auto-select a thread that's still OPEN. A closed conversation
+      // should not be silently re-adopted as "the" active tab — the member
+      // can still switch to it manually from the tab strip.
+      const open = threads.find((t) => t.status === "open");
       if (open) {
         threadId = open.id;
         renderThread(open, { isBaseline: true });
-        startPolling(POLL_MS_BACKGROUND);
-      } else {
-        updateHeadActions();
       }
+      renderTabs();
+      updateHeadActions();
+      if (threads.length) startPolling(POLL_MS_BACKGROUND);
     } catch {
       // A refreshed server cookie can arrive a moment after the page. Retry a
       // couple of times so an existing support session reliably resumes.
@@ -374,14 +422,15 @@ async function init() {
       return;
     }
 
-    if (threadId) {
-      // Already resumed in the background — speed the poll up while open.
-      startPolling(POLL_MS_OPEN);
-      pollThread();
-    } else if (!messagesEl.childElementCount) {
+    if (!threadId && !messagesEl.childElementCount) {
       renderStarter();
     }
+    renderTabs();
     updateHeadActions();
+    // Keep tabs/messages fresh while the panel is open, whether or not a
+    // specific conversation is currently selected.
+    startPolling(POLL_MS_OPEN);
+    pollThread();
 
     // Don't auto-focus on touch devices — it pops the on-screen keyboard
     // immediately on open, which is jarring on mobile. Desktop/mouse users
@@ -398,7 +447,7 @@ async function init() {
     bubble.setAttribute("aria-expanded", "false");
     // Keep a slower background poll alive so the unread dot still works,
     // instead of stopping entirely.
-    if (threadId) {
+    if (threads.length) {
       startPolling(POLL_MS_BACKGROUND);
     } else {
       stopPolling();
@@ -411,11 +460,10 @@ async function init() {
     if (e.key === "Escape" && isOpen) closePanel();
   });
 
-  /* Ends the current conversation server-side so it stops showing as the
-     account's "open" thread. Shared by both the Close and New chat
-     buttons — a new chat is just "close the old one, then start blank". */
-  async function endCurrentConversation() {
-    if (!threadId || !session?.access_token) return;
+  endChatBtn.addEventListener("click", async () => {
+    if (!threadId) return;
+    if (!window.confirm("Close this conversation? You can still find it in its tab and reply later to reopen it.")) return;
+    endChatBtn.disabled = true;
     const closingId = threadId;
     try {
       await fetch("/api/live-desk/close", {
@@ -425,27 +473,22 @@ async function init() {
       });
     } catch {
       /* If the request fails the thread just stays open server-side; the
-         member can try again. Reset the local view regardless so they're
-         not stuck. */
+         member can try again from its tab. */
     }
-  }
-
-  endChatBtn.addEventListener("click", async () => {
-    if (!threadId) return;
-    if (!window.confirm("Close this conversation? You can start a new one any time.")) return;
-    endChatBtn.disabled = true;
-    await endCurrentConversation();
     endChatBtn.disabled = false;
-    resetToFreshConversation({ notice: "Conversation closed. Send a message any time to start a new one." });
-  });
 
-  newChatBtn.addEventListener("click", async () => {
-    if (!threadId) return;
-    newChatBtn.disabled = true;
-    await endCurrentConversation();
-    newChatBtn.disabled = false;
-    resetToFreshConversation();
-    textarea.focus();
+    const closed = threads.find((t) => t.id === closingId);
+    if (closed) closed.status = "closed";
+
+    // Switch to another open conversation if one exists, otherwise drop to
+    // a blank "start new" state — the closed tab stays in the strip either way.
+    const nextOpen = threads.find((t) => t.status === "open" && t.id !== closingId);
+    if (nextOpen) {
+      threadId = null; // force selectThread to actually switch
+      selectThread(nextOpen.id);
+    } else {
+      startNewTab();
+    }
   });
 
   form.addEventListener("submit", async (event) => {
@@ -469,6 +512,10 @@ async function init() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Unable to send message.");
         threadId = data.threadId;
+        // Optimistic tab so the strip shows this conversation immediately;
+        // the next poll replaces it with the real record.
+        threads.push({ id: threadId, subject: "Live chat", status: "open", createdAt: new Date().toISOString(), messages: [] });
+        renderTabs();
         updateHeadActions();
         startAiThinking();
         startPolling(POLL_MS_OPEN);
@@ -480,6 +527,12 @@ async function init() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Unable to send message.");
+        // Replying to a closed tab reopens it server-side — mirror that
+        // locally so the tab strip and Close button reflect it right away.
+        const activeInList = threads.find((t) => t.id === threadId);
+        if (activeInList) activeInList.status = "open";
+        renderTabs();
+        updateHeadActions();
         startAiThinking();
       }
       pollThread();
@@ -512,12 +565,12 @@ async function init() {
   // Renew the current support session after a reload, a return to this tab,
   // or a completed sign-in flow without making the member reopen the widget.
   window.addEventListener("focus", () => {
-    if (!threadId) resumePromise = resumeOnLoad();
+    if (!session) resumePromise = resumeOnLoad();
     else pollThread();
   });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
-      if (!threadId) resumePromise = resumeOnLoad();
+      if (!session) resumePromise = resumeOnLoad();
       else pollThread();
     }
   });
