@@ -152,6 +152,13 @@ const discordInactiveTicketCategoryId = process.env.DISCORD_INACTIVE_TICKET_CATE
 const discordTicketQueueChannelId = process.env.DISCORD_TICKET_QUEUE_CHANNEL_ID || "";
 const discordTicketIdleHours = Math.max(1, Number(process.env.DISCORD_TICKET_IDLE_HOURS || 24));
 const discordTicketReplyWaitMinutes = Math.max(5, Number(process.env.DISCORD_TICKET_REPLY_WAIT_MINUTES || 20));
+// How often the SAME ticket can re-post to the queue channel while it keeps
+// sitting unanswered (e.g. the customer sends several follow-up messages).
+// Without this, every new customer message re-triggered an alert as soon as
+// the reply-wait window passed again, flooding the queue channel when a lot
+// of tickets are open at once.
+const discordTicketQueueAlertCooldownMs =
+  Math.max(1, Number(process.env.DISCORD_TICKET_QUEUE_ALERT_COOLDOWN_HOURS || 24)) * 60 * 60 * 1000;
 // Keep public bot use responsive. Provider-level quotas are still respected, but
 // normal members should not hit an arbitrary support limit during a real issue.
 const discordAiCooldownMs = Math.max(1, Number(process.env.DISCORD_AI_COOLDOWN_SECONDS || 2)) * 1000;
@@ -173,7 +180,7 @@ const discordStatusTargetChannelId = process.env.DISCORD_STATUS_TARGET_CHANNEL_I
 const pendingSchedules = new Map(); // id -> { timer, title, postAt }
 const resellerBuyLocks = new Map(); // inventorySlug -> Promise that resolves when buy completes
 const slashCooldownByUser = new Map(); // `${command}:${userId}` -> ts of last use
-const ticketQueueAlertByChannel = new Map(); // channelId -> last customer message id or initial marker
+const ticketQueueAlertByChannel = new Map(); // channelId -> { key: last alerted customer message id, at: timestamp of that alert }
 const discordAiUsageByUser = new Map(); // userId -> { day, count, lastAt }
 const pendingTicketAiTurns = new Map(); // channelId -> automated reply count
 const discordAiThreadsInFlight = new Set(); // prevents overlapping provider calls in one private thread
@@ -2513,7 +2520,14 @@ async function createStaffTicketFromQuestionThread(sourceThread, user, latestPro
 }
 
 async function postTicketQueueAlert(guild, channel, messages, waitingSince, alertKey) {
-  if (!discordTicketQueueChannelId || ticketQueueAlertByChannel.get(channel.id) === alertKey) return;
+  if (!discordTicketQueueChannelId) return;
+  const lastAlert = ticketQueueAlertByChannel.get(channel.id);
+  // Same unanswered message we already alerted on, or this ticket alerted
+  // recently (even if the customer sent new follow-up messages since) —
+  // don't re-post until the cooldown passes.
+  if (lastAlert && (lastAlert.key === alertKey || Date.now() - lastAlert.at < discordTicketQueueAlertCooldownMs)) {
+    return;
+  }
   const queueChannel = await guild.channels.fetch(discordTicketQueueChannelId).catch(() => null);
   if (!queueChannel?.isTextBased()) return;
 
@@ -2536,7 +2550,7 @@ async function postTicketQueueAlert(guild, channel, messages, waitingSince, aler
       new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel("Open ticket").setURL(`https://discord.com/channels/${guild.id}/${channel.id}`),
     )],
   });
-  ticketQueueAlertByChannel.set(channel.id, alertKey);
+  ticketQueueAlertByChannel.set(channel.id, { key: alertKey, at: Date.now() });
 }
 
 async function maintainDiscordTickets() {
