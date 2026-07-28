@@ -67,10 +67,16 @@ import("./ai-widget.js").catch(function (err) {
     }, { passive: true });
   }
 
-  /* ── Ticker pause on hover ── */
+  /* ── Ticker pause on hover ──
+     Real-mouse only. On touch devices a tap can fire a synthetic
+     "mouseenter" with no matching "mouseleave" ever following, which froze
+     the marquee mid-scroll permanently — whatever phrase happened to be in
+     view at that instant, with blank space where the rest hadn't scrolled
+     in yet. */
   function initTicker() {
     var track = document.querySelector('.ticker-track');
     if (!track) return;
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
     var ticker = track.parentElement;
     ticker.addEventListener('mouseenter', function () { track.style.animationPlayState = 'paused'; });
     ticker.addEventListener('mouseleave', function () { track.style.animationPlayState = 'running'; });
