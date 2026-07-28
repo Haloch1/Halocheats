@@ -63,25 +63,18 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   line-height: 1.65;
-  /* Flat diagonal wash instead of overlapping radial "glow circle" blobs —
-     keeps the red brand color and the grid-line texture without the soft
-     spotlight look. */
+  /* One flat, uniform light red across the whole page — no patches, no
+     concentrated spots of color. Just the tint plus the fine grid-line
+     texture on top. */
   background:
-    linear-gradient(155deg, rgba(255, 60, 68, 0.28), rgba(255, 255, 255, 0) 42%),
-    linear-gradient(-25deg, rgba(216, 32, 40, 0.16), rgba(255, 255, 255, 0) 48%),
-    linear-gradient(rgba(216, 32, 40, 0.18) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(216, 32, 40, 0.18) 1px, transparent 1px),
-    var(--paper);
-  background-size: auto, auto, 42px 42px, 42px 42px, auto;
+    linear-gradient(rgba(216, 32, 40, 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(216, 32, 40, 0.16) 1px, transparent 1px),
+    #fce9e9;
+  background-size: 42px 42px, 42px 42px, auto;
 }
 
 body::before {
-  position: fixed;
-  z-index: -1;
-  inset: 0;
-  content: "";
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 40%, rgba(255, 110, 116, 0.4));
+  display: none;
 }
 
 body.modal-open {
@@ -4168,12 +4161,10 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
      width to spread them across. Scale the grid up and fade it back so it
      stays a subtle texture instead of a visible checkerboard. */
   body {
-    background-size: auto, auto, 64px 64px, 64px 64px, auto;
+    background-size: 64px 64px, 64px 64px, auto;
     background-image:
-      linear-gradient(155deg, rgba(255, 60, 68, 0.22), rgba(255, 255, 255, 0) 42%),
-      linear-gradient(-25deg, rgba(216, 32, 40, 0.13), rgba(255, 255, 255, 0) 48%),
-      linear-gradient(rgba(216, 32, 40, 0.07) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(216, 32, 40, 0.07) 1px, transparent 1px);
+      linear-gradient(rgba(216, 32, 40, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(216, 32, 40, 0.1) 1px, transparent 1px);
   }
 
   .reveal {
