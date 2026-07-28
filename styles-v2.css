@@ -63,14 +63,8 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   line-height: 1.65;
-  /* One flat, uniform light red across the whole page — no patches, no
-     concentrated spots of color. Just the tint plus the fine grid-line
-     texture on top. */
-  background:
-    linear-gradient(rgba(216, 32, 40, 0.16) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(216, 32, 40, 0.16) 1px, transparent 1px),
-    #fce9e9;
-  background-size: 42px 42px, 42px 42px, auto;
+  /* Plain flat light red. No grid lines, no gradients, no texture. */
+  background: #fce9e9;
 }
 
 body::before {
@@ -4154,18 +4148,6 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .section-heading p { font-size: 0.92rem; }
 
   .ticker-track span { padding: 12px 32px; }
-
-  /* The decorative grid lines behind the page use a fixed 42px cell size.
-     On a narrow phone screen that same cell size reads as a handful of big,
-     obvious pink "bars" instead of a fine texture, since there's so little
-     width to spread them across. Scale the grid up and fade it back so it
-     stays a subtle texture instead of a visible checkerboard. */
-  body {
-    background-size: 64px 64px, 64px 64px, auto;
-    background-image:
-      linear-gradient(rgba(216, 32, 40, 0.1) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(216, 32, 40, 0.1) 1px, transparent 1px);
-  }
 
   .reveal {
     transform: translate3d(0, 22px, 0);
