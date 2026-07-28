@@ -64,12 +64,12 @@ body {
   font-family: var(--font-body);
   line-height: 1.65;
   /* Quiet, near-neutral canvas — the red brand color lives in buttons,
-     badges, and the hero glow instead of the page background itself. A
-     fine grid on top gives it texture without adding more red coverage;
-     the two line directions use slightly different reds for depth. */
+     badges, and the hero glow instead of the page background itself. Grid
+     lines use two visibly distinct reds (deep red vertical, bright
+     red-orange horizontal) instead of near-identical faint hairlines. */
   background:
-    linear-gradient(rgba(216, 32, 40, 0.16) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(245, 56, 24, 0.12) 1px, transparent 1px),
+    linear-gradient(rgba(169, 15, 22, 0.4) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 56, 24, 0.3) 1px, transparent 1px),
     var(--paper);
   background-size: 42px 42px, 42px 42px, auto;
 }
@@ -4160,8 +4160,8 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   body {
     background-size: 64px 64px, 64px 64px, auto;
     background-image:
-      linear-gradient(rgba(216, 32, 40, 0.1) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(245, 56, 24, 0.08) 1px, transparent 1px);
+      linear-gradient(rgba(169, 15, 22, 0.3) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245, 56, 24, 0.22) 1px, transparent 1px);
   }
 
   .ticker-track span { padding: 12px 32px; }
