@@ -64,22 +64,18 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   line-height: 1.65;
-  /* Dark canvas with a soft red glow + vignette pinned to the VIEWPORT
-     (background-attachment: fixed) so they sit near the visible top/bottom
-     edges of the screen no matter how tall the actual page is. Percentage
-     "at" positions on a plain (scrolling) body background are relative to
-     the full page height, which on a long page pushes a "-12%" glow
-     hundreds of pixels above anything the visitor can ever see -- fixed
-     attachment re-anchors the position math to the viewport instead. */
+  /* Dark canvas, faint grid lines for subtle texture. The glow/vignette
+     that used to live here moved to .hero and .site-footer respectively --
+     background-attachment: fixed kept them glued to the viewport while
+     scrolling (looked "sticky"/stuck in place), and plain percentage
+     positions on body are relative to the whole scrollable page height,
+     not the viewport, which pushes them off-screen on a long page. Scoping
+     each glow to its own section sidesteps both problems. */
   background-color: var(--paper);
   background-image:
-    radial-gradient(1200px 720px at 50% -140px, rgba(255, 60, 70, 0.32), transparent 62%),
-    radial-gradient(1000px 620px at 50% calc(100% + 160px), rgba(0, 0, 0, 0.6), transparent 60%),
     linear-gradient(rgba(255, 55, 66, 0.07) 1px, transparent 1px),
     linear-gradient(90deg, rgba(245, 56, 24, 0.05) 1px, transparent 1px);
-  background-repeat: no-repeat, no-repeat, repeat, repeat;
-  background-attachment: fixed, fixed, scroll, scroll;
-  background-size: auto, auto, 56px 56px, 56px 56px;
+  background-size: 56px 56px, 56px 56px;
 }
 
 body::before {
@@ -596,12 +592,29 @@ button:disabled {
 }
 
 .hero {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 0.94fr) minmax(480px, 1.06fr);
   align-items: center;
   gap: clamp(42px, 7vw, 88px);
   min-height: calc(100vh - 104px);
   padding: 98px 0 84px;
+}
+
+.hero::before {
+  position: absolute;
+  z-index: -1;
+  /* Bleed past the hero's own width constraint so the glow reaches the
+     screen edges instead of stopping at the content column. */
+  top: -80px;
+  right: 50%;
+  left: 50%;
+  width: 100vw;
+  height: 130%;
+  margin-left: -50vw;
+  content: "";
+  pointer-events: none;
+  background: radial-gradient(1100px 640px at 50% 0%, rgba(255, 60, 70, 0.24), transparent 62%);
 }
 
 .hero-copy {
@@ -3837,7 +3850,9 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   margin-top: 72px;
   color: var(--ink);
   border-top: 1px solid var(--line);
-  background: var(--paper-soft);
+  background:
+    radial-gradient(1000px 400px at 50% 100%, rgba(0, 0, 0, 0.5), transparent 65%),
+    var(--paper-soft);
 }
 
 .footer-inner {
@@ -4200,12 +4215,8 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
      a narrow phone instead of a fine texture Ã¢â‚¬â€ scale the grid up and fade
      it back so it stays subtle rather than a visible checkerboard. */
   body {
-    background-repeat: no-repeat, no-repeat, repeat, repeat;
-    background-attachment: fixed, fixed, scroll, scroll;
-    background-size: auto, auto, 72px 72px, 72px 72px;
+    background-size: 72px 72px, 72px 72px;
     background-image:
-      radial-gradient(700px 440px at 50% -90px, rgba(255, 60, 70, 0.3), transparent 62%),
-      radial-gradient(620px 420px at 50% calc(100% + 120px), rgba(0, 0, 0, 0.55), transparent 60%),
       linear-gradient(rgba(255, 55, 66, 0.06) 1px, transparent 1px),
       linear-gradient(90deg, rgba(245, 56, 24, 0.045) 1px, transparent 1px);
   }
