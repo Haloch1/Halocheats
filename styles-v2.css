@@ -64,12 +64,17 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   line-height: 1.65;
-  /* Dark canvas, faint grid lines for subtle texture. */
-  background:
+  /* Dark canvas: a soft red glow anchored behind the hero for depth, a
+     whisper of film grain so the flat CSS gradient doesn't read as bare,
+     and the faint grid for texture underneath both. */
+  background-color: var(--paper);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(1100px 640px at 50% -8%, rgba(255, 55, 66, 0.1), transparent 65%),
     linear-gradient(rgba(255, 55, 66, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(245, 56, 24, 0.035) 1px, transparent 1px),
-    var(--paper);
-  background-size: 56px 56px, 56px 56px, auto;
+    linear-gradient(90deg, rgba(245, 56, 24, 0.035) 1px, transparent 1px);
+  background-repeat: repeat, no-repeat, repeat, repeat;
+  background-size: 140px 140px, auto, 56px 56px, 56px 56px;
 }
 
 body::before {
@@ -4190,8 +4195,11 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
      a narrow phone instead of a fine texture Ã¢â‚¬â€ scale the grid up and fade
      it back so it stays subtle rather than a visible checkerboard. */
   body {
-    background-size: 72px 72px, 72px 72px, auto;
+    background-repeat: repeat, no-repeat, repeat, repeat;
+    background-size: 140px 140px, auto, 72px 72px, 72px 72px;
     background-image:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.03 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+      radial-gradient(700px 420px at 50% -6%, rgba(255, 55, 66, 0.09), transparent 65%),
       linear-gradient(rgba(255, 55, 66, 0.045) 1px, transparent 1px),
       linear-gradient(90deg, rgba(245, 56, 24, 0.03) 1px, transparent 1px);
   }
