@@ -4171,12 +4171,34 @@ if (isConfiguredValue(discordBotToken)) {
       }
 
       const embed = buildOwnedStatusEmbed(matched);
-      const targetMessage = statusTargetMessageId
+      let targetMessage = statusTargetMessageId
         ? await targetChannel.messages.fetch(statusTargetMessageId).catch(() => null)
         : null;
 
+      /* Fallback: our tracked ID is stale/unset (e.g. right after a restart,
+         before or instead of a successful reconcile). Before posting a brand
+         new message and creating a duplicate, look for our own most recent
+         "Product Status" embed already sitting in the channel and reuse it. */
+      if (!targetMessage) {
+        const recentTarget = await targetChannel.messages.fetch({ limit: 50 }).catch(() => null);
+        const ownMessages = recentTarget
+          ? [...recentTarget.values()]
+              .filter((m) => m.author?.id === discordBot.user.id && /product status/i.test(m.embeds?.[0]?.title || ""))
+              .sort((a, b) => b.createdTimestamp - a.createdTimestamp)
+          : [];
+        if (ownMessages.length) {
+          targetMessage = ownMessages[0];
+          // Self-heal: if a previous restart left stray duplicate status
+          // posts behind, clean them up now that we've found the real one.
+          for (const stale of ownMessages.slice(1)) {
+            await stale.delete().catch(() => {});
+          }
+        }
+      }
+
       if (targetMessage) {
         await targetMessage.edit({ embeds: [embed] });
+        statusTargetMessageId = targetMessage.id;
       } else {
         const sent = await targetChannel.send({ embeds: [embed] });
         statusTargetMessageId = sent.id;
@@ -4194,13 +4216,18 @@ if (isConfiguredValue(discordBotToken)) {
     try {
       const targetChannel = await discordBot.channels.fetch(discordStatusTargetChannelId).catch(() => null);
       if (!targetChannel?.isTextBased?.()) return;
-      const recentTarget = await targetChannel.messages.fetch({ limit: 20 }).catch(() => null);
-      const ownMessage = recentTarget
-        ? [...recentTarget.values()].find(
-            (m) => m.author?.id === discordBot.user.id && /product status/i.test(m.embeds?.[0]?.title || "")
-          )
-        : null;
-      if (ownMessage) statusTargetMessageId = ownMessage.id;
+      const recentTarget = await targetChannel.messages.fetch({ limit: 50 }).catch(() => null);
+      const ownMessages = recentTarget
+        ? [...recentTarget.values()]
+            .filter((m) => m.author?.id === discordBot.user.id && /product status/i.test(m.embeds?.[0]?.title || ""))
+            .sort((a, b) => b.createdTimestamp - a.createdTimestamp)
+        : [];
+      if (ownMessages.length) {
+        statusTargetMessageId = ownMessages[0].id;
+        for (const stale of ownMessages.slice(1)) {
+          await stale.delete().catch(() => {});
+        }
+      }
     } catch (err) {
       console.error("[Status sync] Reconcile failed:", err.message);
     }
