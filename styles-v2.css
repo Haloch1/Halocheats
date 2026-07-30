@@ -599,12 +599,24 @@ button:disabled {
   gap: clamp(42px, 7vw, 88px);
   min-height: calc(100vh - 104px);
   padding: 98px 0 84px;
-  /* Glow lives directly on the section's own background -- simpler and
-     more reliable than a z-index-negative pseudo-element, which needs an
-     unbroken chain of stacking contexts back to the root to paint where
-     you'd expect and is easy to accidentally bury behind other content. */
-  background: radial-gradient(1100px 620px at 50% 0%, rgba(255, 60, 70, 0.28), transparent 62%);
-  background-repeat: no-repeat;
+}
+
+/* .hero itself is capped to the 1180px content column (width: var(--shell)),
+   so a background painted directly on it stops dead at that column's edge --
+   the "block" look. Bleed a glow layer out to the true screen edges instead.
+   No z-index here on purpose: as the first thing in .hero's markup it
+   naturally paints below hero-copy/hero-visual by source order alone. */
+.hero::before {
+  position: absolute;
+  top: -60px;
+  right: 50%;
+  left: 50%;
+  width: 100vw;
+  height: 115%;
+  margin-left: -50vw;
+  content: "";
+  pointer-events: none;
+  background: radial-gradient(1300px 680px at 50% 0%, rgba(255, 60, 70, 0.3), transparent 62%);
 }
 
 .hero-copy {
@@ -1793,7 +1805,24 @@ textarea:focus {
 }
 
 .faq {
+  position: relative;
   max-width: 920px;
+}
+
+/* Same full-bleed treatment as .hero, toned down -- a second, quieter
+   anchor point of depth lower on the page instead of one glow up top and
+   then nothing until the footer vignette. */
+.faq::before {
+  position: absolute;
+  top: 10%;
+  right: 50%;
+  left: 50%;
+  width: 100vw;
+  height: 80%;
+  margin-left: -50vw;
+  content: "";
+  pointer-events: none;
+  background: radial-gradient(1000px 520px at 50% 50%, rgba(255, 60, 70, 0.12), transparent 65%);
 }
 
 .faq-list {
