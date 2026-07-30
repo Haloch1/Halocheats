@@ -82,6 +82,24 @@ body::before {
   display: none;
 }
 
+/* The homepage gets its own stronger glow scoped to .hero. Every other
+   page has no hero, so give them a quieter version anchored to the true
+   top of the document (not the viewport -- see the .hero comment below
+   for why "top: 0" without position:fixed is the reliable way to do this).
+   No z-index: as the first node in body, it naturally paints under the
+   header/nav/main content that follows it in source order. */
+body:not(.home-page)::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 100%;
+  height: 640px;
+  content: "";
+  pointer-events: none;
+  background: radial-gradient(1300px 620px at 50% -10%, rgba(255, 60, 70, 0.22), transparent 62%);
+}
+
 body.modal-open {
   overflow: hidden;
 }
@@ -1737,7 +1755,21 @@ textarea:focus {
 }
 
 .home-reviews-section {
+  position: relative;
   padding-bottom: 56px;
+}
+
+.home-reviews-section::before {
+  position: absolute;
+  top: 5%;
+  right: 50%;
+  left: 50%;
+  width: 100vw;
+  height: 90%;
+  margin-left: -50vw;
+  content: "";
+  pointer-events: none;
+  background: radial-gradient(1000px 520px at 50% 50%, rgba(255, 60, 70, 0.11), transparent 65%);
 }
 
 .review-card,
