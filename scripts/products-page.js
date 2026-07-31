@@ -68,6 +68,8 @@ let saleOnly = false;
 let aiSearchResults = null; // null = use normal filter, array = AI-ranked slugs
 let aiSearchTimer = null;
 let aiSearchController = null;
+let catalogRefreshRunning = false;
+const catalogRefreshMs = 60_000;
 const excludedCatalogTerms = [];
 /* Promo codes live only on the server (Render env var PROMO_CODES) so they
    are never committed to the public repo. The client only knows whether
@@ -118,6 +120,50 @@ async function loadProducts() {
   const data = await response.json();
   promoEnabled = data.promoEnabled === true;
   return data.products;
+}
+
+function refreshOpenProductAvailability() {
+  if (!activeProduct) return;
+
+  const selectedVariantSlug = activeVariant?.slug;
+  const refreshedProduct = catalogProducts.find((product) => product.slug === activeProduct.slug);
+  const modal = document.querySelector("[data-variant-modal]");
+  if (!refreshedProduct || !modal || modal.hidden) return;
+
+  activeProduct = refreshedProduct;
+  modal.querySelector("[data-variant-status]").textContent = refreshedProduct.badge || "";
+
+  modal.querySelectorAll("[data-variant-option]").forEach((option) => {
+    const variant = refreshedProduct.variants?.find(
+      (item) => item.slug === option.dataset.variantSlug
+    );
+    const canSelect = Boolean(variant?.checkoutReady || variant?.checkoutBlocked);
+    option.disabled = !canSelect;
+    const stockText = option.querySelector("small");
+    if (stockText) stockText.textContent = canSelect ? variant.stockLabel : "Out of Stock";
+  });
+
+  const selectedVariant =
+    refreshedProduct.variants?.find((variant) => variant.slug === selectedVariantSlug) ||
+    refreshedProduct.variants?.find((variant) => variant.checkoutReady || variant.checkoutBlocked) ||
+    refreshedProduct.variants?.[0];
+  selectVariant(selectedVariant?.slug);
+}
+
+async function refreshCatalogAvailability() {
+  if (catalogRefreshRunning) return;
+  catalogRefreshRunning = true;
+
+  try {
+    catalogProducts = (await loadProducts()).filter(isAllowedProduct);
+    updateStats(catalogProducts);
+    if (!dedicatedProductSlug) renderCatalogView();
+    refreshOpenProductAvailability();
+  } catch (error) {
+    console.warn("[Product stock refresh]", error.message);
+  } finally {
+    catalogRefreshRunning = false;
+  }
 }
 
 function slugify(value) {
@@ -1612,6 +1658,7 @@ try {
     }
   }
   initReveal();
+  setInterval(refreshCatalogAvailability, catalogRefreshMs);
 } catch (error) {
   renderMessage(notice, error.message, "error");
 }

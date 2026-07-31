@@ -69,7 +69,9 @@ const discordAlertsWebhookUrl = process.env.DISCORD_ALERTS_WEBHOOK_URL || "";
    on Render. See syncCheatsLoveStock() below for the polling job. */
 const cheatsloveApiKey = process.env.CHEATSLOVE_API_KEY || "";
 const cheatsloveBaseUrl = (process.env.CHEATSLOVE_BASE_URL || "https://res.cheatslove.com/api/v1").replace(/\/+$/, "");
-const cheatslovePollMs = Number(process.env.CHEATSLOVE_POLL_MS || 60_000);
+// Keep upstream availability fresh without approaching the reseller's
+// 30-request-per-minute limit.
+const cheatslovePollMs = 60_000;
 /* Real, confirmed-by-sync stock per inventorySlug ("In Stock" | "Out of Stock"),
    populated by syncCheatsLoveStock() below from manual CHEATSLOVE_VID_MAP pins
    AND safe exact-name/duration auto-matches. Anything NOT in this map has no
@@ -15691,6 +15693,7 @@ async function loadProductStatusOverrides() {
   let cheatsloveCatalogLogged = false;
   let cheatsloveUnmatchedLogged = false;
   let cheatsloveAutoMatchLogged = false;
+  let cheatsloveSyncRunning = false;
 
   async function cheatsloveFetch(path, options = {}) {
     const res = await fetch(`${cheatsloveBaseUrl}${path}`, {
@@ -15753,7 +15756,8 @@ async function loadProductStatusOverrides() {
   }
 
   async function syncCheatsLoveStock() {
-    if (!cheatsloveApiKey) return;
+    if (!cheatsloveApiKey || cheatsloveSyncRunning) return;
+    cheatsloveSyncRunning = true;
     try {
       const data = await cheatsloveFetch("/products");
       const clProducts = Array.isArray(data?.products) ? data.products : [];
@@ -15845,6 +15849,8 @@ async function loadProductStatusOverrides() {
       }
     } catch (err) {
       console.error("[Cheats.Love] Stock sync error:", err.message);
+    } finally {
+      cheatsloveSyncRunning = false;
     }
   }
 
