@@ -109,7 +109,7 @@ if (!authConfigured) {
 }
 
 async function loadProducts() {
-  const response = await fetch("/api/products");
+  const response = await fetch("/api/products", { cache: "no-store" });
 
   if (!response.ok) {
     throw new Error("Unable to load products.");
@@ -316,9 +316,12 @@ function getTotalStock(product) {
 }
 
 function stockBadgeHtml(product) {
-  const count = getTotalStock(product);
-  /* If any variant says "In Stock" (reseller-backed), show as available */
-  const resellerBacked = (product.variants || []).some(v => v.stockLabel === "In Stock");
+  const purchasableVariants = (product.variants || []).filter((variant) => variant.checkoutReady);
+  const count = getTotalStock({ variants: purchasableVariants });
+  /* A product is only advertised as available when checkout can fulfill at
+     least one variant. This keeps Updating/disabled products from showing a
+     misleading In Stock badge. */
+  const resellerBacked = purchasableVariants.some((variant) => variant.stockLabel === "In Stock");
   if (count > 0) {
     return `<span class="card-stock in-stock">${count} ${count === 1 ? "Key" : "Keys"} Available</span>`;
   }
@@ -329,11 +332,14 @@ function stockBadgeHtml(product) {
 }
 
 function hasResellerStock(product) {
-  return (product.variants || []).some((variant) => variant.stockLabel === "In Stock");
+  return (product.variants || []).some(
+    (variant) => variant.checkoutReady && variant.stockLabel === "In Stock"
+  );
 }
 
 function isStockedProduct(product) {
-  return getTotalStock(product) > 0 || hasResellerStock(product);
+  const purchasableVariants = (product.variants || []).filter((variant) => variant.checkoutReady);
+  return getTotalStock({ variants: purchasableVariants }) > 0 || hasResellerStock(product);
 }
 
 function isReadyProduct(product) {

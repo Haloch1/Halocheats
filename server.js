@@ -10114,6 +10114,7 @@ app.get("/api/auth/role", async (req, res) => {
 
 app.get("/api/products", async (_req, res) => {
   try {
+    res.set("Cache-Control", "no-store, max-age=0");
     const keyCounts = await getUnusedLicenseKeyCounts();
     const catalog = products.map((product) => ({
       slug: product.slug,
@@ -10162,7 +10163,7 @@ app.get("/api/products", async (_req, res) => {
         let stockLabel;
         if (isDisabledVariant) {
           stockLabel = "Unavailable";
-        } else if (storeSoldOut) {
+        } else if (storeSoldOut || product.available === false) {
           stockLabel = "Out of Stock";
         } else if (showsExactCount) {
           stockLabel = resellerCovers && stockCount === 0 ? "In Stock" : formatKeyStockLabel(stockCount);
