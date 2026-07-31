@@ -65,6 +65,11 @@ const discordOrderWebhookUrl = process.env.DISCORD_ORDER_WEBHOOK_URL || "";
 /* Webhook for the "alerts" channel — new-visitor pings. Create a webhook in your
    alerts channel and set DISCORD_ALERTS_WEBHOOK_URL on Render. */
 const discordAlertsWebhookUrl = process.env.DISCORD_ALERTS_WEBHOOK_URL || "";
+/* Cheats.Love reseller API — never hardcode the key, set CHEATSLOVE_API_KEY
+   on Render. See syncCheatsLoveStock() below for the polling job. */
+const cheatsloveApiKey = process.env.CHEATSLOVE_API_KEY || "";
+const cheatsloveBaseUrl = (process.env.CHEATSLOVE_BASE_URL || "https://res.cheatslove.com/api/v1").replace(/\/+$/, "");
+const cheatslovePollMs = Number(process.env.CHEATSLOVE_POLL_MS || 60_000);
 const adminAccessKey = process.env.ADMIN_ACCESS_KEY || "";
 const ownerRequestsKey = process.env.OWNER_REQUESTS_KEY || "";
 const geminiApiKey = process.env.GEMINI_API_KEY || "";
@@ -15453,8 +15458,158 @@ async function loadProductStatusOverrides() {
   }
 }
 
+/* ── Cheats.Love reseller stock sync ──
+   Polls GET /products on the Cheats.Love reseller API on a timer and keeps
+   our in-memory `stockLabel` per variant in sync with their live stock, so
+   the site never shows a variant as "In Stock" when the upstream reseller
+   is actually out.
+
+   The API key is read from process.env.CHEATSLOVE_API_KEY only (set it on
+   Render — never hardcode it here, this repo is public).
+
+   Matching: Cheats.Love product/variation names won't necessarily match our
+   catalog's names or slugs exactly. CHEATSLOVE_VID_MAP below lets you pin an
+   exact Cheats.Love variation id ("vid") to one of our inventorySlugs
+   (`${productSlug}-${variantSlug}`, e.g. "rust-dullwave-day") once you've
+   confirmed it from the logged catalog dump on first run. Anything not
+   explicitly mapped falls back to a best-effort fuzzy match on product name
+   + plan duration (Day/Week/Month/Year), and unmatched/ambiguous items are
+   logged so the mapping can be tightened over time — nothing is guessed
+   silently into a stock change. */
+  const CHEATSLOVE_VID_MAP = {
+    // "rust-dullwave-day": 10802,
+  };
+
+  let cheatsloveCatalogLogged = false;
+
+  function cheatsloveDurationFromLabel(label) {
+    const text = (label || "").toLowerCase();
+    if (/\bday\b|24\s*h/.test(text)) return "day";
+    if (/\bweek\b|7\s*d/.test(text)) return "week";
+    if (/\bmonth\b|30\s*d/.test(text)) return "month";
+    if (/\byear\b|365\s*d/.test(text)) return "year";
+    return null;
+  }
+
+  function cheatsloveNormalize(text) {
+    return (text || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  }
+
+  async function cheatsloveFetch(path) {
+    const res = await fetch(`${cheatsloveBaseUrl}${path}`, {
+      headers: { Authorization: `Bearer ${cheatsloveApiKey}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 429) {
+      throw new Error("Cheats.Love rate limit hit (429) — will retry next cycle");
+    }
+    if (!res.ok) {
+      throw new Error(`Cheats.Love API ${path} failed: ${res.status}`);
+    }
+    return res.json();
+  }
+
+  function resolveCheatsloveStock(variation) {
+    // stock: null with a human stock_display (e.g. "< 10") means tracked but
+    // not exact; a numeric stock is an exact count; treat 0 as out of stock.
+    if (typeof variation.stock === "number") {
+      return variation.stock > 0 ? "In Stock" : "Out of Stock";
+    }
+    if (typeof variation.stock_display === "string" && variation.stock_display.trim()) {
+      const text = variation.stock_display.trim();
+      if (/^0$|out of stock|unavailable/i.test(text)) return "Out of Stock";
+      return "In Stock";
+    }
+    return null;
+  }
+
+  async function syncCheatsLoveStock() {
+    if (!cheatsloveApiKey) return;
+    try {
+      const data = await cheatsloveFetch("/products");
+      const clProducts = Array.isArray(data?.products) ? data.products : [];
+      if (!clProducts.length) return;
+
+      if (!cheatsloveCatalogLogged) {
+        cheatsloveCatalogLogged = true;
+        console.log(
+          `[Cheats.Love] Catalog loaded: ${clProducts.length} product(s). ` +
+          `Add exact vids to CHEATSLOVE_VID_MAP in server.js for guaranteed matches.`
+        );
+      }
+
+      // Flat list of { vid, productName, label } for fuzzy fallback matching.
+      const flatVariations = [];
+      for (const clProduct of clProducts) {
+        for (const variation of clProduct.variations || []) {
+          flatVariations.push({
+            vid: variation.id,
+            productName: clProduct.name,
+            label: variation.label,
+            stock: resolveCheatsloveStock(variation),
+          });
+        }
+      }
+      const byVid = new Map(flatVariations.map((v) => [v.vid, v]));
+
+      let updatedCount = 0;
+      const unmatched = [];
+
+      for (const product of products) {
+        for (const variant of product.variants || []) {
+          const inventorySlug = variant.inventorySlug || `${product.slug}-${variant.slug}`;
+          let stockInfo = null;
+
+          const pinnedVid = CHEATSLOVE_VID_MAP[inventorySlug];
+          if (pinnedVid != null) {
+            stockInfo = byVid.get(pinnedVid) || null;
+          } else {
+            const wantedDuration = cheatsloveDurationFromLabel(variant.name);
+            const productNameNorm = cheatsloveNormalize(product.name);
+            stockInfo = flatVariations.find((v) => {
+              const durationMatch = cheatsloveDurationFromLabel(v.label);
+              if (!durationMatch || durationMatch !== wantedDuration) return false;
+              const nameNorm = cheatsloveNormalize(v.productName);
+              return nameNorm === productNameNorm || nameNorm.includes(productNameNorm) || productNameNorm.includes(nameNorm);
+            });
+          }
+
+          if (!stockInfo || stockInfo.stock == null) {
+            unmatched.push(inventorySlug);
+            continue;
+          }
+
+          if (variant.stockLabel !== stockInfo.stock) {
+            variant.stockLabel = stockInfo.stock;
+            updatedCount += 1;
+          }
+        }
+      }
+
+      if (updatedCount) {
+        console.log(`[Cheats.Love] Updated stock for ${updatedCount} variant(s).`);
+      }
+      if (unmatched.length && !cheatsloveCatalogLogged) {
+        console.log(`[Cheats.Love] No stock match for: ${unmatched.join(", ")}`);
+      }
+    } catch (err) {
+      console.error("[Cheats.Love] Stock sync error:", err.message);
+    }
+  }
+
 Promise.all([loadProductOverrides(), loadProductStatusOverrides()]).then(() => {
   setInterval(loadProductStatusOverrides, 5 * 60 * 1000).unref();
+
+  if (cheatsloveApiKey) {
+    setInterval(syncCheatsLoveStock, cheatslovePollMs).unref();
+    setTimeout(syncCheatsLoveStock, 5_000); // first sync 5s after boot
+    console.log(`[Cheats.Love] Stock sync enabled, polling every ${Math.round(cheatslovePollMs / 1000)}s.`);
+  } else {
+    console.log("[Cheats.Love] CHEATSLOVE_API_KEY not set — stock sync disabled.");
+  }
 
   const httpServer = app.listen(port, () => {
     console.log(`API server listening on http://localhost:${port}`);

@@ -139,6 +139,225 @@ const rustMeta = {
 
 const productCatalog = [
   {
+    ...rustMeta,
+    badge: "Undetected",
+    slug: "rust-dullwave",
+    name: "Rust - Dullwave",
+    priceDisplay: `From ${money(730)}`,
+    summary:
+      "Premium undetected Rust cheat built for tactical domination, pairing precision aim tools with a strong Rust ESP for total raid awareness.",
+    features: ["Aimbot", "Player ESP", "Loot ESP"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
+      { title: "ESP", items: ["Player ESP", "Loot filters", "Distance info"] },
+      { title: "Misc", items: ["Config save/load", "Low resource use"] },
+    ],
+    generalInfo: [
+      "Loader password is shared setup-wide; check the instructions page before first launch.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11 (21H2, 22H2, 23H2, 24H2, 25H2)",
+      "Full-screen mode: not supported (windowed/borderless only)",
+      "Flashdrive required: No",
+    ],
+    variants: [
+      keyVariant("rust-dullwave", "day", "1 Day Key", 730),
+      keyVariant("rust-dullwave", "week", "7 Day Key", 3310),
+      keyVariant("rust-dullwave", "month", "30 Day Key", 4640),
+    ],
+  },
+  {
+    ...rustMeta,
+    badge: "Undetected",
+    slug: "rust-mason-lite",
+    name: "Rust Mason Lite",
+    priceDisplay: `From ${money(270)}`,
+    summary:
+      "Lite Rust ESP with automatic player boxes and zero configuration. Launch it, join the game, and get instant visual awareness.",
+    features: ["Auto player ESP", "Zero setup", "USB loader flow"],
+    featureGroups: [
+      { title: "ESP", items: ["Automatic player box ESP", "No menus or config required"] },
+    ],
+    generalInfo: [
+      "USB-only loader; full injection steps are on the instructions page.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Cheat type: Lite Rust ESP (auto player box)",
+      "Game: Rust (Steam)",
+      "OS: Windows 10 x64 (2004, 20H2, 21H1, 21H2, 22H2), Windows 11 (21H2, 22H2, 23H2 up to build 3880)",
+      "Anti-cheat: Easy Anti-Cheat",
+      "Stream-Proof: No",
+      "Flashdrive required: Yes",
+    ],
+    variants: [
+      keyVariant("rust-mason-lite", "day", "1 Day Key", 270),
+      keyVariant("rust-mason-lite", "week", "7 Day Key", 1110),
+      keyVariant("rust-mason-lite", "month", "30 Day Key", 2085),
+    ],
+  },
+  {
+    ...rustMeta,
+    badge: "Undetected",
+    slug: "rust-mason-full",
+    name: "Rust Mason Full",
+    priceDisplay: `From ${money(555)}`,
+    summary:
+      "Full Rust cheat with advanced aimbot precision, deep ESP visuals, and full configuration control for total map awareness.",
+    features: ["Aimbot", "Full ESP", "Config control"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Advanced aim precision", "FOV control", "Target selection"] },
+      { title: "Visuals", items: ["Player ESP", "Loot ESP", "Resource ESP"] },
+      { title: "Misc", items: ["Full config save/load", "HWID spoofer included"] },
+    ],
+    generalInfo: [
+      "Loader must run from a USB flash drive; see the two-stage injection walkthrough on the instructions page.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Rust (Steam)",
+      "OS: Windows 10 & 11 x64 (up to 25H2)",
+      "Anti-cheat: Easy Anti-Cheat",
+      "Stream-Proof: Yes (screenshots & recordings)",
+      "Flashdrive required: Yes",
+    ],
+    variants: [
+      keyVariant("rust-mason-full", "day", "1 Day Key", 555),
+      keyVariant("rust-mason-full", "week", "7 Day Key", 2225),
+      keyVariant("rust-mason-full", "month", "30 Day Key", 5000),
+    ],
+  },
+  {
+    ...rustMeta,
+    badge: "Undetected",
+    slug: "rust-mrpro",
+    name: "Rust - MrPro",
+    priceDisplay: `From ${money(640)}`,
+    summary:
+      "Rust cheat built for Intel systems, covering aim and visual tools in one setup. Intel processors only.",
+    features: ["Aimbot", "Player ESP", "Intel-only build"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Aim controls", "FOV settings"] },
+      { title: "Visuals", items: ["Player ESP", "Distance info"] },
+    ],
+    generalInfo: [
+      "Attention: Intel processors only. Open a Discord ticket for setup help.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam",
+      "CPU: Intel only",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10 (21H2, 22H2), Windows 11 (21H2, 22H2, 23H2, 24H2)",
+      "Full-screen mode: not supported (windowed/borderless only)",
+    ],
+    variants: [
+      keyVariant("rust-mrpro", "day", "1 Day Key", 640),
+      keyVariant("rust-mrpro", "week", "7 Day Key", 3220),
+      keyVariant("rust-mrpro", "month", "30 Day Key", 6440),
+    ],
+  },
+  {
+    ...fortniteMeta,
+    badge: "Undetected",
+    slug: "fortnite-dullwave",
+    name: "Fortnite - Dullwave",
+    priceDisplay: `From ${money(465)}`,
+    summary:
+      "Undetected Fortnite cheat built for total arena control, pairing a precise aimbot with a strong Fortnite ESP for full tactical awareness.",
+    features: ["Aimbot", "Player ESP", "Stream-friendly design"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing", "Target selection"] },
+      { title: "ESP", items: ["Player ESP", "Distance info", "Box/skeleton visuals"] },
+      { title: "Misc", items: ["Config save/load", "Low resource use"] },
+    ],
+    generalInfo: [
+      "Loader password is shared setup-wide; check the instructions page before first launch.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Epic Games",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10 (1903-22H2), Windows 11 (21H2-25H2)",
+      "Full-screen mode: not supported (windowed/borderless only)",
+      "Flashdrive required: No",
+    ],
+    variants: [
+      keyVariant("fortnite-dullwave", "day", "1 Day Key", 465),
+      keyVariant("fortnite-dullwave", "three-day", "3 Day Key", 930),
+      keyVariant("fortnite-dullwave", "week", "7 Day Key", 1850),
+      keyVariant("fortnite-dullwave", "month", "30 Day Key", 3575),
+    ],
+  },
+  {
+    ...fortniteMeta,
+    badge: "Undetected",
+    slug: "fortnite-ancient",
+    name: "Fortnite Ancient",
+    priceDisplay: `From ${money(400)}`,
+    summary:
+      "Fortnite setup with aim tools, player ESP, and configuration sharing built for Epic Games Store.",
+    features: ["Aim support", "Player ESP", "Config sharing"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Aim key", "Smooth", "FOV", "Target selection"] },
+      { title: "Visuals", items: ["Player ESP", "Skeleton", "Distance", "Radar"] },
+      { title: "Config", items: ["Save", "Load", "Share"] },
+    ],
+    generalInfo: [
+      "Follow the full preparation and injection walkthrough on the instructions page before first launch.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Epic Games Store (EGS)",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11 (21H2, 22H2, 23H2, 24H2, 25H2)",
+      "Full-screen mode: not supported (windowed/borderless only)",
+    ],
+    variants: [
+      keyVariant("fortnite-ancient", "day", "1 Day Key", 400),
+      keyVariant("fortnite-ancient", "week", "7 Day Key", 2000),
+      keyVariant("fortnite-ancient", "month", "30 Day Key", 4000),
+    ],
+  },
+  {
+    ...fortniteMeta,
+    badge: "Undetected",
+    slug: "fortnite-arcane",
+    name: "Fortnite - Arcane",
+    priceDisplay: `From ${money(700)}`,
+    summary:
+      "Full-featured Fortnite package with a tunable aimbot, distance-aware visuals, and stream-safe visibility checks.",
+    features: ["Aimbot suite", "Player ESP", "Anti-detection prep"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "FOV control", "Smoothing", "Target selection"] },
+      { title: "Visuals", items: ["Player ESP", "Distance", "Visibility check"] },
+      { title: "Misc", items: ["HWID spoofer prompt on first launch", "Config save/load"] },
+    ],
+    generalInfo: [
+      "Requires the Visual C++ Redistributable and a PC restart before first launch; see the instructions page.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Epic Games Store (EGS)",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11 (21H2, 22H2, 23H2, 24H2)",
+      "Full-screen mode: not supported (windowed/borderless only)",
+      "Stream-Proof: No",
+    ],
+    variants: [
+      keyVariant("fortnite-arcane", "day", "1 Day Key", 700),
+      keyVariant("fortnite-arcane", "week", "7 Day Key", 3500),
+      keyVariant("fortnite-arcane", "month", "30 Day Key", 6000),
+    ],
+  },
+  {
     ...r6Meta,
     badge: "Undetected",
     slug: "r6s-ancient",
@@ -431,10 +650,10 @@ const productCatalog = [
       "Full-screen mode: not supported (windowed/borderless only)",
     ],
     variants: [
-      keyVariant("r6s-lethal", "day", "1 Day Key", 1099, { stockLabel: "Backorder" }),
-      keyVariant("r6s-lethal", "week", "7 Day Key", 3299, { stockLabel: "Backorder" }),
-      keyVariant("r6s-lethal", "month", "30 Day Key", 5299, { stockLabel: "Backorder" }),
-      keyVariant("r6s-lethal", "year", "1 Year Key", 34999, { stockLabel: "Backorder" }),
+      keyVariant("r6s-lethal", "day", "1 Day Key", 1099),
+      keyVariant("r6s-lethal", "week", "7 Day Key", 3299),
+      keyVariant("r6s-lethal", "month", "30 Day Key", 5299),
+      keyVariant("r6s-lethal", "year", "1 Year Key", 34999),
     ],
   },
   {
@@ -491,102 +710,6 @@ const productCatalog = [
       keyVariant("r6s-no-recoil", "week", "7 Day Key", 1000),
       keyVariant("r6s-no-recoil", "month", "30 Day Key", 2000),
       keyVariant("r6s-no-recoil", "three-month", "90 Day Key", 3500),
-    ],
-  },
-  {
-    ...fortniteMeta,
-    badge: "Undetected",
-    slug: "fortnite-dullwave",
-    name: "Fortnite - Dullwave",
-    priceDisplay: `From ${money(465)}`,
-    summary:
-      "Undetected Fortnite cheat built for total arena control, pairing a precise aimbot with a strong Fortnite ESP for full tactical awareness.",
-    features: ["Aimbot", "Player ESP", "Stream-friendly design"],
-    featureGroups: [
-      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing", "Target selection"] },
-      { title: "ESP", items: ["Player ESP", "Distance info", "Box/skeleton visuals"] },
-      { title: "Misc", items: ["Config save/load", "Low resource use"] },
-    ],
-    generalInfo: [
-      "Loader password is shared setup-wide; check the instructions page before first launch.",
-      ...universalSetupNotes,
-    ],
-    requirements: [
-      "Game version: Epic Games",
-      "CPU: Intel & AMD",
-      "GPU: Nvidia & AMD",
-      "OS: Windows 10 (1903-22H2), Windows 11 (21H2-25H2)",
-      "Full-screen mode: not supported (windowed/borderless only)",
-      "Flashdrive required: No",
-    ],
-    variants: [
-      keyVariant("fortnite-dullwave", "day", "1 Day Key", 465),
-      keyVariant("fortnite-dullwave", "three-day", "3 Day Key", 930),
-      keyVariant("fortnite-dullwave", "week", "7 Day Key", 1850),
-      keyVariant("fortnite-dullwave", "month", "30 Day Key", 3575),
-    ],
-  },
-  {
-    ...fortniteMeta,
-    badge: "Undetected",
-    slug: "fortnite-ancient",
-    name: "Fortnite Ancient",
-    priceDisplay: `From ${money(400)}`,
-    summary:
-      "Fortnite setup with aim tools, player ESP, and configuration sharing built for Epic Games Store.",
-    features: ["Aim support", "Player ESP", "Config sharing"],
-    featureGroups: [
-      { title: "Aimbot", items: ["Aim key", "Smooth", "FOV", "Target selection"] },
-      { title: "Visuals", items: ["Player ESP", "Skeleton", "Distance", "Radar"] },
-      { title: "Config", items: ["Save", "Load", "Share"] },
-    ],
-    generalInfo: [
-      "Follow the full preparation and injection walkthrough on the instructions page before first launch.",
-      ...universalSetupNotes,
-    ],
-    requirements: [
-      "Game version: Epic Games Store (EGS)",
-      "CPU: Intel & AMD",
-      "GPU: Nvidia & AMD",
-      "OS: Windows 10, Windows 11 (21H2, 22H2, 23H2, 24H2, 25H2)",
-      "Full-screen mode: not supported (windowed/borderless only)",
-    ],
-    variants: [
-      keyVariant("fortnite-ancient", "day", "1 Day Key", 400),
-      keyVariant("fortnite-ancient", "week", "7 Day Key", 2000),
-      keyVariant("fortnite-ancient", "month", "30 Day Key", 4000),
-    ],
-  },
-  {
-    ...fortniteMeta,
-    badge: "Undetected",
-    slug: "fortnite-arcane",
-    name: "Fortnite - Arcane",
-    priceDisplay: `From ${money(700)}`,
-    summary:
-      "Full-featured Fortnite package with a tunable aimbot, distance-aware visuals, and stream-safe visibility checks.",
-    features: ["Aimbot suite", "Player ESP", "Anti-detection prep"],
-    featureGroups: [
-      { title: "Aimbot", items: ["Enable aimbot", "FOV control", "Smoothing", "Target selection"] },
-      { title: "Visuals", items: ["Player ESP", "Distance", "Visibility check"] },
-      { title: "Misc", items: ["HWID spoofer prompt on first launch", "Config save/load"] },
-    ],
-    generalInfo: [
-      "Requires the Visual C++ Redistributable and a PC restart before first launch; see the instructions page.",
-      ...universalSetupNotes,
-    ],
-    requirements: [
-      "Game version: Epic Games Store (EGS)",
-      "CPU: Intel & AMD",
-      "GPU: Nvidia & AMD",
-      "OS: Windows 10, Windows 11 (21H2, 22H2, 23H2, 24H2)",
-      "Full-screen mode: not supported (windowed/borderless only)",
-      "Stream-Proof: No",
-    ],
-    variants: [
-      keyVariant("fortnite-arcane", "day", "1 Day Key", 700),
-      keyVariant("fortnite-arcane", "week", "7 Day Key", 3500),
-      keyVariant("fortnite-arcane", "month", "30 Day Key", 6000),
     ],
   },
   {
@@ -716,6 +839,468 @@ const productCatalog = [
     ],
   },
   {
+    ...categoryMeta("Counter-Strike 2"),
+    badge: "Undetected",
+    slug: "cs2-predator",
+    name: "CS2 - Predator",
+    priceDisplay: `From ${money(450)}`,
+    summary:
+      "Subscription-managed Counter-Strike 2 cheat with aim and visual tools handled through a dedicated panel, built for consistent long-term use.",
+    features: ["Aimbot", "Player ESP", "Panel-managed subscription"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
+      { title: "Visuals", items: ["Player ESP", "Distance info", "Skeleton"] },
+      { title: "Misc", items: ["Panel-based license management", "Config save/load"] },
+    ],
+    generalInfo: [
+      "Manage your subscription and download the loader from the Predator panel; check the instructions page before first launch.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11",
+      "Full-screen mode: not supported (windowed/borderless only)",
+    ],
+    variants: [
+      keyVariant("cs2-predator", "day", "1 Day Key", 450),
+      keyVariant("cs2-predator", "week", "7 Day Key", 2250),
+      keyVariant("cs2-predator", "month", "30 Day Key", 4500),
+    ],
+  },
+  {
+    ...categoryMeta("Counter-Strike 2"),
+    badge: "Undetected",
+    slug: "cs2-arcane",
+    name: "CS2 - Arcane Cheat",
+    priceDisplay: `From ${money(500)}`,
+    summary:
+      "Full-featured Counter-Strike 2 package with a tunable aimbot, distance-aware visuals, and stream-safe visibility checks.",
+    features: ["Aimbot suite", "Player ESP", "Anti-detection prep"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "FOV control", "Smoothing", "Target selection"] },
+      { title: "Visuals", items: ["Player ESP", "Distance", "Visibility check"] },
+      { title: "Misc", items: ["HWID spoofer prompt on first launch", "Config save/load"] },
+    ],
+    generalInfo: [
+      "Requires the Visual C++ Redistributable and a PC restart before first launch; see the instructions page.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11",
+      "Full-screen mode: not supported (windowed/borderless only)",
+      "Stream-Proof: No",
+    ],
+    variants: [
+      keyVariant("cs2-arcane", "day", "1 Day Key", 500),
+      keyVariant("cs2-arcane", "week", "7 Day Key", 2500),
+      keyVariant("cs2-arcane", "month", "30 Day Key", 5000),
+    ],
+  },
+  {
+    ...categoryMeta("Counter-Strike 2"),
+    badge: "Undetected",
+    slug: "cs2-strikeforce",
+    name: "CS2 - Strikeforce",
+    priceDisplay: `From ${money(350)}`,
+    summary:
+      "Lightweight Counter-Strike 2 aim and visibility combo built to stay low-impact on performance while covering the essentials.",
+    features: ["Aimbot", "Player ESP", "Low resource use"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control"] },
+      { title: "Visuals", items: ["Player ESP", "Distance info"] },
+    ],
+    generalInfo: [
+      "Loader password is shared setup-wide; check the instructions page before first launch.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11",
+      "Full-screen mode: not supported (windowed/borderless only)",
+    ],
+    variants: [
+      keyVariant("cs2-strikeforce", "day", "1 Day Key", 350),
+      keyVariant("cs2-strikeforce", "week", "7 Day Key", 1750),
+      keyVariant("cs2-strikeforce", "month", "30 Day Key", 3500),
+    ],
+  },
+  {
+    ...categoryMeta("PUBG"),
+    badge: "Undetected",
+    slug: "pubg-arcane",
+    name: "PUBG - Arcane Cheats",
+    priceDisplay: `From ${money(500)}`,
+    summary:
+      "Full-featured PUBG package with a tunable aimbot, distance-aware visuals, and stream-safe visibility checks.",
+    features: ["Aimbot suite", "Player ESP", "Anti-detection prep"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "FOV control", "Smoothing", "Target selection"] },
+      { title: "Visuals", items: ["Player ESP", "Distance", "Visibility check"] },
+      { title: "Misc", items: ["HWID spoofer prompt on first launch", "Config save/load"] },
+    ],
+    generalInfo: [
+      "Requires the Visual C++ Redistributable and a PC restart before first launch; see the instructions page.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11",
+      "Full-screen mode: not supported (windowed/borderless only)",
+      "Stream-Proof: No",
+    ],
+    variants: [
+      keyVariant("pubg-arcane", "day", "1 Day Key", 500),
+      keyVariant("pubg-arcane", "week", "7 Day Key", 2500),
+      keyVariant("pubg-arcane", "month", "30 Day Key", 5000),
+    ],
+  },
+  {
+    ...categoryMeta("PUBG"),
+    badge: "Undetected",
+    slug: "pubg-shadow",
+    name: "PUBG - Shadow",
+    priceDisplay: `From ${money(400)}`,
+    summary:
+      "Regularly updated PUBG visual and aim combo built to stay lightweight and quick to set up.",
+    features: ["Aimbot", "Player ESP", "Lightweight"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "Smoothing"] },
+      { title: "Visuals", items: ["Player ESP", "Distance info"] },
+    ],
+    generalInfo: [
+      "Disable antivirus and Windows Defender before running the loader.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11 (21H2, 22H2, 23H2, 24H2, 25H2)",
+    ],
+    variants: [
+      keyVariant("pubg-shadow", "day", "1 Day Key", 400),
+      keyVariant("pubg-shadow", "week", "7 Day Key", 1800),
+      keyVariant("pubg-shadow", "month", "30 Day Key", 3400),
+    ],
+  },
+  {
+    ...categoryMeta("Delta Force"),
+    badge: "Undetected",
+    slug: "delta-force-dullwave",
+    name: "Delta Force - Dullwave",
+    priceDisplay: `From ${money(465)}`,
+    summary:
+      "Undetected Delta Force cheat pairing a precise aimbot with a strong player ESP for full tactical awareness.",
+    features: ["Aimbot", "Player ESP", "Stream-friendly design"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
+      { title: "ESP", items: ["Player ESP", "Distance info", "Box/skeleton visuals"] },
+      { title: "Misc", items: ["Config save/load", "Low resource use"] },
+    ],
+    generalInfo: [
+      "Loader password is shared setup-wide; check the instructions page before first launch.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11 (21H2-25H2)",
+      "Full-screen mode: not supported (windowed/borderless only)",
+      "Flashdrive required: No",
+    ],
+    variants: [
+      keyVariant("delta-force-dullwave", "day", "1 Day Key", 465),
+      keyVariant("delta-force-dullwave", "week", "7 Day Key", 1850),
+      keyVariant("delta-force-dullwave", "month", "30 Day Key", 3575),
+    ],
+  },
+  {
+    ...categoryMeta("Delta Force"),
+    badge: "Undetected",
+    slug: "delta-force-ancient",
+    name: "Delta Force - Ancient",
+    priceDisplay: `From ${money(400)}`,
+    summary:
+      "Delta Force setup with aim tools, player ESP, and configuration sharing.",
+    features: ["Aim support", "Player ESP", "Config sharing"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Aim key", "Smooth", "FOV", "Target selection"] },
+      { title: "Visuals", items: ["Player ESP", "Skeleton", "Distance", "Radar"] },
+      { title: "Config", items: ["Save", "Load", "Share"] },
+    ],
+    generalInfo: [
+      "Follow the full preparation and injection walkthrough on the instructions page before first launch.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11 (21H2, 22H2, 23H2, 24H2, 25H2)",
+      "Full-screen mode: not supported (windowed/borderless only)",
+    ],
+    variants: [
+      keyVariant("delta-force-ancient", "day", "1 Day Key", 400),
+      keyVariant("delta-force-ancient", "week", "7 Day Key", 2000),
+      keyVariant("delta-force-ancient", "month", "30 Day Key", 4000),
+    ],
+  },
+  {
+    ...categoryMeta("Marvel Rivals"),
+    badge: "Undetected",
+    slug: "marvel-rivals-dullwave",
+    name: "Marvel Rivals - Dullwave",
+    priceDisplay: `From ${money(465)}`,
+    summary:
+      "Undetected Marvel Rivals cheat pairing a precise aimbot with a strong player ESP for full tactical awareness.",
+    features: ["Aimbot", "Player ESP", "Stream-friendly design"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
+      { title: "ESP", items: ["Player ESP", "Distance info", "Box/skeleton visuals"] },
+      { title: "Misc", items: ["Config save/load", "Low resource use"] },
+    ],
+    generalInfo: [
+      "Loader password is shared setup-wide; check the instructions page before first launch.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11 (21H2-25H2)",
+      "Full-screen mode: not supported (windowed/borderless only)",
+      "Flashdrive required: No",
+    ],
+    variants: [
+      keyVariant("marvel-rivals-dullwave", "day", "1 Day Key", 465),
+      keyVariant("marvel-rivals-dullwave", "week", "7 Day Key", 1850),
+      keyVariant("marvel-rivals-dullwave", "month", "30 Day Key", 3575),
+    ],
+  },
+  {
+    ...categoryMeta("Marvel Rivals"),
+    badge: "Undetected",
+    slug: "marvel-rivals-predator",
+    name: "Marvel Rivals - Predator",
+    priceDisplay: `From ${money(450)}`,
+    summary:
+      "Subscription-managed Marvel Rivals cheat with aim and visual tools handled through a dedicated panel.",
+    features: ["Aimbot", "Player ESP", "Panel-managed subscription"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
+      { title: "Visuals", items: ["Player ESP", "Distance info", "Skeleton"] },
+      { title: "Misc", items: ["Panel-based license management", "Config save/load"] },
+    ],
+    generalInfo: [
+      "Manage your subscription and download the loader from the Predator panel; check the instructions page before first launch.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11",
+      "Full-screen mode: not supported (windowed/borderless only)",
+    ],
+    variants: [
+      keyVariant("marvel-rivals-predator", "day", "1 Day Key", 450),
+      keyVariant("marvel-rivals-predator", "week", "7 Day Key", 2250),
+      keyVariant("marvel-rivals-predator", "month", "30 Day Key", 4500),
+    ],
+  },
+  {
+    ...categoryMeta("Marvel Rivals"),
+    badge: "Undetected",
+    slug: "marvel-rivals-smg",
+    name: "Marvel Rivals - SMG Cheat",
+    priceDisplay: `From ${money(400)}`,
+    summary:
+      "Marvel Rivals aim and visibility combo with straightforward setup and reliable performance.",
+    features: ["Aimbot", "Player ESP"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "Smoothing"] },
+      { title: "Visuals", items: ["Player ESP", "Distance info"] },
+    ],
+    generalInfo: [
+      "Loader password is shared setup-wide; check the instructions page before first launch.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11",
+      "Full-screen mode: not supported (windowed/borderless only)",
+    ],
+    variants: [
+      keyVariant("marvel-rivals-smg", "day", "1 Day Key", 400),
+      keyVariant("marvel-rivals-smg", "week", "7 Day Key", 2000),
+      keyVariant("marvel-rivals-smg", "month", "30 Day Key", 4000),
+    ],
+  },
+  {
+    ...categoryMeta("Overwatch 2"),
+    badge: "Undetected",
+    slug: "overwatch2-mason",
+    name: "Overwatch 2 - Mason",
+    priceDisplay: `From ${money(450)}`,
+    summary:
+      "Full Overwatch 2 cheat with auto-tracking aimbot precision, detailed player ESP, and instant configuration switching.",
+    features: ["Aimbot", "Player ESP", "Config switching"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Auto-tracking precision", "FOV control", "Target selection"] },
+      { title: "Visuals", items: ["Player ESP"] },
+      { title: "Misc", items: ["Instant config switching", "HWID spoofer included"] },
+    ],
+    generalInfo: [
+      "Loader must run from a USB flash drive; see the two-stage injection walkthrough on the instructions page.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game: Overwatch 2 (Battle.net)",
+      "OS: Windows 10 & 11 x64",
+      "Stream-Proof: Yes (screenshots & recordings)",
+      "Flashdrive required: Yes",
+    ],
+    variants: [
+      keyVariant("overwatch2-mason", "day", "1 Day Key", 450),
+      keyVariant("overwatch2-mason", "week", "7 Day Key", 2250),
+      keyVariant("overwatch2-mason", "month", "30 Day Key", 4500),
+    ],
+  },
+  {
+    ...categoryMeta("Battlefield"),
+    badge: "Undetected",
+    slug: "battlefield-fecurity",
+    name: "Battlefield - Fecurity",
+    priceDisplay: `From ${money(450)}`,
+    summary:
+      "Battlefield aim and visibility combo covering the essentials with straightforward setup.",
+    features: ["Aimbot", "Player ESP"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "Smoothing"] },
+      { title: "Visuals", items: ["Player ESP", "Distance info"] },
+    ],
+    generalInfo: [
+      "If the loader link isn't working, contact support in Discord for a mirror.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam, EA App, Origin",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11",
+    ],
+    variants: [
+      keyVariant("battlefield-fecurity", "day", "1 Day Key", 450),
+      keyVariant("battlefield-fecurity", "week", "7 Day Key", 1800),
+      keyVariant("battlefield-fecurity", "month", "30 Day Key", 3400),
+    ],
+  },
+  {
+    ...categoryMeta("Call of Duty"),
+    badge: "Undetected",
+    slug: "cod-lunar",
+    name: "CoD - Lunar",
+    priceDisplay: `From ${money(400)}`,
+    summary:
+      "Call of Duty aim and visibility combo with straightforward setup and reliable performance.",
+    features: ["Aimbot", "Player ESP"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "Smoothing"] },
+      { title: "Visuals", items: ["Player ESP", "Distance info"] },
+    ],
+    generalInfo: [
+      "Loader link is sent via Discord after purchase; open a ticket if you don't receive it within a few minutes.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Battle.net, Steam",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11",
+    ],
+    variants: [
+      keyVariant("cod-lunar", "day", "1 Day Key", 400),
+      keyVariant("cod-lunar", "week", "7 Day Key", 2000),
+      keyVariant("cod-lunar", "month", "30 Day Key", 4000),
+    ],
+  },
+  {
+    ...categoryMeta("Call of Duty"),
+    badge: "Undetected",
+    slug: "cod-dullwave",
+    name: "CoD - Dullwave",
+    priceDisplay: `From ${money(465)}`,
+    summary:
+      "Undetected Call of Duty cheat pairing a precise aimbot with a strong player ESP for full tactical awareness.",
+    features: ["Aimbot", "Player ESP", "Stream-friendly design"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
+      { title: "ESP", items: ["Player ESP", "Distance info", "Box/skeleton visuals"] },
+      { title: "Misc", items: ["Config save/load", "Low resource use"] },
+    ],
+    generalInfo: [
+      "Loader password is shared setup-wide; check the instructions page before first launch.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Battle.net, Steam",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11 (21H2-25H2)",
+      "Full-screen mode: not supported (windowed/borderless only)",
+      "Flashdrive required: No",
+    ],
+    variants: [
+      keyVariant("cod-dullwave", "day", "1 Day Key", 465),
+      keyVariant("cod-dullwave", "week", "7 Day Key", 1850),
+      keyVariant("cod-dullwave", "month", "30 Day Key", 3575),
+    ],
+  },
+  {
+    ...categoryMeta("FragPunk"),
+    badge: "Undetected",
+    slug: "fragpunk-dullwave",
+    name: "FragPunk - Dullwave",
+    priceDisplay: `From ${money(400)}`,
+    summary:
+      "Undetected FragPunk cheat pairing a precise aimbot with a strong player ESP for full tactical awareness.",
+    features: ["Aimbot", "Player ESP", "Stream-friendly design"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
+      { title: "ESP", items: ["Player ESP", "Distance info", "Box/skeleton visuals"] },
+      { title: "Misc", items: ["Config save/load", "Low resource use"] },
+    ],
+    generalInfo: [
+      "Loader password is shared setup-wide; check the instructions page before first launch.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11",
+      "Full-screen mode: not supported (windowed/borderless only)",
+      "Flashdrive required: No",
+    ],
+    variants: [
+      keyVariant("fragpunk-dullwave", "day", "1 Day Key", 400),
+      keyVariant("fragpunk-dullwave", "week", "7 Day Key", 1600),
+      keyVariant("fragpunk-dullwave", "month", "30 Day Key", 3200),
+    ],
+  },
+  {
     ...spooferMeta,
     badge: "Undetected",
     slug: "spoofer-lunar",
@@ -814,129 +1399,6 @@ const productCatalog = [
       ["black-ices-20", "+20 Black Ices", 750],
       ["previous-emerald", "Previous Emerald", 850],
     ]),
-  },
-  {
-    ...rustMeta,
-    badge: "Undetected",
-    slug: "rust-dullwave",
-    name: "Rust - Dullwave",
-    priceDisplay: `From ${money(730)}`,
-    summary:
-      "Premium undetected Rust cheat built for tactical domination, pairing precision aim tools with a strong Rust ESP for total raid awareness.",
-    features: ["Aimbot", "Player ESP", "Loot ESP"],
-    featureGroups: [
-      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
-      { title: "ESP", items: ["Player ESP", "Loot filters", "Distance info"] },
-      { title: "Misc", items: ["Config save/load", "Low resource use"] },
-    ],
-    generalInfo: [
-      "Loader password is shared setup-wide; check the instructions page before first launch.",
-      ...universalSetupNotes,
-    ],
-    requirements: [
-      "Game version: Steam",
-      "CPU: Intel & AMD",
-      "GPU: Nvidia & AMD",
-      "OS: Windows 10, Windows 11 (21H2, 22H2, 23H2, 24H2, 25H2)",
-      "Full-screen mode: not supported (windowed/borderless only)",
-      "Flashdrive required: No",
-    ],
-    variants: [
-      keyVariant("rust-dullwave", "day", "1 Day Key", 730),
-      keyVariant("rust-dullwave", "week", "7 Day Key", 3310),
-      keyVariant("rust-dullwave", "month", "30 Day Key", 4640),
-    ],
-  },
-  {
-    ...rustMeta,
-    badge: "Undetected",
-    slug: "rust-mason-lite",
-    name: "Rust Mason Lite",
-    priceDisplay: `From ${money(270)}`,
-    summary:
-      "Lite Rust ESP with automatic player boxes and zero configuration. Launch it, join the game, and get instant visual awareness.",
-    features: ["Auto player ESP", "Zero setup", "USB loader flow"],
-    featureGroups: [
-      { title: "ESP", items: ["Automatic player box ESP", "No menus or config required"] },
-    ],
-    generalInfo: [
-      "USB-only loader; full injection steps are on the instructions page.",
-      ...universalSetupNotes,
-    ],
-    requirements: [
-      "Cheat type: Lite Rust ESP (auto player box)",
-      "Game: Rust (Steam)",
-      "OS: Windows 10 x64 (2004, 20H2, 21H1, 21H2, 22H2), Windows 11 (21H2, 22H2, 23H2 up to build 3880)",
-      "Anti-cheat: Easy Anti-Cheat",
-      "Stream-Proof: No",
-      "Flashdrive required: Yes",
-    ],
-    variants: [
-      keyVariant("rust-mason-lite", "day", "1 Day Key", 270),
-      keyVariant("rust-mason-lite", "week", "7 Day Key", 1110),
-      keyVariant("rust-mason-lite", "month", "30 Day Key", 2085),
-    ],
-  },
-  {
-    ...rustMeta,
-    badge: "Undetected",
-    slug: "rust-mason-full",
-    name: "Rust Mason Full",
-    priceDisplay: `From ${money(555)}`,
-    summary:
-      "Full Rust cheat with advanced aimbot precision, deep ESP visuals, and full configuration control for total map awareness.",
-    features: ["Aimbot", "Full ESP", "Config control"],
-    featureGroups: [
-      { title: "Aimbot", items: ["Advanced aim precision", "FOV control", "Target selection"] },
-      { title: "Visuals", items: ["Player ESP", "Loot ESP", "Resource ESP"] },
-      { title: "Misc", items: ["Full config save/load", "HWID spoofer included"] },
-    ],
-    generalInfo: [
-      "Loader must run from a USB flash drive; see the two-stage injection walkthrough on the instructions page.",
-      ...universalSetupNotes,
-    ],
-    requirements: [
-      "Game version: Rust (Steam)",
-      "OS: Windows 10 & 11 x64 (up to 25H2)",
-      "Anti-cheat: Easy Anti-Cheat",
-      "Stream-Proof: Yes (screenshots & recordings)",
-      "Flashdrive required: Yes",
-    ],
-    variants: [
-      keyVariant("rust-mason-full", "day", "1 Day Key", 555),
-      keyVariant("rust-mason-full", "week", "7 Day Key", 2225),
-      keyVariant("rust-mason-full", "month", "30 Day Key", 5000),
-    ],
-  },
-  {
-    ...rustMeta,
-    badge: "Undetected",
-    slug: "rust-mrpro",
-    name: "Rust - MrPro",
-    priceDisplay: `From ${money(640)}`,
-    summary:
-      "Rust cheat built for Intel systems, covering aim and visual tools in one setup. Intel processors only.",
-    features: ["Aimbot", "Player ESP", "Intel-only build"],
-    featureGroups: [
-      { title: "Aimbot", items: ["Aim controls", "FOV settings"] },
-      { title: "Visuals", items: ["Player ESP", "Distance info"] },
-    ],
-    generalInfo: [
-      "Attention: Intel processors only. Open a Discord ticket for setup help.",
-      ...universalSetupNotes,
-    ],
-    requirements: [
-      "Game version: Steam",
-      "CPU: Intel only",
-      "GPU: Nvidia & AMD",
-      "OS: Windows 10 (21H2, 22H2), Windows 11 (21H2, 22H2, 23H2, 24H2)",
-      "Full-screen mode: not supported (windowed/borderless only)",
-    ],
-    variants: [
-      keyVariant("rust-mrpro", "day", "1 Day Key", 640),
-      keyVariant("rust-mrpro", "week", "7 Day Key", 3220),
-      keyVariant("rust-mrpro", "month", "30 Day Key", 6440),
-    ],
   },
 ];
 

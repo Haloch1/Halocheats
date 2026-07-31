@@ -141,6 +141,15 @@ function escapeHtml(value) {
   });
 }
 
+// Appends the anti-cheat status badge (e.g. "Undetected", "Updating") after
+// the stock status wherever it's shown, e.g. "In Stock - Undetected". Skips
+// generic/non-informative badges so we don't print "In Stock - Online".
+function formatStockStatus(stockLabel, badge) {
+  if (!stockLabel) return stockLabel;
+  if (!badge || badge === "Online" || badge === "Coming soon") return stockLabel;
+  return `${stockLabel} - ${badge}`;
+}
+
 function starsHtml(count) {
   const parsed = Number.parseInt(count, 10);
   const n = Number.isFinite(parsed) ? Math.max(0, Math.min(5, parsed)) : 5;
@@ -1174,7 +1183,7 @@ function openVariantModal(product, { updateUrl = true } = {}) {
       button.innerHTML = `
         <span>
           <strong>${escapeHtml(variant.name)}</strong>
-          <small>${escapeHtml(canSelectVariant ? variant.stockLabel : "0 In Stock")}</small>
+          <small>${escapeHtml(canSelectVariant ? formatStockStatus(variant.stockLabel, product.badge) : "0 In Stock")}</small>
         </span>
         <em>${variant.originalPrice ? `${escapeHtml(variant.priceDisplay)} <small>${escapeHtml(variant.originalPrice)}</small>` : escapeHtml(variant.priceDisplay)}</em>
       `;
@@ -1230,7 +1239,9 @@ function selectVariant(variantSlug) {
   const stockBadge = modal.querySelector("[data-variant-stock]");
 
   if (stockBadge) {
-    stockBadge.textContent = activeVariant?.stockLabel || "0 In Stock";
+    stockBadge.textContent = activeVariant
+      ? formatStockStatus(activeVariant.stockLabel, activeProduct?.badge)
+      : "0 In Stock";
   }
 
   updateVariantPricing();
