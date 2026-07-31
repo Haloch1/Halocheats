@@ -1301,6 +1301,39 @@ const productCatalog = [
     ],
   },
   {
+    ...categoryMeta("Escape from Tarkov"),
+    badge: "Undetected",
+    slug: "eft-dullwave",
+    name: "EFT - Dullwave",
+    priceDisplay: `From ${money(500)}`,
+    summary:
+      "Undetected Escape from Tarkov cheat pairing a precise aimbot with a strong player ESP and loot awareness for full raid control.",
+    features: ["Aimbot", "Player ESP", "Loot ESP"],
+    featureGroups: [
+      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
+      { title: "ESP", items: ["Player ESP", "Loot filters", "Distance info", "Box/skeleton visuals"] },
+      { title: "Misc", items: ["Config save/load", "Low resource use"] },
+    ],
+    generalInfo: [
+      "Loader password is shared setup-wide; check the instructions page before first launch.",
+      ...universalSetupNotes,
+    ],
+    requirements: [
+      "Game version: Steam, EFT launcher",
+      "CPU: Intel & AMD",
+      "GPU: Nvidia & AMD",
+      "OS: Windows 10, Windows 11",
+      "Anti-cheat: BattlEye",
+      "Full-screen mode: not supported (windowed/borderless only)",
+      "Flashdrive required: No",
+    ],
+    variants: [
+      keyVariant("eft-dullwave", "day", "1 Day Key", 500),
+      keyVariant("eft-dullwave", "week", "7 Day Key", 2000),
+      keyVariant("eft-dullwave", "month", "30 Day Key", 3850),
+    ],
+  },
+  {
     ...spooferMeta,
     badge: "Undetected",
     slug: "spoofer-lunar",

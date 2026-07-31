@@ -3970,6 +3970,76 @@ if (isConfiguredValue(discordBotToken)) {
         { match: /dullwave/i, slug: "rust-dullwave" },
       ],
     },
+    {
+      game: /counter[\s-]*strike|\bcs2\b/i,
+      label: "Counter-Strike 2",
+      variants: [
+        { match: /strikeforce/i, slug: "cs2-strikeforce" },
+        { match: /arcane/i, slug: "cs2-arcane" },
+        { match: /predator/i, slug: "cs2-predator" },
+      ],
+    },
+    {
+      game: /pubg/i,
+      label: "PUBG",
+      variants: [
+        { match: /shadow/i, slug: "pubg-shadow" },
+        { match: /arcane/i, slug: "pubg-arcane" },
+      ],
+    },
+    {
+      game: /delta\s*force/i,
+      label: "Delta Force",
+      variants: [
+        { match: /ancient/i, slug: "delta-force-ancient" },
+        { match: /dullwave/i, slug: "delta-force-dullwave" },
+      ],
+    },
+    {
+      game: /marvel\s*rivals/i,
+      label: "Marvel Rivals",
+      variants: [
+        { match: /smg/i, slug: "marvel-rivals-smg" },
+        { match: /predator/i, slug: "marvel-rivals-predator" },
+        { match: /dullwave/i, slug: "marvel-rivals-dullwave" },
+      ],
+    },
+    {
+      game: /overwatch/i,
+      label: "Overwatch 2",
+      variants: [
+        { match: /mason/i, slug: "overwatch2-mason" },
+      ],
+    },
+    {
+      game: /battlefield/i,
+      label: "Battlefield",
+      variants: [
+        { match: /fecurity/i, slug: "battlefield-fecurity" },
+      ],
+    },
+    {
+      game: /call\s*of\s*duty|\bcod\b/i,
+      label: "Call of Duty",
+      variants: [
+        { match: /lunar/i, slug: "cod-lunar" },
+        { match: /dullwave/i, slug: "cod-dullwave" },
+      ],
+    },
+    {
+      game: /fragpunk/i,
+      label: "FragPunk",
+      variants: [
+        { match: /dullwave/i, slug: "fragpunk-dullwave" },
+      ],
+    },
+    {
+      game: /escape\s*from\s*tarkov|\beft\b|tarkov/i,
+      label: "Escape from Tarkov",
+      variants: [
+        { match: /dullwave/i, slug: "eft-dullwave" },
+      ],
+    },
   ];
 
   function isProductStatusEmbed(embed) {
@@ -15468,35 +15538,19 @@ async function loadProductStatusOverrides() {
    Render — never hardcode it here, this repo is public).
 
    Matching: Cheats.Love product/variation names won't necessarily match our
-   catalog's names or slugs exactly. CHEATSLOVE_VID_MAP below lets you pin an
-   exact Cheats.Love variation id ("vid") to one of our inventorySlugs
-   (`${productSlug}-${variantSlug}`, e.g. "rust-dullwave-day") once you've
-   confirmed it from the logged catalog dump on first run. Anything not
-   explicitly mapped falls back to a best-effort fuzzy match on product name
-   + plan duration (Day/Week/Month/Year), and unmatched/ambiguous items are
-   logged so the mapping can be tightened over time — nothing is guessed
-   silently into a stock change. */
+   catalog's names or slugs exactly, and guessing wrong marks a real
+   in-stock product as "Out of Stock" site-wide — worse than not syncing at
+   all. So stock is ONLY ever changed for an inventorySlug you've explicitly
+   pinned in CHEATSLOVE_VID_MAP below (`${productSlug}-${variantSlug}`, e.g.
+   "rust-dullwave-day" -> the Cheats.Love variation id). Everything else is
+   left alone and logged as unmatched on the first cycle so you can look up
+   the real vids from that log and add them here. */
   const CHEATSLOVE_VID_MAP = {
     // "rust-dullwave-day": 10802,
   };
 
   let cheatsloveCatalogLogged = false;
-
-  function cheatsloveDurationFromLabel(label) {
-    const text = (label || "").toLowerCase();
-    if (/\bday\b|24\s*h/.test(text)) return "day";
-    if (/\bweek\b|7\s*d/.test(text)) return "week";
-    if (/\bmonth\b|30\s*d/.test(text)) return "month";
-    if (/\byear\b|365\s*d/.test(text)) return "year";
-    return null;
-  }
-
-  function cheatsloveNormalize(text) {
-    return (text || "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, " ")
-      .trim();
-  }
+  let cheatsloveUnmatchedLogged = false;
 
   async function cheatsloveFetch(path) {
     const res = await fetch(`${cheatsloveBaseUrl}${path}`, {
@@ -15533,27 +15587,32 @@ async function loadProductStatusOverrides() {
       const clProducts = Array.isArray(data?.products) ? data.products : [];
       if (!clProducts.length) return;
 
-      if (!cheatsloveCatalogLogged) {
-        cheatsloveCatalogLogged = true;
-        console.log(
-          `[Cheats.Love] Catalog loaded: ${clProducts.length} product(s). ` +
-          `Add exact vids to CHEATSLOVE_VID_MAP in server.js for guaranteed matches.`
-        );
-      }
-
-      // Flat list of { vid, productName, label } for fuzzy fallback matching.
-      const flatVariations = [];
+      const byVid = new Map();
       for (const clProduct of clProducts) {
         for (const variation of clProduct.variations || []) {
-          flatVariations.push({
-            vid: variation.id,
+          byVid.set(variation.id, {
             productName: clProduct.name,
             label: variation.label,
             stock: resolveCheatsloveStock(variation),
           });
         }
       }
-      const byVid = new Map(flatVariations.map((v) => [v.vid, v]));
+
+      if (!cheatsloveCatalogLogged) {
+        cheatsloveCatalogLogged = true;
+        const sample = clProducts
+          .slice(0, 20)
+          .map((p) => `${p.name} [${(p.variations || []).map((v) => `${v.label}=${v.id}`).join(", ")}]`)
+          .join(" | ");
+        console.log(
+          `[Cheats.Love] Catalog loaded: ${clProducts.length} product(s). ` +
+          `No vids are pinned yet, so stock is NOT being changed for anything. ` +
+          `Match your products against this dump and add entries to CHEATSLOVE_VID_MAP in server.js: ${sample}`
+        );
+      }
+
+      const pinnedSlugs = Object.keys(CHEATSLOVE_VID_MAP);
+      if (!pinnedSlugs.length) return; // nothing pinned — don't touch stock labels
 
       let updatedCount = 0;
       const unmatched = [];
@@ -15561,22 +15620,9 @@ async function loadProductStatusOverrides() {
       for (const product of products) {
         for (const variant of product.variants || []) {
           const inventorySlug = variant.inventorySlug || `${product.slug}-${variant.slug}`;
-          let stockInfo = null;
+          if (!(inventorySlug in CHEATSLOVE_VID_MAP)) continue; // not pinned — leave as-is
 
-          const pinnedVid = CHEATSLOVE_VID_MAP[inventorySlug];
-          if (pinnedVid != null) {
-            stockInfo = byVid.get(pinnedVid) || null;
-          } else {
-            const wantedDuration = cheatsloveDurationFromLabel(variant.name);
-            const productNameNorm = cheatsloveNormalize(product.name);
-            stockInfo = flatVariations.find((v) => {
-              const durationMatch = cheatsloveDurationFromLabel(v.label);
-              if (!durationMatch || durationMatch !== wantedDuration) return false;
-              const nameNorm = cheatsloveNormalize(v.productName);
-              return nameNorm === productNameNorm || nameNorm.includes(productNameNorm) || productNameNorm.includes(nameNorm);
-            });
-          }
-
+          const stockInfo = byVid.get(CHEATSLOVE_VID_MAP[inventorySlug]) || null;
           if (!stockInfo || stockInfo.stock == null) {
             unmatched.push(inventorySlug);
             continue;
@@ -15592,8 +15638,9 @@ async function loadProductStatusOverrides() {
       if (updatedCount) {
         console.log(`[Cheats.Love] Updated stock for ${updatedCount} variant(s).`);
       }
-      if (unmatched.length && !cheatsloveCatalogLogged) {
-        console.log(`[Cheats.Love] No stock match for: ${unmatched.join(", ")}`);
+      if (unmatched.length && !cheatsloveUnmatchedLogged) {
+        cheatsloveUnmatchedLogged = true;
+        console.log(`[Cheats.Love] Pinned vid returned no stock data for: ${unmatched.join(", ")}`);
       }
     } catch (err) {
       console.error("[Cheats.Love] Stock sync error:", err.message);
