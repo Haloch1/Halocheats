@@ -89,7 +89,7 @@ function renderAdminPerks(role) {
       badges: ["Desk inbox", "Reply access", "Ticket workflow", "Member queue"],
       actions: [
         { href: "/desk-admin/", label: "Open Desk Admin", tone: "button-primary" },
-        { href: "/desk/", label: "Member Inbox", tone: "button-secondary" },
+        { href: "#", label: "Member Inbox", tone: "button-secondary" },
         { href: "/products/", label: "Check Products", tone: "button-secondary" },
       ],
     },
@@ -336,19 +336,12 @@ function renderSuggestedProducts(items) {
   suggestedShell.hidden = false;
 }
 
-function actionDeskHref(record) {
-  const params = new URLSearchParams();
-
-  if (record?.orderId) {
-    params.set("order", record.orderId);
-  }
-
-  if (record?.baseProductSlug) {
-    params.set("product", record.baseProductSlug);
-  }
-
-  const query = params.toString();
-  return query ? `/desk/?${query}` : "/desk/";
+/* There is no /desk/ page (only /desk-admin/). Support is the in-page AI
+   widget, opened by the delegated [data-open-support] handler in
+   ai-widget.js, so these "Open Help" links point at "#" and carry that
+   attribute rather than navigating to a route that 404s. */
+function actionDeskHref() {
+  return "#";
 }
 
 function renderOrders(orders) {
@@ -379,7 +372,7 @@ function renderOrders(orders) {
           <small>Opened ${formatTimestamp(order.createdAt)}${order.fulfilledAt ? ` | Delivered ${formatTimestamp(order.fulfilledAt)}` : ""}</small>
           <div class="member-item-actions">
             <a class="button button-secondary button-small" href="${escapeHtml(order.instructionHref || "/instructions/")}">Setup Guide</a>
-            <a class="button button-secondary button-small" href="${escapeHtml(actionDeskHref(order))}">Open Help</a>
+            <a class="button button-secondary button-small" href="#" data-open-support>Open Help</a>
             <a class="button button-secondary button-small" href="/reviews/">Leave Review</a>
             <button class="button button-secondary button-small" type="button" data-copy-value="${escapeHtml(order.id)}" data-copy-label="Order ID">Copy Order ID</button>
           </div>
@@ -416,7 +409,7 @@ function renderKeys(keys) {
           <div class="member-item-actions">
             <button class="button button-primary button-small" type="button" data-copy-value="${escapeHtml(licenseKey.keyValue)}" data-copy-label="Key">Copy Key</button>
             <a class="button button-secondary button-small" href="${escapeHtml(licenseKey.instructionHref || "/instructions/")}">Setup Guide</a>
-            <a class="button button-secondary button-small" href="${escapeHtml(actionDeskHref(licenseKey))}">Open Help</a>
+            <a class="button button-secondary button-small" href="#" data-open-support>Open Help</a>
             ${licenseKey.orderId ? `<button class="button button-secondary button-small" type="button" data-copy-value="${escapeHtml(licenseKey.orderId)}" data-copy-label="Order ID">Copy Order ID</button>` : ""}
           </div>
         </article>

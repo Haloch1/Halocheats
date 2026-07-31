@@ -1735,7 +1735,11 @@ function recordVisitorPageView({ visitorId, userLabel, pagePath, referrer, ipAdd
       })
       .then(({ error }) => {
         if (error) console.error("[Analytics] DB insert error:", error.message);
-      });
+      })
+      /* .then() catches PostgREST result errors but NOT a rejected promise
+         (socket hangup, Supabase 5xx). Without this, a transient blip is an
+         unhandled rejection, which terminates the process on Node >=15. */
+      .catch((err) => console.error("[Analytics] DB insert failed:", err?.message || err));
   }
 }
 
@@ -9394,7 +9398,8 @@ app.post("/api/product-view", async (req, res) => {
       supabaseAdmin
         .from("product_views")
         .insert({ product_slug: slug })
-        .then(({ error }) => { if (error) console.error("[product-view]", error.message); });
+        .then(({ error }) => { if (error) console.error("[product-view]", error.message); })
+        .catch((err) => console.error("[product-view] failed:", err?.message || err));
     }
     return res.json({ ok: true });
   } catch {

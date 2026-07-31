@@ -821,7 +821,12 @@ async function loadAdminReviews() {
       return;
     }
 
-    const stars = (n) => "★".repeat(n) + "☆".repeat(5 - n);
+    /* Clamp: an out-of-range rating made "☆".repeat() throw a RangeError,
+       which killed the whole .map() and silently blanked this panel. */
+    const stars = (n) => {
+      const filled = Math.max(0, Math.min(5, Math.round(Number(n) || 0)));
+      return "★".repeat(filled) + "☆".repeat(5 - filled);
+    };
 
     tbody.innerHTML = data.reviews
       .map(

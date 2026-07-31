@@ -42,7 +42,11 @@ function markAdminThreadRead(threadId, thread) {
   const ts = getAdminReadTimestamps();
   const lastMsg = thread.messages?.at(-1);
   ts[threadId] = lastMsg?.createdAt || new Date().toISOString();
-  localStorage.setItem("desk_admin_read_ts", JSON.stringify(ts));
+  /* Guarded: localStorage throws in private mode / with storage blocked,
+     and this runs as the 2nd statement of renderActiveThread(), so an
+     unguarded throw aborted the render and left the desk stuck on
+     "Select a thread". Unread tracking is best-effort, not critical. */
+  try { localStorage.setItem("desk_admin_read_ts", JSON.stringify(ts)); } catch {}
 }
 
 function hasAdminUnread(thread) {

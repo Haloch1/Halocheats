@@ -246,7 +246,10 @@ const accountLink = document.querySelector("[data-account-link]");
 
 /* Account nav button is rendered icon-only by initWallet(); no text set here. */
 
-const initialSession = await getCurrentSession();
+/* .catch: this is a top-level await, so a rejection here would abort the
+   entire rest of this module -- the Discord popup wiring and all its event
+   listeners below never get registered, silently. */
+const initialSession = await getCurrentSession().catch(() => null);
 
 /* ── Discord link popup ── */
 const discordPopup = document.getElementById("discordPopup");
@@ -258,7 +261,10 @@ const discordPopupAction = document.getElementById("discordPopupAction");
 
 async function maybeShowDiscordPopup() {
   if (!discordPopup) return;
-  if (localStorage.getItem("hc_discord_popup_dismissed")) return;
+  /* Guarded: localStorage throws in private mode / with storage blocked. */
+  try {
+    if (localStorage.getItem("hc_discord_popup_dismissed")) return;
+  } catch {}
 
   if (initialSession) {
     // Signed in - check if Discord is already linked
@@ -294,7 +300,7 @@ discordPopupClose?.addEventListener("click", () => {
   discordPopup.hidden = true;
 });
 discordPopupDismiss?.addEventListener("click", () => {
-  localStorage.setItem("hc_discord_popup_dismissed", "1");
+  try { localStorage.setItem("hc_discord_popup_dismissed", "1"); } catch {}
   discordPopup.hidden = true;
 });
 discordPopup?.addEventListener("click", (e) => {

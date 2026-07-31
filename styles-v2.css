@@ -1171,11 +1171,15 @@ button:disabled {
   inset: 0;
 }
 
+/* Much lighter than it was: the heavy bottom fade existed purely to make
+   the (now removed) card title + product-count legible over the artwork.
+   With no text left to protect it just read as a dark smear, so this is
+   reduced to a gentle edge that still seats the card on the page. */
 .category-card-art::after {
   position: absolute;
   inset: 0;
   content: "";
-  background: linear-gradient(180deg, transparent 30%, rgba(17, 9, 10, 0.12) 58%, rgba(17, 9, 10, 0.88) 100%);
+  background: linear-gradient(180deg, transparent 55%, rgba(17, 9, 10, 0.28) 100%);
 }
 
 .category-card-art img {
@@ -1628,7 +1632,7 @@ button:disabled {
 .variant-promo-form label {
   display: grid;
   gap: 7px;
-  color: #423a3b;
+  color: var(--ink-soft);
   font-size: 0.78rem;
   font-weight: 700;
 }
@@ -1667,7 +1671,7 @@ textarea {
 input:hover,
 select:hover,
 textarea:hover {
-  border-color: #cdb9b6;
+  border-color: var(--line-strong);
 }
 
 input:focus,
@@ -3080,9 +3084,9 @@ textarea:focus {
   justify-content: space-between;
   gap: 18px;
   padding: 18px;
-  border: 1px solid #d8dcff;
+  border: 1px solid rgba(88, 101, 242, 0.35);
   border-radius: 17px;
-  background: #f5f6ff;
+  background: rgba(88, 101, 242, 0.12);
 }
 
 .discord-link-info,
@@ -3187,7 +3191,7 @@ textarea:focus {
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 15px;
-  background: linear-gradient(145deg, #fff, #fff6f4);
+  background: linear-gradient(145deg, var(--paper-soft), var(--paper-warm));
 }
 
 .suggested-product-top,
@@ -3296,7 +3300,7 @@ textarea:focus {
 .desk-message-bubble-admin {
   color: var(--ink);
   border-color: rgba(216, 32, 40, 0.2);
-  background: linear-gradient(145deg, #fff, #fff5f4);
+  background: linear-gradient(145deg, var(--paper-warm), var(--red-soft));
 }
 
 .desk-message-bubble-typing {
@@ -4110,13 +4114,20 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
     opacity: 0;
     transform: translateY(-8px);
     pointer-events: none;
-    transition: opacity 180ms ease, transform 180ms ease;
+    /* visibility (not just opacity) so the closed menu's links are removed
+       from the tab order -- otherwise mobile keyboard users tab through 5-6
+       invisible nav links before reaching the hamburger or page content.
+       Delayed on close so the fade-out still plays. */
+    visibility: hidden;
+    transition: opacity 180ms ease, transform 180ms ease, visibility 0s linear 180ms;
   }
 
   .nav.is-open {
     opacity: 1;
     transform: translateY(0);
     pointer-events: auto;
+    visibility: visible;
+    transition: opacity 180ms ease, transform 180ms ease, visibility 0s;
   }
 
   .nav a { width: 100%; justify-content: flex-start; min-height: 44px; padding-inline: 14px; font-size: 0.86rem; }
@@ -4529,7 +4540,7 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   padding: 34px 30px 24px;
   text-align: center;
   color: var(--ink);
-  background: linear-gradient(155deg, #ffffff, #fff5f4);
+  background: linear-gradient(155deg, var(--paper-soft), var(--paper-warm));
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);

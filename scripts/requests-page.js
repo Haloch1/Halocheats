@@ -23,12 +23,18 @@ function formatTimestamp(value) {
   }).format(new Date(value));
 }
 
+/* Guarded: localStorage throws in private mode / with storage blocked, and
+   these run before the fetch in every approve/deny/delete action. */
 function getOwnerLabel() {
-  return window.localStorage.getItem(OWNER_LABEL_STORAGE) || "owner";
+  try {
+    return window.localStorage.getItem(OWNER_LABEL_STORAGE) || "owner";
+  } catch {
+    return "owner";
+  }
 }
 
 function setOwnerLabel(ownerLabel) {
-  window.localStorage.setItem(OWNER_LABEL_STORAGE, ownerLabel);
+  try { window.localStorage.setItem(OWNER_LABEL_STORAGE, ownerLabel); } catch {}
 }
 
 function ownerHeaders() {

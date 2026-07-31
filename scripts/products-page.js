@@ -411,14 +411,26 @@ function productImageSrc(product) {
   return productArtwork[product.slug] || categoryImageSrc(product.category || product.game || "");
 }
 
-function renderCategoryCard(category, products) {
+function renderCategoryCard(category) {
   const card = document.createElement("article");
   const imageSrc = categoryImageSrc(category);
   card.className = "catalog-category-card";
   card.dataset.categoryCard = category;
+  /* The card is activated by a delegated click handler on the grid, so
+     without these it is mouse-only: not reachable by Tab, no accessible
+     name (the <img alt> alone doesn't name the control), and the existing
+     :focus-visible / :focus-within CSS could never fire. */
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+  card.setAttribute("aria-label", `View ${category} products`);
+  card.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    card.click();
+  });
   card.innerHTML = `
     <div class="category-card-art">
-      <img src="${imageSrc}" alt="${escapeHtml(category)}" loading="lazy" />
+      <img src="${imageSrc}" alt="" loading="lazy" />
       <span class="category-card-view-overlay" aria-hidden="true"><span>View</span></span>
     </div>
   `;
