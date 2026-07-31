@@ -877,14 +877,15 @@ const productCatalog = [
     badge: "Undetected",
     slug: "cs2-arcane",
     name: "CS2 - Arcane Cheat",
-    priceDisplay: `From ${money(500)}`,
+    priceDisplay: `From ${money(150)}`,
     summary:
-      "Full-featured Counter-Strike 2 package with a tunable aimbot, distance-aware visuals, and stream-safe visibility checks.",
-    features: ["Aimbot suite", "Player ESP", "Anti-detection prep"],
+      "Full-featured Counter-Strike 2 package covering a configurable aimbot, 2D/3D player ESP, world item ESP, triggerbot, sniper scope styles, and an internal radar.",
+    features: ["Configurable aimbot", "Player & item ESP", "Triggerbot", "Radar"],
     featureGroups: [
-      { title: "Aimbot", items: ["Enable aimbot", "FOV control", "Smoothing", "Target selection"] },
-      { title: "Visuals", items: ["Player ESP", "Distance", "Visibility check"] },
-      { title: "Misc", items: ["HWID spoofer prompt on first launch", "Config save/load"] },
+      { title: "Aimbot", items: ["Aim on teammate toggle", "Smooth factor & FOV radius", "Aim always / switch delay", "Bone select (head/neck/chest/stomach)", "Player lock & keybind"] },
+      { title: "Player & Weapon ESP", items: ["2D/3D boxes with team colors", "Skeleton & joints", "Name, health, armor", "Snaplines, map callouts & distance", "Weapon type/icon/ammo"] },
+      { title: "Items & Tools", items: ["World item ESP with custom colors per type", "Triggerbot (delay, scoped-only)", "Sniper scope styles", "Internal map radar"] },
+      { title: "Misc", items: ["Bomb timer", "Anti-flash", "BunnyHop", "Recoil control", "Configs (save/load/delete)"] },
     ],
     generalInfo: [
       "Requires the Visual C++ Redistributable and a PC restart before first launch; see the instructions page.",
@@ -899,9 +900,9 @@ const productCatalog = [
       "Stream-Proof: No",
     ],
     variants: [
-      keyVariant("cs2-arcane", "day", "1 Day Key", 500),
-      keyVariant("cs2-arcane", "week", "7 Day Key", 2500),
-      keyVariant("cs2-arcane", "month", "30 Day Key", 5000),
+      keyVariant("cs2-arcane", "day", "1 Day Key", 150),
+      keyVariant("cs2-arcane", "fifteen-day", "15 Day Key", 300),
+      keyVariant("cs2-arcane", "month", "30 Day Key", 450),
     ],
   },
   {
@@ -909,13 +910,15 @@ const productCatalog = [
     badge: "Undetected",
     slug: "cs2-strikeforce",
     name: "CS2 - Strikeforce",
-    priceDisplay: `From ${money(350)}`,
+    priceDisplay: `From ${money(60)}`,
     summary:
-      "Lightweight Counter-Strike 2 aim and visibility combo built to stay low-impact on performance while covering the essentials.",
-    features: ["Aimbot", "Player ESP", "Low resource use"],
+      "Counter-Strike 2 aimbot and wallhack with full recoil control, world ESP for bombs and drops, and a night mode radar setup.",
+    features: ["Aimbot with RCS", "Player & world ESP", "Radar"],
     featureGroups: [
-      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control"] },
-      { title: "Visuals", items: ["Player ESP", "Distance info"] },
+      { title: "Aimbot", items: ["FOV & smooth", "Check flash / ignore smoke", "Shot delay & after-kill delay", "RCS (recoil control) per weapon"] },
+      { title: "Player ESP", items: ["Boxes & skeleton", "Health, names, weapon", "Eye direction & snaplines"] },
+      { title: "World ESP", items: ["Dropped weapons & bombs", "Planted bomb timer", "Defuse kits", "Thrown grenades"] },
+      { title: "Misc", items: ["Radar & recoil crosshair", "Spectator check", "NoFlash & night mode", "Config save/load, Chinese/Russian language"] },
     ],
     generalInfo: [
       "Loader password is shared setup-wide; check the instructions page before first launch.",
@@ -930,9 +933,9 @@ const productCatalog = [
       "Flashdrive required: Yes",
     ],
     variants: [
-      keyVariant("cs2-strikeforce", "day", "1 Day Key", 350),
-      keyVariant("cs2-strikeforce", "week", "7 Day Key", 1750),
-      keyVariant("cs2-strikeforce", "month", "30 Day Key", 3500),
+      keyVariant("cs2-strikeforce", "day", "1 Day Key", 60),
+      keyVariant("cs2-strikeforce", "week", "7 Day Key", 180),
+      keyVariant("cs2-strikeforce", "month", "30 Day Key", 360),
     ],
   },
   {
@@ -940,12 +943,14 @@ const productCatalog = [
     badge: "Undetected",
     slug: "cs2-skinchanger",
     name: "CS2 - Skinchanger",
-    priceDisplay: `From ${money(200)}`,
+    priceDisplay: `From ${money(125)}`,
     summary:
-      "Unlock any weapon, knife, or glove skin in Counter-Strike 2 with no FPS impact and minimal detection risk.",
-    features: ["Weapon skin changer", "Knife changer", "Glove changer"],
+      "Unlock any weapon, knife, or glove skin in Counter-Strike 2, with full control over wear, pattern, StarTrak, and custom item names.",
+    features: ["Weapon/knife/glove changer", "Skin search & rarity filters", "Wear, pattern & StarTrak control"],
     featureGroups: [
-      { title: "Skins", items: ["Weapon skins", "Knife skins", "Glove skins", "No FPS drop"] },
+      { title: "Inventory Changer", items: ["Weapon, knife & glove changer", "Search by category"] },
+      { title: "Skins", items: ["Every in-game skin available", "Search by name", "Color filters by rarity"] },
+      { title: "Item Options", items: ["Wear & pattern (paint seed)", "StarTrak counter", "Custom item name", "Add/remove items from list"] },
     ],
     generalInfo: [
       "Loader password is shared setup-wide; check the instructions page before first launch.",
@@ -959,9 +964,9 @@ const productCatalog = [
       "Full-screen mode: not supported (windowed/borderless only)",
     ],
     variants: [
-      keyVariant("cs2-skinchanger", "day", "1 Day Key", 200),
-      keyVariant("cs2-skinchanger", "week", "7 Day Key", 500),
-      keyVariant("cs2-skinchanger", "month", "30 Day Key", 900),
+      keyVariant("cs2-skinchanger", "day", "1 Day Key", 125),
+      keyVariant("cs2-skinchanger", "week", "7 Day Key", 300),
+      keyVariant("cs2-skinchanger", "month", "30 Day Key", 600),
     ],
   },
   {
@@ -1003,13 +1008,14 @@ const productCatalog = [
     badge: "Undetected",
     slug: "pubg-shadow",
     name: "PUBG - Shadow",
-    priceDisplay: `From ${money(400)}`,
+    priceDisplay: `From ${money(190)}`,
     summary:
-      "Regularly updated PUBG visual and aim combo built to stay lightweight and quick to set up.",
-    features: ["Aimbot", "Player ESP", "Lightweight"],
+      "Full PUBG package covering player ESP, vehicle & airdrop tracking, loot detection, and a mini-map radar, with a free HWID spoofer included.",
+    features: ["Player ESP", "Vehicle & airdrop ESP", "Loot ESP", "Radar"],
     featureGroups: [
-      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "Smoothing"] },
-      { title: "Visuals", items: ["Player ESP", "Distance info"] },
+      { title: "Player ESP", items: ["Boxes, skeleton & snaplines", "Visible check & bot detection", "Health, kill count & level", "Knocked-player tracking", "Max distance control"] },
+      { title: "World & Loot ESP", items: ["Vehicles & airdrops with distance", "Dropped items, weapons & armor", "Scopes, attachments & meds", "Adjustable render distance"] },
+      { title: "Misc", items: ["Spectator count", "Static crosshair", "Custom ESP colors & hotkeys", "Mini-map radar", "Free HWID spoofer included"] },
     ],
     generalInfo: [
       "Disable antivirus and Windows Defender before running the loader.",
@@ -1022,9 +1028,9 @@ const productCatalog = [
       "OS: Windows 10 (1903, 1909, 2004, 20H2, 21H1, 21H2, 22H2), Windows 11 (21H2, 22H2, 23H2)",
     ],
     variants: [
-      keyVariant("pubg-shadow", "day", "1 Day Key", 400),
-      keyVariant("pubg-shadow", "week", "7 Day Key", 1800),
-      keyVariant("pubg-shadow", "month", "30 Day Key", 3400),
+      keyVariant("pubg-shadow", "day", "1 Day Key", 190),
+      keyVariant("pubg-shadow", "week", "7 Day Key", 760),
+      keyVariant("pubg-shadow", "month", "30 Day Key", 1520),
     ],
   },
   {
@@ -1032,14 +1038,14 @@ const productCatalog = [
     badge: "Undetected",
     slug: "delta-force-dullwave",
     name: "Delta Force - Dullwave",
-    priceDisplay: `From ${money(465)}`,
+    priceDisplay: `From ${money(650)}`,
     summary:
-      "Undetected Delta Force cheat pairing a precise aimbot with a strong player ESP for full tactical awareness.",
-    features: ["Aimbot", "Player ESP", "Stream-friendly design"],
+      "Tactical Delta Force aimbot with humanized smoothing and target lock, paired with full player/bot ESP and a loot & economy ESP for fast progression.",
+    features: ["Tactical aimbot", "Player & bot ESP", "Loot & economy ESP"],
     featureGroups: [
-      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
-      { title: "ESP", items: ["Player ESP", "Distance info", "Box/skeleton visuals"] },
-      { title: "Misc", items: ["Config save/load", "Low resource use"] },
+      { title: "Aimbot", items: ["Bind & bone select", "Humanize & dynamic smooth", "Aim lock & visible check", "Customizable FOV with draw overlay"] },
+      { title: "Player & Bot ESP", items: ["Corner/2D/filled box styles", "Health bar & nickname", "Skeleton & snapline", "Level, distance & corpse ESP"] },
+      { title: "Loot & Economy ESP", items: ["Price & rarity display", "Containers & weapon highlighting", "Min-price loot filter", "Separate distance sliders"] },
     ],
     generalInfo: [
       "Loader password is shared setup-wide; check the instructions page before first launch.",
@@ -1054,9 +1060,9 @@ const productCatalog = [
       "Flashdrive required: No",
     ],
     variants: [
-      keyVariant("delta-force-dullwave", "day", "1 Day Key", 465),
-      keyVariant("delta-force-dullwave", "week", "7 Day Key", 1850),
-      keyVariant("delta-force-dullwave", "month", "30 Day Key", 3575),
+      keyVariant("delta-force-dullwave", "day", "1 Day Key", 650),
+      keyVariant("delta-force-dullwave", "week", "7 Day Key", 2250),
+      keyVariant("delta-force-dullwave", "month", "30 Day Key", 4240),
     ],
   },
   {
@@ -1066,12 +1072,12 @@ const productCatalog = [
     name: "Delta Force - Ancient",
     priceDisplay: `From ${money(400)}`,
     summary:
-      "Delta Force setup with aim tools, player ESP, and configuration sharing.",
-    features: ["Aim support", "Player ESP", "Config sharing"],
+      "Delta Force aimbot with static and curved aim modes plus a full player ESP and radar, including a built-in HWID spoofer and StreamProof protection.",
+    features: ["Static/curved aimbot", "Player ESP & radar", "HWID spoofer included"],
     featureGroups: [
-      { title: "Aimbot", items: ["Aim key", "Smooth", "FOV", "Target selection"] },
-      { title: "Visuals", items: ["Player ESP", "Skeleton", "Distance", "Radar"] },
-      { title: "Config", items: ["Save", "Load", "Share"] },
+      { title: "Aimbot", items: ["Static or curved aim", "Dual aim keys", "FOV with draw overlay", "Bone select & nearest-bone", "Lock target (incl. knocked)"] },
+      { title: "Player ESP & Radar", items: ["Box, skeleton & line ESP", "Health & name ESP", "Team check", "Mini-map radar with size control"] },
+      { title: "Misc", items: ["StreamProof", "Built-in HWID spoofer", "English & Chinese language", "Custom colors & font size", "Config save/load"] },
     ],
     generalInfo: [
       "Follow the full preparation and injection walkthrough on the instructions page before first launch.",
@@ -1124,14 +1130,14 @@ const productCatalog = [
     badge: "Undetected",
     slug: "marvel-rivals-dullwave",
     name: "Marvel Rivals - Dullwave",
-    priceDisplay: `From ${money(465)}`,
+    priceDisplay: `From ${money(385)}`,
     summary:
-      "Undetected Marvel Rivals cheat pairing a precise aimbot with a strong player ESP for full tactical awareness.",
-    features: ["Aimbot", "Player ESP", "Stream-friendly design"],
+      "Undetected Marvel Rivals cheat with a humanized aimbot, full player wallhack, and an industry-leading anti-detection system for stable, low-impact performance.",
+    features: ["Humanized aimbot", "Player wallhack", "Anti-detection system"],
     featureGroups: [
-      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
-      { title: "ESP", items: ["Player ESP", "Distance info", "Box/skeleton visuals"] },
-      { title: "Misc", items: ["Config save/load", "Low resource use"] },
+      { title: "Aimbot", items: ["Bind & bone select", "Visible check (invisibles)", "Humanize & smooth", "FOV with draw overlay & color", "Snapline to target"] },
+      { title: "Player ESP", items: ["2D/corner box styles", "Health bar & nickname", "Distance & skeleton", "Snapline & enemy-only toggle"] },
+      { title: "Performance & Support", items: ["Zero FPS drop, low CPU/GPU use", "Ban-protection anti-detection", "Stable across maps/patches", "Easy install, 24/7 support"] },
     ],
     generalInfo: [
       "Loader password is shared setup-wide; check the instructions page before first launch.",
@@ -1146,9 +1152,9 @@ const productCatalog = [
       "Flashdrive required: No",
     ],
     variants: [
-      keyVariant("marvel-rivals-dullwave", "day", "1 Day Key", 465),
-      keyVariant("marvel-rivals-dullwave", "week", "7 Day Key", 1850),
-      keyVariant("marvel-rivals-dullwave", "month", "30 Day Key", 3575),
+      keyVariant("marvel-rivals-dullwave", "day", "1 Day Key", 385),
+      keyVariant("marvel-rivals-dullwave", "week", "7 Day Key", 1585),
+      keyVariant("marvel-rivals-dullwave", "month", "30 Day Key", 2915),
     ],
   },
   {
@@ -1156,14 +1162,14 @@ const productCatalog = [
     badge: "Undetected",
     slug: "marvel-rivals-predator",
     name: "Marvel Rivals - Predator",
-    priceDisplay: `From ${money(450)}`,
+    priceDisplay: `From ${money(300)}`,
     summary:
-      "Subscription-managed Marvel Rivals cheat with aim and visual tools handled through a dedicated panel.",
-    features: ["Aimbot", "Player ESP", "Panel-managed subscription"],
+      "Subscription-managed Marvel Rivals cheat with a full vector aimbot, hero-aware wallhack, radar hack, and a built-in HWID spoofer, all handled through the Predator panel.",
+    features: ["Vector aimbot", "Hero-aware wallhack", "Radar hack", "HWID spoofer included"],
     featureGroups: [
-      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
-      { title: "Visuals", items: ["Player ESP", "Distance info", "Skeleton"] },
-      { title: "Misc", items: ["Panel-based license management", "Config save/load"] },
+      { title: "Aimbot", items: ["Aim mode (always/hold key)", "Hitbox & priority select", "FOV type & smooth", "Prediction & visible check"] },
+      { title: "Wallhack", items: ["Players & teammates", "Health bar & nickname", "Hero name & ultimate charge", "Box, skeleton & glow"] },
+      { title: "Radar & Misc", items: ["Radar with out-of-view indicator", "StreamProof", "Built-in HWID spoofer", "Menu key & key bind list"] },
     ],
     generalInfo: [
       "Manage your subscription and download the loader from the Predator panel; check the instructions page before first launch.",
@@ -1177,9 +1183,10 @@ const productCatalog = [
       "Full-screen mode: not supported (windowed/borderless only)",
     ],
     variants: [
-      keyVariant("marvel-rivals-predator", "day", "1 Day Key", 450),
-      keyVariant("marvel-rivals-predator", "week", "7 Day Key", 2250),
-      keyVariant("marvel-rivals-predator", "month", "30 Day Key", 4500),
+      keyVariant("marvel-rivals-predator", "day", "1 Day Key", 300),
+      keyVariant("marvel-rivals-predator", "week", "7 Day Key", 800),
+      keyVariant("marvel-rivals-predator", "month", "30 Day Key", 1700),
+      keyVariant("marvel-rivals-predator", "three-month", "90 Day Key", 3500),
     ],
   },
   {
@@ -1187,13 +1194,14 @@ const productCatalog = [
     badge: "Undetected",
     slug: "marvel-rivals-shadow",
     name: "Marvel Rivals - Shadow",
-    priceDisplay: `From ${money(400)}`,
+    priceDisplay: `From ${money(430)}`,
     summary:
-      "Advanced Marvel Rivals targeting and vision toolkit with discreet, safety-focused operation for professional-grade gameplay.",
-    features: ["Advanced targeting", "Superior vision", "Discreet operation"],
+      "Marvel Rivals aimbot with vector and silent modes plus a full hero-aware wallhack, Lua scripting, skin changer, and a built-in HWID spoofer.",
+    features: ["Vector/silent aimbot", "Hero-aware wallhack", "Skin changer & scripts", "HWID spoofer included"],
     featureGroups: [
-      { title: "Aimbot", items: ["Advanced targeting", "Smoothing", "FOV control"] },
-      { title: "Visuals", items: ["Superior vision", "Player ESP"] },
+      { title: "Aimbot & Combat", items: ["Vector & silent aimbot", "Aim mode (always/toggle/hold)", "Humanizer & smooth", "Triggerbot & spinbot", "Visible check & ignore teammate"] },
+      { title: "Visuals (WH)", items: ["Box, glow & hero name", "Health & ultimate charge", "Distance to targets", "Health-pack & portal tracking"] },
+      { title: "Other Shadow Features", items: ["Custom .lua scripts", "SkinChanger", "BunnyHop script", "Safe mode & built-in HWID spoofer"] },
     ],
     generalInfo: [
       "Loader password is shared setup-wide; check the instructions page before first launch.",
@@ -1207,9 +1215,9 @@ const productCatalog = [
       "Full-screen mode: not supported (windowed/borderless only)",
     ],
     variants: [
-      keyVariant("marvel-rivals-shadow", "day", "1 Day Key", 400),
-      keyVariant("marvel-rivals-shadow", "week", "7 Day Key", 1900),
-      keyVariant("marvel-rivals-shadow", "month", "30 Day Key", 3800),
+      keyVariant("marvel-rivals-shadow", "day", "1 Day Key", 430),
+      keyVariant("marvel-rivals-shadow", "week", "7 Day Key", 1230),
+      keyVariant("marvel-rivals-shadow", "month", "30 Day Key", 2470),
     ],
   },
   {
@@ -1217,14 +1225,13 @@ const productCatalog = [
     badge: "Undetected",
     slug: "overwatch2-mason",
     name: "Overwatch 2 - Mason",
-    priceDisplay: `From ${money(450)}`,
+    priceDisplay: `From ${money(510)}`,
     summary:
-      "Full Overwatch 2 cheat with auto-tracking aimbot precision, detailed player ESP, and instant configuration switching.",
-    features: ["Aimbot", "Player ESP", "Config switching"],
+      "Overwatch 2 vector aimbot with adjustable FOV and sensitivity, paired with a 2D box ESP for enhanced enemy awareness.",
+    features: ["Vector aimbot", "2D box ESP", "Team switch"],
     featureGroups: [
-      { title: "Aimbot", items: ["Auto-tracking precision", "FOV control", "Target selection"] },
-      { title: "Visuals", items: ["Player ESP"] },
-      { title: "Misc", items: ["Instant config switching", "HWID spoofer included"] },
+      { title: "Aimbot", items: ["Vector-based aiming", "Adjustable FOV", "Smoothing", "Sensitivity config", "Hold-key activation"] },
+      { title: "Visuals", items: ["2D box ESP around enemies", "Aimbot FOV overlay"] },
     ],
     generalInfo: [
       "Loader must run from a USB flash drive; see the two-stage injection walkthrough on the instructions page.",
@@ -1240,9 +1247,9 @@ const productCatalog = [
       "Flashdrive required: Yes",
     ],
     variants: [
-      keyVariant("overwatch2-mason", "day", "1 Day Key", 450),
-      keyVariant("overwatch2-mason", "week", "7 Day Key", 2250),
-      keyVariant("overwatch2-mason", "month", "30 Day Key", 4500),
+      keyVariant("overwatch2-mason", "day", "1 Day Key", 510),
+      keyVariant("overwatch2-mason", "week", "7 Day Key", 1900),
+      keyVariant("overwatch2-mason", "month", "30 Day Key", 3800),
     ],
   },
   {
@@ -1250,13 +1257,14 @@ const productCatalog = [
     badge: "Undetected",
     slug: "battlefield-fecurity",
     name: "Battlefield - Fecurity",
-    priceDisplay: `From ${money(450)}`,
+    priceDisplay: `From ${money(800)}`,
     summary:
-      "Battlefield aim and visibility combo covering the essentials with straightforward setup.",
-    features: ["Aimbot", "Player ESP"],
+      "Battlefield aimbot with vectored and silent modes plus full player and vehicle ESP, covering enemy positions, health, and distance in real time.",
+    features: ["Vectored/silent aimbot", "Player ESP", "Vehicle ESP"],
     featureGroups: [
-      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "Smoothing"] },
-      { title: "Visuals", items: ["Player ESP", "Distance info"] },
+      { title: "Aimbot", items: ["Vectored & silent aim", "Aim-at-shoot", "FOV with draw overlay", "Prediction & target switch delay", "Bone & hitbox priority"] },
+      { title: "Player ESP", items: ["Enemy/visible-only filters", "Box ESP with outline", "Skeleton & health", "Name & distance"] },
+      { title: "Vehicle ESP & Misc", items: ["Vehicle box, health & distance", "Custom ESP colors", "Distance unit toggle", "Built-in HWID spoofer"] },
     ],
     generalInfo: [
       "If the loader link isn't working, contact support in Discord for a mirror.",
@@ -1270,9 +1278,9 @@ const productCatalog = [
       "Full-screen mode: not supported (windowed/borderless only)",
     ],
     variants: [
-      keyVariant("battlefield-fecurity", "day", "1 Day Key", 450),
-      keyVariant("battlefield-fecurity", "week", "7 Day Key", 1800),
-      keyVariant("battlefield-fecurity", "month", "30 Day Key", 3400),
+      keyVariant("battlefield-fecurity", "day", "1 Day Key", 800),
+      keyVariant("battlefield-fecurity", "week", "7 Day Key", 3500),
+      keyVariant("battlefield-fecurity", "month", "30 Day Key", 7000),
     ],
   },
   {
@@ -1345,12 +1353,12 @@ const productCatalog = [
     name: "CoD - Dullwave",
     priceDisplay: `From ${money(465)}`,
     summary:
-      "Undetected Call of Duty cheat pairing a precise aimbot with a strong player ESP for full tactical awareness.",
-    features: ["Aimbot", "Player ESP", "Stream-friendly design"],
+      "Undetected Call of Duty cheat covering configurable aimbot targeting, a full wallhack with box/skeleton overlays, loot detection, and a real-time radar.",
+    features: ["Configurable aimbot", "Player wallhack", "Loot ESP & radar"],
     featureGroups: [
-      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
-      { title: "ESP", items: ["Player ESP", "Distance info", "Box/skeleton visuals"] },
-      { title: "Misc", items: ["Config save/load", "Low resource use"] },
+      { title: "Aimbot", items: ["Body-part targeting", "Key bind activation", "Movement prediction", "FOV & smoothness", "Team-only / bot targeting toggle"] },
+      { title: "ESP", items: ["Player & bot wallhack", "2D box / corner box styles", "Skeleton overlay & snaplines", "Health, distance & nickname"] },
+      { title: "Loot, Radar & Misc", items: ["Armor, ammo & gas mask ESP", "Kill-streak visibility", "Radar overlay (bots, teams, distances)", "Field of view changer"] },
     ],
     generalInfo: [
       "Loader password is shared setup-wide; check the instructions page before first launch.",
@@ -1375,14 +1383,14 @@ const productCatalog = [
     badge: "Undetected",
     slug: "fragpunk-dullwave",
     name: "FragPunk - Dullwave",
-    priceDisplay: `From ${money(400)}`,
+    priceDisplay: `From ${money(465)}`,
     summary:
-      "Undetected FragPunk cheat pairing a precise aimbot with a strong player ESP for full tactical awareness.",
-    features: ["Aimbot", "Player ESP", "Stream-friendly design"],
+      "Undetected FragPunk cheat with a humanized aimbot and full player wallhack, backed by an industry-leading anti-detection system for stable performance.",
+    features: ["Humanized aimbot", "Player wallhack", "Anti-detection system"],
     featureGroups: [
-      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
-      { title: "ESP", items: ["Player ESP", "Distance info", "Box/skeleton visuals"] },
-      { title: "Misc", items: ["Config save/load", "Low resource use"] },
+      { title: "Aimbot", items: ["Bind & bone select", "FOV with draw overlay", "Aim lock & humanize", "Invisibles (through obstacles)", "Smooth & max distance"] },
+      { title: "Player ESP", items: ["2D/corner box styles", "Health bar & nickname", "Distance & skeleton", "Snapline to targets"] },
+      { title: "Performance & Support", items: ["No FPS drop on weaker PCs", "Ban-protection anti-detection", "Stable across maps/patches", "Easy install, 24/7 support"] },
     ],
     generalInfo: [
       "Loader password is shared setup-wide; check the instructions page before first launch.",
@@ -1397,9 +1405,9 @@ const productCatalog = [
       "Flashdrive required: No",
     ],
     variants: [
-      keyVariant("fragpunk-dullwave", "day", "1 Day Key", 400),
-      keyVariant("fragpunk-dullwave", "week", "7 Day Key", 1600),
-      keyVariant("fragpunk-dullwave", "month", "30 Day Key", 3200),
+      keyVariant("fragpunk-dullwave", "day", "1 Day Key", 465),
+      keyVariant("fragpunk-dullwave", "week", "7 Day Key", 1850),
+      keyVariant("fragpunk-dullwave", "month", "30 Day Key", 3580),
     ],
   },
   {

@@ -554,30 +554,35 @@ const WHOLESALE_COSTS = {
   "r6s-no-recoil-day": 210, "r6s-no-recoil-week": 700, "r6s-no-recoil-month": 1400, "r6s-no-recoil-three-month": 2450,
   // Counter-Strike 2 — set to 70% of sell price (30% margin) until a real reseller cost is provided
   "cs2-predator-day": 105, "cs2-predator-week": 245, "cs2-predator-month": 413, "cs2-predator-three-month": 952,
-  "cs2-arcane-day": 350, "cs2-arcane-week": 1750, "cs2-arcane-month": 3500,
-  "cs2-strikeforce-day": 245, "cs2-strikeforce-week": 1225, "cs2-strikeforce-month": 2450,
-  "cs2-skinchanger-day": 140, "cs2-skinchanger-week": 350, "cs2-skinchanger-month": 630,
-  // PUBG — set to 70% of sell price (30% margin) until a real reseller cost is provided
-  "pubg-arcane-day": 350, "pubg-arcane-week": 1750, "pubg-arcane-month": 3500,
-  "pubg-shadow-day": 280, "pubg-shadow-week": 1260, "pubg-shadow-month": 2380,
+  "cs2-arcane-day": 105, "cs2-arcane-fifteen-day": 210, "cs2-arcane-month": 315,
+  "cs2-strikeforce-day": 42, "cs2-strikeforce-week": 126, "cs2-strikeforce-month": 252,
+  "cs2-skinchanger-day": 88, "cs2-skinchanger-week": 210, "cs2-skinchanger-month": 420,
+  // PUBG — set to 70% of sell price (30% margin) until a real reseller cost is provided.
+  // pubg-arcane week/month left unpinned — source file's variation data was
+  // corrupted (cross-contaminated with cs2-arcane's cached data), only the
+  // day price ($5) was confirmed real; see chat for details.
+  "pubg-arcane-day": 350,
+  "pubg-shadow-day": 133, "pubg-shadow-week": 532, "pubg-shadow-month": 1064,
   // Delta Force — set to 70% of sell price (30% margin) until a real reseller cost is provided
-  "delta-force-dullwave-day": 326, "delta-force-dullwave-week": 1295, "delta-force-dullwave-month": 2502,
+  "delta-force-dullwave-day": 455, "delta-force-dullwave-week": 1575, "delta-force-dullwave-month": 2968,
   "delta-force-ancient-day": 280, "delta-force-ancient-week": 1400, "delta-force-ancient-month": 2800,
   "delta-force-luna-chams-day": 1400, "delta-force-luna-chams-week": 7000, "delta-force-luna-chams-month": 14000,
   // Marvel Rivals — set to 70% of sell price (30% margin) until a real reseller cost is provided
-  "marvel-rivals-dullwave-day": 326, "marvel-rivals-dullwave-week": 1295, "marvel-rivals-dullwave-month": 2502,
-  "marvel-rivals-predator-day": 315, "marvel-rivals-predator-week": 1575, "marvel-rivals-predator-month": 3150,
-  "marvel-rivals-shadow-day": 280, "marvel-rivals-shadow-week": 1330, "marvel-rivals-shadow-month": 2660,
+  "marvel-rivals-dullwave-day": 270, "marvel-rivals-dullwave-week": 1110, "marvel-rivals-dullwave-month": 2041,
+  "marvel-rivals-predator-day": 210, "marvel-rivals-predator-week": 560, "marvel-rivals-predator-month": 1190, "marvel-rivals-predator-three-month": 2450,
+  "marvel-rivals-shadow-day": 301, "marvel-rivals-shadow-week": 861, "marvel-rivals-shadow-month": 1729,
   // Overwatch 2 — set to 70% of sell price (30% margin) until a real reseller cost is provided
-  "overwatch2-mason-day": 315, "overwatch2-mason-week": 1575, "overwatch2-mason-month": 3150,
+  "overwatch2-mason-day": 357, "overwatch2-mason-week": 1330, "overwatch2-mason-month": 2660,
   // Battlefield — set to 70% of sell price (30% margin) until a real reseller cost is provided
-  "battlefield-fecurity-day": 315, "battlefield-fecurity-week": 1260, "battlefield-fecurity-month": 2380,
+  "battlefield-fecurity-day": 560, "battlefield-fecurity-week": 2450, "battlefield-fecurity-month": 4900,
   "battlefield6-ancient-day": 280, "battlefield6-ancient-week": 1400, "battlefield6-ancient-month": 2800,
-  // Call of Duty — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  // Call of Duty — set to 70% of sell price (30% margin) until a real reseller cost is provided.
+  // cod-dullwave pricing left unpinned — source file only exposed a raw
+  // WooCommerce price range ($5-$30) with no per-variant breakdown, and
+  // conflicted with the page's own JSON-LD price; needs a fresh source file.
   "cod-lunar-day": 350, "cod-lunar-week": 1050, "cod-lunar-month": 2100,
-  "cod-dullwave-day": 326, "cod-dullwave-week": 1295, "cod-dullwave-month": 2502,
   // FragPunk — set to 70% of sell price (30% margin) until a real reseller cost is provided
-  "fragpunk-dullwave-day": 280, "fragpunk-dullwave-week": 1120, "fragpunk-dullwave-month": 2240,
+  "fragpunk-dullwave-day": 326, "fragpunk-dullwave-week": 1295, "fragpunk-dullwave-month": 2506,
   // Escape from Tarkov — set to 70% of sell price (30% margin) until a real reseller cost is provided
   "eft-dullwave-day": 350, "eft-dullwave-week": 1400, "eft-dullwave-month": 2695,
   "eft-crusader-day": 350, "eft-crusader-week": 1680, "eft-crusader-month": 3150,
