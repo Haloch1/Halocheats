@@ -1958,14 +1958,11 @@ textarea:focus {
 
 .category-strip {
   display: flex;
+  flex-wrap: wrap;
   gap: 9px;
   margin: 0 0 32px;
   padding: 3px 0 8px;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
-
-.category-strip::-webkit-scrollbar { display: none; }
 
 .category-strip button {
   min-height: 40px;
@@ -2347,6 +2344,16 @@ textarea:focus {
   box-shadow: 0 8px 22px rgba(117, 34, 38, 0.09);
 }
 
+.variant-option.is-selected {
+  border-color: rgba(62, 203, 133, 0.75);
+  background: rgba(62, 203, 133, 0.12);
+  box-shadow: 0 8px 22px rgba(62, 203, 133, 0.15);
+}
+
+.variant-option.is-selected em {
+  color: var(--green);
+}
+
 .variant-option strong,
 .variant-option span {
   display: block;
@@ -2406,6 +2413,20 @@ textarea:focus {
   padding: 0;
   flex: 0 0 auto;
   accent-color: var(--red);
+}
+
+.variant-terms.terms-needs-attention {
+  animation: terms-shake 420ms ease;
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(216, 32, 40, 0.25);
+}
+
+@keyframes terms-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(3px); }
 }
 
 .variant-terms a,

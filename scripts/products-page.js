@@ -141,15 +141,6 @@ function escapeHtml(value) {
   });
 }
 
-// Appends the anti-cheat status badge (e.g. "Undetected", "Updating") after
-// the stock status wherever it's shown, e.g. "In Stock - Undetected". Skips
-// generic/non-informative badges so we don't print "In Stock - Online".
-function formatStockStatus(stockLabel, badge) {
-  if (!stockLabel) return stockLabel;
-  if (!badge || badge === "Online" || badge === "Coming soon") return stockLabel;
-  return `${stockLabel} - ${badge}`;
-}
-
 function starsHtml(count) {
   const parsed = Number.parseInt(count, 10);
   const n = Number.isFinite(parsed) ? Math.max(0, Math.min(5, parsed)) : 5;
@@ -936,6 +927,20 @@ function termsAccepted() {
   return Boolean(document.querySelector("[data-terms-check]")?.checked);
 }
 
+/* Draws attention to the "I understand..." checkbox when someone tries to
+   check out without accepting it — the page-level notice banner can be easy
+   to miss while a modal is open, so this makes it impossible to miss. */
+function flagTermsCheckbox() {
+  const label = document.querySelector("[data-terms-check]")?.closest(".variant-terms");
+  if (!label) return;
+  label.scrollIntoView({ behavior: "smooth", block: "center" });
+  label.classList.remove("terms-needs-attention");
+  // Force reflow so the animation restarts if it's already flagged.
+  void label.offsetWidth;
+  label.classList.add("terms-needs-attention");
+  window.setTimeout(() => label.classList.remove("terms-needs-attention"), 1600);
+}
+
 function updateVariantPricing() {
   const modal = ensureVariantModal();
   const priceTarget = modal.querySelector("[data-variant-price]");
@@ -956,12 +961,16 @@ function updateCheckoutButtonState() {
   /* Out of stock (not a blocked/error variant) → offer restock notify instead */
   const outOfStock = Boolean(activeVariant) && !canAttempt;
 
+  /* Note: buttons stay clickable even when the terms checkbox isn't checked
+     yet — disabling them here would swallow the click entirely, so the user
+     would never see the "please check the box" notice. The checkout
+     functions themselves check termsAccepted() and flag the checkbox. */
   checkoutButton.hidden = outOfStock;
-  checkoutButton.disabled = !canAttempt || !termsAccepted();
+  checkoutButton.disabled = !canAttempt;
   checkoutButton.textContent = canAttempt ? "Pay with Card" : "Unavailable";
   if (balanceButton) {
     balanceButton.hidden = outOfStock;
-    balanceButton.disabled = !canAttempt || !termsAccepted();
+    balanceButton.disabled = !canAttempt;
     balanceButton.textContent = canAttempt ? "Pay with Balance" : "Unavailable";
   }
   if (cartButton) {
@@ -971,7 +980,7 @@ function updateCheckoutButtonState() {
   }
   if (cryptoButton) {
     cryptoButton.hidden = outOfStock;
-    cryptoButton.disabled = !canAttempt || !termsAccepted();
+    cryptoButton.disabled = !canAttempt;
     cryptoButton.textContent = canAttempt ? "Pay with Crypto" : "Unavailable";
   }
   if (notifyButton) {
@@ -1183,7 +1192,7 @@ function openVariantModal(product, { updateUrl = true } = {}) {
       button.innerHTML = `
         <span>
           <strong>${escapeHtml(variant.name)}</strong>
-          <small>${escapeHtml(canSelectVariant ? formatStockStatus(variant.stockLabel, product.badge) : "0 In Stock")}</small>
+          <small>${escapeHtml(canSelectVariant ? variant.stockLabel : "0 In Stock")}</small>
         </span>
         <em>${variant.originalPrice ? `${escapeHtml(variant.priceDisplay)} <small>${escapeHtml(variant.originalPrice)}</small>` : escapeHtml(variant.priceDisplay)}</em>
       `;
@@ -1239,9 +1248,7 @@ function selectVariant(variantSlug) {
   const stockBadge = modal.querySelector("[data-variant-stock]");
 
   if (stockBadge) {
-    stockBadge.textContent = activeVariant
-      ? formatStockStatus(activeVariant.stockLabel, activeProduct?.badge)
-      : "0 In Stock";
+    stockBadge.textContent = activeVariant?.stockLabel || "0 In Stock";
   }
 
   updateVariantPricing();
@@ -1359,7 +1366,8 @@ async function checkoutSelectedVariant(button) {
   }
 
   if (!termsAccepted()) {
-    renderMessage(notice, "Agree to the Terms of Service before continuing.", "warn");
+    renderMessage(notice, "Please check “I understand all sales are final” before continuing.", "warn");
+    flagTermsCheckbox();
     return;
   }
 
@@ -1437,7 +1445,8 @@ async function checkoutSelectedVariantBalance(button) {
   }
 
   if (!termsAccepted()) {
-    renderMessage(notice, "Agree to the Terms of Service before continuing.", "warn");
+    renderMessage(notice, "Please check “I understand all sales are final” before continuing.", "warn");
+    flagTermsCheckbox();
     return;
   }
 
@@ -1541,7 +1550,8 @@ async function checkoutSelectedVariantCrypto(button) {
   }
 
   if (!termsAccepted()) {
-    renderMessage(notice, "Agree to the Terms of Service before continuing.", "warn");
+    renderMessage(notice, "Please check “I understand all sales are final” before continuing.", "warn");
+    flagTermsCheckbox();
     return;
   }
 

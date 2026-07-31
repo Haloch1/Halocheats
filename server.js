@@ -528,14 +528,46 @@ const xAccessSecret = process.env.X_ACCESS_SECRET || "";
 
 /* ── Wholesale cost map (cents) — what we pay the reseller per key ── */
 const WHOLESALE_COSTS = {
-  // R6S — TODO: these are placeholders (0). Fill in the real per-key cost
-  // you pay the reseller for each of these before relying on margin reports.
-  "r6s-ancient-license": 0,
-  "r6s-crusader-license": 0,
-  "r6s-vega-license": 0,
-  "r6s-chams-license": 0,
-  "r6s-lethal-license": 0,
-  "r6s-no-recoil-license": 0,
+  // R6S — set to 70% of sell price (30% margin) until a real reseller cost is provided.
+  // (Previous entries here used a "-license" suffix that never matched the real
+  // inventorySlugs below, so R6S margin reports were silently reading 0 — fixed.)
+  "r6s-ancient-day": 210, "r6s-ancient-week": 1050, "r6s-ancient-month": 2100,
+  "r6s-crusader-day": 280, "r6s-crusader-week": 1400, "r6s-crusader-month": 2800,
+  "r6s-vega-day": 280, "r6s-vega-three-day": 560, "r6s-vega-week": 1120, "r6s-vega-month": 2100,
+  "r6s-chams-day": 245, "r6s-chams-week": 1050, "r6s-chams-month": 2100,
+  "r6s-lethal-day": 769, "r6s-lethal-week": 2309, "r6s-lethal-month": 3709, "r6s-lethal-year": 24499,
+  "r6s-no-recoil-day": 210, "r6s-no-recoil-week": 700, "r6s-no-recoil-month": 1400, "r6s-no-recoil-three-month": 2450,
+  // Counter-Strike 2 — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  "cs2-predator-day": 315, "cs2-predator-week": 1575, "cs2-predator-month": 3150,
+  "cs2-arcane-day": 350, "cs2-arcane-week": 1750, "cs2-arcane-month": 3500,
+  "cs2-strikeforce-day": 245, "cs2-strikeforce-week": 1225, "cs2-strikeforce-month": 2450,
+  "cs2-skinchanger-day": 140, "cs2-skinchanger-week": 350, "cs2-skinchanger-month": 630,
+  // PUBG — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  "pubg-arcane-day": 350, "pubg-arcane-week": 1750, "pubg-arcane-month": 3500,
+  "pubg-shadow-day": 280, "pubg-shadow-week": 1260, "pubg-shadow-month": 2380,
+  // Delta Force — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  "delta-force-dullwave-day": 326, "delta-force-dullwave-week": 1295, "delta-force-dullwave-month": 2502,
+  "delta-force-ancient-day": 280, "delta-force-ancient-week": 1400, "delta-force-ancient-month": 2800,
+  "delta-force-luna-chams-day": 1400, "delta-force-luna-chams-week": 7000, "delta-force-luna-chams-month": 14000,
+  // Marvel Rivals — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  "marvel-rivals-dullwave-day": 326, "marvel-rivals-dullwave-week": 1295, "marvel-rivals-dullwave-month": 2502,
+  "marvel-rivals-predator-day": 315, "marvel-rivals-predator-week": 1575, "marvel-rivals-predator-month": 3150,
+  "marvel-rivals-smg-day": 280, "marvel-rivals-smg-week": 1400, "marvel-rivals-smg-month": 2800,
+  "marvel-rivals-shadow-day": 280, "marvel-rivals-shadow-week": 1330, "marvel-rivals-shadow-month": 2660,
+  // Overwatch 2 — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  "overwatch2-mason-day": 315, "overwatch2-mason-week": 1575, "overwatch2-mason-month": 3150,
+  // Battlefield — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  "battlefield-fecurity-day": 315, "battlefield-fecurity-week": 1260, "battlefield-fecurity-month": 2380,
+  "battlefield6-ancient-day": 280, "battlefield6-ancient-week": 1400, "battlefield6-ancient-month": 2800,
+  // Call of Duty — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  "cod-lunar-day": 280, "cod-lunar-week": 1400, "cod-lunar-month": 2800,
+  "cod-dullwave-day": 326, "cod-dullwave-week": 1295, "cod-dullwave-month": 2502,
+  // FragPunk — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  "fragpunk-dullwave-day": 280, "fragpunk-dullwave-week": 1120, "fragpunk-dullwave-month": 2240,
+  // Escape from Tarkov — set to 70% of sell price (30% margin) until a real reseller cost is provided
+  "eft-dullwave-day": 350, "eft-dullwave-week": 1400, "eft-dullwave-month": 2695,
+  "eft-crusader-day": 350, "eft-crusader-week": 1680, "eft-crusader-month": 3150,
+  "eft-superior-day": 448, "eft-superior-week": 2100, "eft-superior-month": 4060,
   // Fortnite — set to 70% of sell price (30% margin) until a real reseller cost is provided
   "fortnite-dullwave-day": 326, "fortnite-dullwave-three-day": 651, "fortnite-dullwave-week": 1295, "fortnite-dullwave-month": 2503,
   "fortnite-ancient-day": 399, "fortnite-ancient-week": 1999, "fortnite-ancient-month": 3999,
@@ -3976,6 +4008,7 @@ if (isConfiguredValue(discordBotToken)) {
       label: "Counter-Strike 2",
       variants: [
         { match: /strikeforce/i, slug: "cs2-strikeforce" },
+        { match: /skinchanger|skin\s*changer/i, slug: "cs2-skinchanger" },
         { match: /arcane/i, slug: "cs2-arcane" },
         { match: /predator/i, slug: "cs2-predator" },
       ],
@@ -3992,6 +4025,7 @@ if (isConfiguredValue(discordBotToken)) {
       game: /delta\s*force/i,
       label: "Delta Force",
       variants: [
+        { match: /luna\s*chams/i, slug: "delta-force-luna-chams" },
         { match: /ancient/i, slug: "delta-force-ancient" },
         { match: /dullwave/i, slug: "delta-force-dullwave" },
       ],
@@ -4001,6 +4035,7 @@ if (isConfiguredValue(discordBotToken)) {
       label: "Marvel Rivals",
       variants: [
         { match: /smg/i, slug: "marvel-rivals-smg" },
+        { match: /shadow/i, slug: "marvel-rivals-shadow" },
         { match: /predator/i, slug: "marvel-rivals-predator" },
         { match: /dullwave/i, slug: "marvel-rivals-dullwave" },
       ],
@@ -4017,6 +4052,7 @@ if (isConfiguredValue(discordBotToken)) {
       label: "Battlefield",
       variants: [
         { match: /fecurity/i, slug: "battlefield-fecurity" },
+        { match: /ancient/i, slug: "battlefield6-ancient" },
       ],
     },
     {
@@ -4038,6 +4074,8 @@ if (isConfiguredValue(discordBotToken)) {
       game: /escape\s*from\s*tarkov|\beft\b|tarkov/i,
       label: "Escape from Tarkov",
       variants: [
+        { match: /crusader/i, slug: "eft-crusader" },
+        { match: /superior/i, slug: "eft-superior" },
         { match: /dullwave/i, slug: "eft-dullwave" },
       ],
     },
