@@ -70,6 +70,21 @@ const discordAlertsWebhookUrl = process.env.DISCORD_ALERTS_WEBHOOK_URL || "";
 const cheatsloveApiKey = process.env.CHEATSLOVE_API_KEY || "";
 const cheatsloveBaseUrl = (process.env.CHEATSLOVE_BASE_URL || "https://res.cheatslove.com/api/v1").replace(/\/+$/, "");
 const cheatslovePollMs = Number(process.env.CHEATSLOVE_POLL_MS || 60_000);
+/* Real, confirmed-by-sync stock per inventorySlug ("In Stock" | "Out of Stock"),
+   populated by syncCheatsLoveStock() below from manual CHEATSLOVE_VID_MAP pins
+   AND safe exact-name/duration auto-matches. Anything NOT in this map has no
+   confirmed upstream stock signal yet, so callers fall back to the optimistic
+   "reseller covers it" default (real fulfillment still goes through the normal
+   buy-on-demand + staff safety net). This is what makes the live site actually
+   reflect a real "Out of Stock" from the Cheats.Love panel instead of always
+   showing "In Stock" whenever CHEATSLOVE_API_KEY is set. */
+const cheatsloveStockKnown = new Map();
+function cheatsloveCoversInventory(inventorySlug) {
+  if (!cheatsloveApiKey) return false;
+  const known = cheatsloveStockKnown.get(inventorySlug);
+  if (known) return known === "In Stock";
+  return true; // no confirmed data yet — optimistic default with staff safety net
+}
 const adminAccessKey = process.env.ADMIN_ACCESS_KEY || "";
 const ownerRequestsKey = process.env.OWNER_REQUESTS_KEY || "";
 const geminiApiKey = process.env.GEMINI_API_KEY || "";
@@ -538,7 +553,7 @@ const WHOLESALE_COSTS = {
   "r6s-lethal-day": 769, "r6s-lethal-week": 2309, "r6s-lethal-month": 3709, "r6s-lethal-year": 24499,
   "r6s-no-recoil-day": 210, "r6s-no-recoil-week": 700, "r6s-no-recoil-month": 1400, "r6s-no-recoil-three-month": 2450,
   // Counter-Strike 2 — set to 70% of sell price (30% margin) until a real reseller cost is provided
-  "cs2-predator-day": 315, "cs2-predator-week": 1575, "cs2-predator-month": 3150,
+  "cs2-predator-day": 105, "cs2-predator-week": 245, "cs2-predator-month": 413, "cs2-predator-three-month": 952,
   "cs2-arcane-day": 350, "cs2-arcane-week": 1750, "cs2-arcane-month": 3500,
   "cs2-strikeforce-day": 245, "cs2-strikeforce-week": 1225, "cs2-strikeforce-month": 2450,
   "cs2-skinchanger-day": 140, "cs2-skinchanger-week": 350, "cs2-skinchanger-month": 630,
@@ -552,7 +567,6 @@ const WHOLESALE_COSTS = {
   // Marvel Rivals — set to 70% of sell price (30% margin) until a real reseller cost is provided
   "marvel-rivals-dullwave-day": 326, "marvel-rivals-dullwave-week": 1295, "marvel-rivals-dullwave-month": 2502,
   "marvel-rivals-predator-day": 315, "marvel-rivals-predator-week": 1575, "marvel-rivals-predator-month": 3150,
-  "marvel-rivals-smg-day": 280, "marvel-rivals-smg-week": 1400, "marvel-rivals-smg-month": 2800,
   "marvel-rivals-shadow-day": 280, "marvel-rivals-shadow-week": 1330, "marvel-rivals-shadow-month": 2660,
   // Overwatch 2 — set to 70% of sell price (30% margin) until a real reseller cost is provided
   "overwatch2-mason-day": 315, "overwatch2-mason-week": 1575, "overwatch2-mason-month": 3150,
@@ -560,7 +574,7 @@ const WHOLESALE_COSTS = {
   "battlefield-fecurity-day": 315, "battlefield-fecurity-week": 1260, "battlefield-fecurity-month": 2380,
   "battlefield6-ancient-day": 280, "battlefield6-ancient-week": 1400, "battlefield6-ancient-month": 2800,
   // Call of Duty — set to 70% of sell price (30% margin) until a real reseller cost is provided
-  "cod-lunar-day": 280, "cod-lunar-week": 1400, "cod-lunar-month": 2800,
+  "cod-lunar-day": 350, "cod-lunar-week": 1050, "cod-lunar-month": 2100,
   "cod-dullwave-day": 326, "cod-dullwave-week": 1295, "cod-dullwave-month": 2502,
   // FragPunk — set to 70% of sell price (30% margin) until a real reseller cost is provided
   "fragpunk-dullwave-day": 280, "fragpunk-dullwave-week": 1120, "fragpunk-dullwave-month": 2240,
@@ -568,6 +582,10 @@ const WHOLESALE_COSTS = {
   "eft-dullwave-day": 350, "eft-dullwave-week": 1400, "eft-dullwave-month": 2695,
   "eft-crusader-day": 350, "eft-crusader-week": 1680, "eft-crusader-month": 3150,
   "eft-superior-day": 448, "eft-superior-week": 2100, "eft-superior-month": 4060,
+  "eft-sugar-week": 3584, "eft-sugar-month": 7161,
+  "eft-sky-day": 315, "eft-sky-week": 1071, "eft-sky-month": 2058,
+  "eft-chams-day": 357, "eft-chams-week": 1435, "eft-chams-month": 2688,
+  "eft-mason-day": 389, "eft-mason-week": 1558, "eft-mason-month": 3507,
   // Fortnite — set to 70% of sell price (30% margin) until a real reseller cost is provided
   "fortnite-dullwave-day": 326, "fortnite-dullwave-three-day": 651, "fortnite-dullwave-week": 1295, "fortnite-dullwave-month": 2503,
   "fortnite-ancient-day": 399, "fortnite-ancient-week": 1999, "fortnite-ancient-month": 3999,
@@ -4034,7 +4052,6 @@ if (isConfiguredValue(discordBotToken)) {
       game: /marvel\s*rivals/i,
       label: "Marvel Rivals",
       variants: [
-        { match: /smg/i, slug: "marvel-rivals-smg" },
         { match: /shadow/i, slug: "marvel-rivals-shadow" },
         { match: /predator/i, slug: "marvel-rivals-predator" },
         { match: /dullwave/i, slug: "marvel-rivals-dullwave" },
@@ -4076,10 +4093,25 @@ if (isConfiguredValue(discordBotToken)) {
       variants: [
         { match: /crusader/i, slug: "eft-crusader" },
         { match: /superior/i, slug: "eft-superior" },
+        { match: /sugar/i, slug: "eft-sugar" },
+        { match: /sky/i, slug: "eft-sky" },
+        { match: /chams/i, slug: "eft-chams" },
+        { match: /mason/i, slug: "eft-mason" },
         { match: /dullwave/i, slug: "eft-dullwave" },
       ],
     },
   ];
+
+  /* Applies a status badge to a product. "Updating" means the cheat is being
+     reworked upstream and shouldn't be sold until it's back — keep the
+     "Updating" badge visible (so customers know why) but flip the product
+     to unavailable so checkout is blocked while it's mid-update. Any other
+     badge (Undetected, Use at own risk!, Testing, Discontinued) restores
+     normal availability. */
+  function applyProductStatusBadge(product, badge) {
+    product.badge = badge;
+    product.available = badge !== "Updating";
+  }
 
   function isProductStatusEmbed(embed) {
     return /product status overview/i.test(embed?.title || "");
@@ -4172,7 +4204,7 @@ if (isConfiguredValue(discordBotToken)) {
     if (!matched.length) return;
     for (const row of matched) {
       const product = products.find((p) => p.slug === row.slug);
-      if (product) product.badge = row.badge;
+      if (product) applyProductStatusBadge(product, row.badge);
     }
     if (!supabaseAdmin) return;
     try {
@@ -10101,23 +10133,27 @@ app.get("/api/products", async (_req, res) => {
         const inventorySlug = getVariantInventorySlug(product, variant);
         const stockCount = keyCounts.get(inventorySlug) || 0;
         /* If the reseller API is configured and this variant maps to a reseller product, treat it as in stock.
-           Cheats.Love coverage is blanket (like the legacy reseller check above) since real fulfillment
-           falls back to the existing "mark paid, alert staff" safety net for anything not yet pinned in
-           CHEATSLOVE_VID_MAP — see the Cheats.Love buy block in syncPaidOrder. */
-        const resellerCovers = Boolean((resellerApiKey && getResellerParams(inventorySlug)) || cheatsloveApiKey);
+           Cheats.Love coverage uses REAL synced stock when we have it (see cheatsloveCoversInventory /
+           syncCheatsLoveStock below); only falls back to the optimistic default for variants with no
+           confirmed data yet, with the existing "mark paid, alert staff" safety net covering the gap —
+           see the Cheats.Love buy block in syncPaidOrder. */
+        const resellerCovers = Boolean((resellerApiKey && getResellerParams(inventorySlug)) || cheatsloveCoversInventory(inventorySlug));
         /* Variants with DISABLED_ stripe keys are explicitly unavailable */
         const isDisabledVariant = variant.stripeEnvKey?.startsWith("DISABLED_");
         const hasKeys = !isDisabledVariant && (stockCount > 0 || resellerCovers);
         const isExplicitlyBlocked = Boolean(product.checkoutBlocked || variant.checkoutBlocked);
         const hasValidPrice = variant.amount > 0;
-        /* Store kill switch forces everything out of stock / not purchasable */
-        const checkoutReady = !storeSoldOut && hasKeys && hasValidPrice && !isExplicitlyBlocked;
+        /* Store kill switch forces everything out of stock / not purchasable.
+           product.available === false also blocks checkout — this is how a
+           status badge of "Updating" (see applyProductStatusBadge) takes the
+           product off sale while still showing the "Updating" badge. */
+        const checkoutReady = !storeSoldOut && hasKeys && hasValidPrice && !isExplicitlyBlocked && product.available !== false;
         const checkoutBlocked = isExplicitlyBlocked && hasKeys;
 
         /* Apex & EFT show the exact key count; every other product just shows
            "In Stock" / "Out of Stock" without revealing counts. */
         const showsExactCount =
-          product.category === "Apex Legends" || product.category === "Escape From Tarkov";
+          product.category === "Apex Legends" || product.category === "Escape from Tarkov";
         let stockLabel;
         if (isDisabledVariant) {
           stockLabel = "Unavailable";
@@ -12159,10 +12195,11 @@ app.get("/api/checkout/complete", authLimiter, async (req, res) => {
 function isKeyAvailable(inventorySlug) {
   /* If reseller API covers this product, treat as available (buy happens after payment) */
   if (resellerApiKey && getResellerParams(inventorySlug)) return true;
-  /* Cheats.Love configured — treat as available; falls back to the existing
-     "mark paid, alert staff" safety net if not yet pinned in CHEATSLOVE_VID_MAP */
-  if (cheatsloveApiKey) return true;
-  return false;
+  /* Cheats.Love: block checkout only when we have REAL confirmed out-of-stock
+     data for this exact inventorySlug. Otherwise treat as available — falls
+     back to the existing "mark paid, alert staff" safety net for anything not
+     yet pinned/matched in CHEATSLOVE_VID_MAP. */
+  return cheatsloveCoversInventory(inventorySlug);
 }
 
 async function isKeyAvailableAsync(inventorySlug) {
@@ -13960,7 +13997,7 @@ async function getLiveInventoryContext(query) {
       const variants = (product.variants || []).map((variant) => {
         const inventorySlug = getVariantInventorySlug(product, variant);
         const localCount = keyCounts.get(inventorySlug) || 0;
-        const resellerCovers = Boolean((resellerApiKey && getResellerParams(inventorySlug)) || cheatsloveApiKey);
+        const resellerCovers = Boolean((resellerApiKey && getResellerParams(inventorySlug)) || cheatsloveCoversInventory(inventorySlug));
         const disabled = variant.stripeEnvKey?.startsWith("DISABLED_");
         const ready = !storeSoldOut
           && !disabled
@@ -15611,7 +15648,7 @@ async function loadProductStatusOverrides() {
     if (!data || !data.length) return;
     for (const row of data) {
       const product = products.find((p) => p.slug === row.product_slug);
-      if (product && row.badge) product.badge = row.badge;
+      if (product && row.badge) applyProductStatusBadge(product, row.badge);
     }
     console.log(`[Status sync] Loaded ${data.length} product status override(s) from database.`);
   } catch (err) {
@@ -15621,9 +15658,9 @@ async function loadProductStatusOverrides() {
 
 /* ── Cheats.Love reseller stock sync ──
    Polls GET /products on the Cheats.Love reseller API on a timer and keeps
-   our in-memory `stockLabel` per variant in sync with their live stock, so
-   the site never shows a variant as "In Stock" when the upstream reseller
-   is actually out.
+   our in-memory `stockLabel` per variant AND `cheatsloveStockKnown` (top of
+   file) in sync with their live stock, so the site never shows a variant as
+   "In Stock" when the upstream reseller panel is actually out.
 
    The API key is read from process.env.CHEATSLOVE_API_KEY only (set it on
    Render — never hardcode it here, this repo is public).
@@ -15631,17 +15668,23 @@ async function loadProductStatusOverrides() {
    Matching: Cheats.Love product/variation names won't necessarily match our
    catalog's names or slugs exactly, and guessing wrong marks a real
    in-stock product as "Out of Stock" site-wide — worse than not syncing at
-   all. So stock is ONLY ever changed for an inventorySlug you've explicitly
-   pinned in CHEATSLOVE_VID_MAP below (`${productSlug}-${variantSlug}`, e.g.
-   "rust-dullwave-day" -> the Cheats.Love variation id). Everything else is
-   left alone and logged as unmatched on the first cycle so you can look up
-   the real vids from that log and add them here. */
+   all. So a variant's stock is only ever changed when we're confident:
+     1. It's explicitly pinned in CHEATSLOVE_VID_MAP below
+        (`${productSlug}-${variantSlug}` -> the Cheats.Love variation id), or
+     2. It auto-matches — the product's `name` equals a Cheats.Love product
+        name exactly (case/punctuation-insensitive) AND the variant's
+        duration (1 Day / 7 Day / 30 Day / 90 Day, etc.) equals a variation's
+        duration exactly. No fuzzy/partial matching.
+   Manual pins always win over an auto-match for the same inventorySlug.
+   Everything else is left alone and logged as unmatched on the first cycle
+   so you can look up the real vids from that log and add them here. */
   const CHEATSLOVE_VID_MAP = {
     // "rust-dullwave-day": 10802,
   };
 
   let cheatsloveCatalogLogged = false;
   let cheatsloveUnmatchedLogged = false;
+  let cheatsloveAutoMatchLogged = false;
 
   async function cheatsloveFetch(path, options = {}) {
     const res = await fetch(`${cheatsloveBaseUrl}${path}`, {
@@ -15676,6 +15719,33 @@ async function loadProductStatusOverrides() {
     return null;
   }
 
+  /* Lowercase + strip all non-alphanumerics so "EFT – Chams+" and "EFT - Chams+"
+     (curly vs plain dash, trailing +) compare equal. Exact match only. */
+  function cheatsloveNormalizeName(s) {
+    return String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+  }
+
+  /* Maps a human duration string ("1 Day", "7 Day Key", "3 Month", "90 Day Key")
+     to a canonical bucket so both sides of the match use the same units. */
+  function cheatsloveDurationKey(label) {
+    const m = String(label || "").toLowerCase().match(/(\d+)\s*(day|week|month)/);
+    if (!m) return null;
+    const n = Number(m[1]);
+    const unit = m[2];
+    if (unit === "day") {
+      if (n === 1) return "day";
+      if (n === 7) return "week";
+      if (n === 30) return "month";
+      if (n === 90) return "three-month";
+    }
+    if (unit === "week" && n === 1) return "week";
+    if (unit === "month") {
+      if (n === 1) return "month";
+      if (n === 3) return "three-month";
+    }
+    return `${n}${unit}`;
+  }
+
   async function syncCheatsLoveStock() {
     if (!cheatsloveApiKey) return;
     try {
@@ -15684,7 +15754,9 @@ async function loadProductStatusOverrides() {
       if (!clProducts.length) return;
 
       const byVid = new Map();
+      const clByName = new Map();
       for (const clProduct of clProducts) {
+        clByName.set(cheatsloveNormalizeName(clProduct.name), clProduct);
         for (const variation of clProduct.variations || []) {
           byVid.set(variation.id, {
             productName: clProduct.name,
@@ -15702,13 +15774,39 @@ async function loadProductStatusOverrides() {
           .join(" | ");
         console.log(
           `[Cheats.Love] Catalog loaded: ${clProducts.length} product(s). ` +
-          `No vids are pinned yet, so stock is NOT being changed for anything. ` +
-          `Match your products against this dump and add entries to CHEATSLOVE_VID_MAP in server.js: ${sample}`
+          `Stock is applied to manually pinned CHEATSLOVE_VID_MAP entries plus safe exact-name auto-matches. ` +
+          `Full dump for manual pinning of anything still unmatched: ${sample}`
         );
       }
 
-      const pinnedSlugs = Object.keys(CHEATSLOVE_VID_MAP);
-      if (!pinnedSlugs.length) return; // nothing pinned — don't touch stock labels
+      // Safe exact-match auto-pin: product name + variant duration must both
+      // match exactly. Manual CHEATSLOVE_VID_MAP entries always take priority.
+      const autoMatchedVids = new Map(); // inventorySlug -> vid
+      const autoMatchLog = [];
+      for (const product of products) {
+        const clProduct = clByName.get(cheatsloveNormalizeName(product.name));
+        if (!clProduct) continue;
+        for (const variant of product.variants || []) {
+          const inventorySlug = variant.inventorySlug || `${product.slug}-${variant.slug}`;
+          if (inventorySlug in CHEATSLOVE_VID_MAP) continue; // manual pin wins
+          const wantKey = cheatsloveDurationKey(variant.name);
+          if (!wantKey) continue;
+          const match = (clProduct.variations || []).find(
+            (v) => cheatsloveDurationKey(v.label) === wantKey
+          );
+          if (match) {
+            autoMatchedVids.set(inventorySlug, match.id);
+            autoMatchLog.push(`${inventorySlug}->${match.id}`);
+          }
+        }
+      }
+      if (autoMatchedVids.size && !cheatsloveAutoMatchLogged) {
+        cheatsloveAutoMatchLogged = true;
+        console.log(`[Cheats.Love] Auto-matched ${autoMatchedVids.size} variant(s) by exact name+duration: ${autoMatchLog.join(", ")}`);
+      }
+
+      const resolvedVidBySlug = new Map([...autoMatchedVids, ...Object.entries(CHEATSLOVE_VID_MAP)]);
+      if (!resolvedVidBySlug.size) return; // nothing pinned or matched — don't touch stock labels
 
       let updatedCount = 0;
       const unmatched = [];
@@ -15716,14 +15814,15 @@ async function loadProductStatusOverrides() {
       for (const product of products) {
         for (const variant of product.variants || []) {
           const inventorySlug = variant.inventorySlug || `${product.slug}-${variant.slug}`;
-          if (!(inventorySlug in CHEATSLOVE_VID_MAP)) continue; // not pinned — leave as-is
+          if (!resolvedVidBySlug.has(inventorySlug)) continue; // not pinned/matched — leave as-is
 
-          const stockInfo = byVid.get(CHEATSLOVE_VID_MAP[inventorySlug]) || null;
+          const stockInfo = byVid.get(resolvedVidBySlug.get(inventorySlug)) || null;
           if (!stockInfo || stockInfo.stock == null) {
             unmatched.push(inventorySlug);
             continue;
           }
 
+          cheatsloveStockKnown.set(inventorySlug, stockInfo.stock);
           if (variant.stockLabel !== stockInfo.stock) {
             variant.stockLabel = stockInfo.stock;
             updatedCount += 1;
@@ -15736,7 +15835,7 @@ async function loadProductStatusOverrides() {
       }
       if (unmatched.length && !cheatsloveUnmatchedLogged) {
         cheatsloveUnmatchedLogged = true;
-        console.log(`[Cheats.Love] Pinned vid returned no stock data for: ${unmatched.join(", ")}`);
+        console.log(`[Cheats.Love] Pinned/matched vid returned no stock data for: ${unmatched.join(", ")}`);
       }
     } catch (err) {
       console.error("[Cheats.Love] Stock sync error:", err.message);
