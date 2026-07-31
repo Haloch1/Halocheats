@@ -3908,7 +3908,8 @@ if (isConfiguredValue(discordBotToken)) {
   // Discord status emoji -> our badge label. The source bot actually uses
   // colored hearts (💚/💙/🖤), not the colored circles from the legend
   // screenshot — confirmed 2026-07-26 from a raw embed dump. Circle
-  // variants are kept too in case the bot ever switches formats.
+  // variants are kept too in case the bot ever switches formats. 🖤 (black
+  // heart) means "Updating", not discontinued — confirmed by Azad.
   const STATUS_EMOJI_LABELS = {
     "🟢": "Undetected",
     "💚": "Undetected",
@@ -3918,10 +3919,10 @@ if (isConfiguredValue(discordBotToken)) {
     "💙": "Updating",
     "⚪": "Updating",
     "🤍": "Updating",
+    "🖤": "Updating",
     "🟡": "Testing",
     "💛": "Testing",
     "📝": "Discontinued",
-    "🖤": "Discontinued",
   };
 
   // Only games/variants XenCheats actually sells. `game` matches the
@@ -4170,7 +4171,7 @@ if (isConfiguredValue(discordBotToken)) {
     }));
     const legendField = {
       name: "Status Code:",
-      value: "💚 Undetected  •  💙 Updating  •  🧡 Use at own risk!  •  💛 Testing  •  🖤 Discontinued",
+      value: "💚 Undetected  •  💙/🖤 Updating  •  🧡 Use at own risk!  •  💛 Testing  •  📝 Discontinued",
       inline: false,
     };
 
@@ -8826,6 +8827,52 @@ async function syncPaidOrder(session) {
     }
   }
 
+  /* ── 1a) Try Cheats.Love reseller API (only for inventorySlugs pinned in
+     CHEATSLOVE_VID_MAP in the stock-sync block below). Buys on demand after
+     payment, same pattern as the legacy reseller block above. ── */
+  if (cheatsloveApiKey && CHEATSLOVE_VID_MAP[order.product_slug] != null) {
+    try {
+      const vid = CHEATSLOVE_VID_MAP[order.product_slug];
+      const cheatsloveOrder = await cheatsloveFetch("/orders", {
+        method: "POST",
+        body: JSON.stringify({ items: [{ vid, qty: 1 }] }),
+      });
+      const keyValue = cheatsloveOrder?.lines?.[0]?.keys?.[0];
+      if (cheatsloveOrder?.fulfilled && keyValue) {
+        console.log(`[Cheats.Love Buy] Got key for ${order.product_slug}: order ${cheatsloveOrder.order_ref}`);
+        const clAssignedAt = new Date().toISOString();
+        const { data: clKey, error: clErr } = await supabaseAdmin
+          .from("license_keys")
+          .insert({
+            product_slug: order.product_slug,
+            key_value: keyValue,
+            status: "assigned",
+            assigned_user_id: order.user_id,
+            assigned_order_id: order.id,
+            assigned_at: clAssignedAt,
+          })
+          .select("id, key_value")
+          .single();
+
+        if (!clErr && clKey) {
+          await supabaseAdmin.from("orders").update({
+            status: "fulfilled",
+            stripe_session_id: session.id,
+            stripe_payment_intent: session.payment_intent || null,
+            fulfilled_at: clAssignedAt,
+            delivered_key_value: clKey.key_value,
+          }).eq("id", order.id);
+
+          return await postFulfillment(order, session, clKey, clAssignedAt);
+        }
+      } else {
+        console.warn(`[Cheats.Love Buy] Failed/unfulfilled for ${order.product_slug}:`, JSON.stringify(cheatsloveOrder).slice(0, 300));
+      }
+    } catch (clErr) {
+      console.error(`[Cheats.Love Buy] Error for ${order.product_slug}:`, clErr.message);
+    }
+  }
+
   /* ── 1b) Fallback: claim free key from XimCheats partner inventory ── */
   const ximUrl = process.env.XIMCHEATS_SUPABASE_URL;
   const ximAnon = process.env.XIMCHEATS_ANON_KEY;
@@ -10015,8 +10062,11 @@ app.get("/api/products", async (_req, res) => {
       variants: (product.variants || []).map((variant) => {
         const inventorySlug = getVariantInventorySlug(product, variant);
         const stockCount = keyCounts.get(inventorySlug) || 0;
-        /* If the reseller API is configured and this variant maps to a reseller product, treat it as in stock */
-        const resellerCovers = Boolean(resellerApiKey && getResellerParams(inventorySlug));
+        /* If the reseller API is configured and this variant maps to a reseller product, treat it as in stock.
+           Cheats.Love coverage is blanket (like the legacy reseller check above) since real fulfillment
+           falls back to the existing "mark paid, alert staff" safety net for anything not yet pinned in
+           CHEATSLOVE_VID_MAP — see the Cheats.Love buy block in syncPaidOrder. */
+        const resellerCovers = Boolean((resellerApiKey && getResellerParams(inventorySlug)) || cheatsloveApiKey);
         /* Variants with DISABLED_ stripe keys are explicitly unavailable */
         const isDisabledVariant = variant.stripeEnvKey?.startsWith("DISABLED_");
         const hasKeys = !isDisabledVariant && (stockCount > 0 || resellerCovers);
@@ -12071,6 +12121,9 @@ app.get("/api/checkout/complete", authLimiter, async (req, res) => {
 function isKeyAvailable(inventorySlug) {
   /* If reseller API covers this product, treat as available (buy happens after payment) */
   if (resellerApiKey && getResellerParams(inventorySlug)) return true;
+  /* Cheats.Love configured — treat as available; falls back to the existing
+     "mark paid, alert staff" safety net if not yet pinned in CHEATSLOVE_VID_MAP */
+  if (cheatsloveApiKey) return true;
   return false;
 }
 
@@ -13869,7 +13922,7 @@ async function getLiveInventoryContext(query) {
       const variants = (product.variants || []).map((variant) => {
         const inventorySlug = getVariantInventorySlug(product, variant);
         const localCount = keyCounts.get(inventorySlug) || 0;
-        const resellerCovers = Boolean(resellerApiKey && getResellerParams(inventorySlug));
+        const resellerCovers = Boolean((resellerApiKey && getResellerParams(inventorySlug)) || cheatsloveApiKey);
         const disabled = variant.stripeEnvKey?.startsWith("DISABLED_");
         const ready = !storeSoldOut
           && !disabled
@@ -15552,10 +15605,15 @@ async function loadProductStatusOverrides() {
   let cheatsloveCatalogLogged = false;
   let cheatsloveUnmatchedLogged = false;
 
-  async function cheatsloveFetch(path) {
+  async function cheatsloveFetch(path, options = {}) {
     const res = await fetch(`${cheatsloveBaseUrl}${path}`, {
-      headers: { Authorization: `Bearer ${cheatsloveApiKey}` },
-      signal: AbortSignal.timeout(10_000),
+      method: options.method || "GET",
+      headers: {
+        Authorization: `Bearer ${cheatsloveApiKey}`,
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+      },
+      body: options.body,
+      signal: AbortSignal.timeout(15_000),
     });
     if (res.status === 429) {
       throw new Error("Cheats.Love rate limit hit (429) — will retry next cycle");
