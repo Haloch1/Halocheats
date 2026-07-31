@@ -1192,7 +1192,7 @@ function openVariantModal(product, { updateUrl = true } = {}) {
       button.innerHTML = `
         <span>
           <strong>${escapeHtml(variant.name)}</strong>
-          <small>${escapeHtml(canSelectVariant ? variant.stockLabel : "0 In Stock")}</small>
+          <small>${escapeHtml(canSelectVariant ? variant.stockLabel : "Out of Stock")}</small>
         </span>
         <em>${variant.originalPrice ? `${escapeHtml(variant.priceDisplay)} <small>${escapeHtml(variant.originalPrice)}</small>` : escapeHtml(variant.priceDisplay)}</em>
       `;
@@ -1248,7 +1248,7 @@ function selectVariant(variantSlug) {
   const stockBadge = modal.querySelector("[data-variant-stock]");
 
   if (stockBadge) {
-    stockBadge.textContent = activeVariant?.stockLabel || "0 In Stock";
+    stockBadge.textContent = activeVariant?.stockLabel || "Out of Stock";
   }
 
   updateVariantPricing();

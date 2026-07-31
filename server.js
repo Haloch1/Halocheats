@@ -969,7 +969,7 @@ function getResellerParams(inventorySlug) {
 
 function formatKeyStockLabel(count) {
   if (!count) {
-    return "0 In Stock";
+    return "Out of Stock";
   }
 
   return `${count} ${count === 1 ? "Key" : "Keys"} Available`;
