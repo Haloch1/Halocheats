@@ -140,7 +140,7 @@ function refreshOpenProductAvailability() {
     const canSelect = Boolean(variant?.checkoutReady || variant?.checkoutBlocked);
     option.disabled = !canSelect;
     const stockText = option.querySelector("small");
-    if (stockText) stockText.textContent = canSelect ? variant.stockLabel : "Out of Stock";
+    if (stockText) stockText.textContent = variant.stockLabel || (canSelect ? "In Stock" : "Out of Stock");
   });
 
   const selectedVariant =
@@ -1244,7 +1244,7 @@ function openVariantModal(product, { updateUrl = true } = {}) {
       button.innerHTML = `
         <span>
           <strong>${escapeHtml(variant.name)}</strong>
-          <small>${escapeHtml(canSelectVariant ? variant.stockLabel : "Out of Stock")}</small>
+          <small>${escapeHtml(variant.stockLabel || (canSelectVariant ? "In Stock" : "Out of Stock"))}</small>
         </span>
         <em>${variant.originalPrice ? `${escapeHtml(variant.priceDisplay)} <small>${escapeHtml(variant.originalPrice)}</small>` : escapeHtml(variant.priceDisplay)}</em>
       `;

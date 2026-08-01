@@ -1723,21 +1723,21 @@ const productCatalog = [
   },
   {
     ...accountsMeta,
-    badge: "Unavailable",
+    badge: "Coming Soon",
     available: false,
     slug: "r6s-nfa-account",
     name: "R6S NFA Account",
     priceDisplay: money(350),
-    summary: "Non-Full Access Rainbow Six Siege account listing. Purchasing is currently disabled by the upstream store.",
-    features: ["Non-Full Access account", "Currently unavailable"],
+    summary: "Non-Full Access Rainbow Six Siege account listing. This product is coming soon.",
+    features: ["Non-Full Access account", "Coming soon"],
     featureGroups: [
-      { title: "Account", items: ["Non-Full Access (NFA)", "Upstream purchasing unavailable"] },
+      { title: "Account", items: ["Non-Full Access (NFA)", "Coming soon"] },
     ],
     generalInfo: [
-      "This item cannot be purchased until the upstream listing becomes purchasable.",
+      "This item will become available when it is listed by the upstream supplier.",
       ...universalSetupNotes,
     ],
-    requirements: ["Purchasing is currently unavailable"],
+    requirements: ["Coming soon"],
     variants: disabledVariants("r6s-nfa-account", [
       ["account", "NFA Account", 350],
     ]),

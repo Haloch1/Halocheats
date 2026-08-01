@@ -90,11 +90,21 @@ const cheatslovePollMs = 5 * 60_000;
 const cheatsloveStockKnown = new Map();
 const cheatsloveStoreStockKnown = new Map();
 const cheatsloveCostKnown = new Map();
+const cheatsloveProductPresenceKnown = new Map();
 let cheatsloveBalanceCents = null;
 let cheatsloveStockSyncReady = false;
 let cheatsloveLastStockSyncAt = 0;
 let cheatsloveStoreStockSyncReady = false;
 let cheatsloveLastStoreStockSyncAt = 0;
+let cheatsloveProductPresenceReady = false;
+function isCheatsloveProductComingSoon(product) {
+  if (!cheatsloveProductPresenceReady || !product) return false;
+  const productId = Number(product.cheatsLoveProductId);
+  return !Number.isInteger(productId) || cheatsloveProductPresenceKnown.get(product.slug) !== true;
+}
+function isCatalogProductAvailable(product) {
+  return product?.available !== false && !isCheatsloveProductComingSoon(product);
+}
 function cheatsloveCoversInventory(inventorySlug) {
   if (!cheatsloveApiKey) return false;
   const known = cheatsloveStockKnown.get(inventorySlug);
@@ -10019,26 +10029,30 @@ app.get("/api/products", async (_req, res) => {
       void syncCheatsLoveStoreStock();
     }
     const keyCounts = await getUnusedLicenseKeyCounts();
-    const catalog = products.map((product) => ({
-      slug: product.slug,
-      name: product.name,
-      vendor: product.vendor,
-      game: product.game,
-      category: product.category,
-      priceDisplay: product.priceDisplay,
-      /* When the store is closed (/soldout), flip "Online" badges to "Offline";
-         leave other badges (e.g. "Coming Soon") untouched. */
-      badge: storeSoldOut && product.badge === "Online" ? "Offline" : product.badge,
-      summary: product.summary,
-      features: product.features,
-      featureGroups: product.featureGroups || [],
-      generalInfo: product.generalInfo || [],
-      instructionHref: product.instructionHref || "",
-      requirements: product.requirements || [],
-      featured: product.featured,
-      available: product.available !== false,
-      sale: product.sale || null,
-      variants: (product.variants || []).map((variant) => {
+    const catalog = products.map((product) => {
+      const comingSoon = isCheatsloveProductComingSoon(product);
+      const productAvailable = isCatalogProductAvailable(product);
+      return {
+        slug: product.slug,
+        name: product.name,
+        vendor: product.vendor,
+        game: product.game,
+        category: product.category,
+        priceDisplay: product.priceDisplay,
+        /* Supplier catalog presence takes priority over cosmetic status overrides. */
+        badge: comingSoon
+          ? "Coming Soon"
+          : (storeSoldOut && product.badge === "Online" ? "Offline" : product.badge),
+        summary: product.summary,
+        features: product.features,
+        featureGroups: product.featureGroups || [],
+        generalInfo: product.generalInfo || [],
+        instructionHref: comingSoon ? "" : (product.instructionHref || ""),
+        requirements: product.requirements || [],
+        featured: product.featured,
+        available: productAvailable,
+        sale: product.sale || null,
+        variants: (product.variants || []).map((variant) => {
         const inventorySlug = getVariantInventorySlug(product, variant);
         const stockCount = keyCounts.get(inventorySlug) || 0;
         /* Mapped variants use confirmed Cheats.Love stock after the first sync. */
@@ -10055,7 +10069,7 @@ app.get("/api/products", async (_req, res) => {
            product.available === false also blocks checkout — this is how a
            status badge of "Updating" (see applyProductStatusBadge) takes the
            product off sale while still showing the "Updating" badge. */
-        const checkoutReady = !storeSoldOut && hasKeys && hasValidPrice && !isExplicitlyBlocked && product.available !== false;
+        const checkoutReady = !storeSoldOut && hasKeys && hasValidPrice && !isExplicitlyBlocked && productAvailable;
         const checkoutBlocked = isExplicitlyBlocked && hasKeys;
 
         /* Apex & EFT show the exact key count; every other product just shows
@@ -10063,9 +10077,11 @@ app.get("/api/products", async (_req, res) => {
         const showsExactCount =
           product.category === "Apex Legends" || product.category === "Escape from Tarkov";
         let stockLabel;
-        if (isDisabledVariant) {
+        if (comingSoon) {
+          stockLabel = "Coming Soon";
+        } else if (isDisabledVariant) {
           stockLabel = "Unavailable";
-        } else if (storeSoldOut || product.available === false) {
+        } else if (storeSoldOut || !productAvailable) {
           stockLabel = "Out of Stock";
         } else if (showsExactCount) {
           stockLabel = resellerCovers && stockCount === 0 ? "In Stock" : formatKeyStockLabel(stockCount);
@@ -10086,9 +10102,10 @@ app.get("/api/products", async (_req, res) => {
             "Error occurred. Please open a ticket in Discord so support can help you with this item.",
           checkoutReady,
         };
-      }),
-      checkoutReady: false,
-    }));
+        }),
+        checkoutReady: false,
+      };
+    });
 
     res.json({ products: catalog, promoEnabled: await anyPromoActive() });
   } catch (error) {
@@ -11963,7 +11980,7 @@ app.post("/api/reseller/buy", async (req, res) => {
     });
   }
 
-  if (selection.product.available === false) {
+  if (!isCatalogProductAvailable(selection.product)) {
     return res.status(409).json({
       success: false,
       error: "This product is currently unavailable.",
@@ -12252,7 +12269,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
     return res.status(404).json({ error: "Product variant not found." });
   }
 
-  if (selection.product.available === false) {
+  if (!isCatalogProductAvailable(selection.product)) {
     return res.status(409).json({ error: "This product is currently unavailable." });
   }
 
@@ -12396,7 +12413,7 @@ app.post("/api/create-crypto-checkout", async (req, res) => {
     return res.status(404).json({ error: "Product variant not found." });
   }
 
-  if (selection.product.available === false) {
+  if (!isCatalogProductAvailable(selection.product)) {
     return res.status(409).json({ error: "This product is currently unavailable." });
   }
 
@@ -12647,7 +12664,7 @@ app.post("/api/purchase-with-balance", async (req, res) => {
     return res.status(404).json({ error: "Product variant not found." });
   }
 
-  if (selection.product.available === false) {
+  if (!isCatalogProductAvailable(selection.product)) {
     return res.status(409).json({ error: "This product is currently unavailable." });
   }
 
@@ -12728,7 +12745,7 @@ app.post("/api/cart/checkout", async (req, res) => {
       return res.status(404).json({ error: "A product in your cart is no longer available." });
     }
     if (
-      selection.product.available === false ||
+      !isCatalogProductAvailable(selection.product) ||
       selection.product.checkoutBlocked ||
       selection.variant.checkoutBlocked
     ) {
@@ -12841,7 +12858,7 @@ app.post("/api/cart/create-stripe-session", async (req, res) => {
       return res.status(404).json({ error: "A product in your cart is no longer available." });
     }
     if (
-      selection.product.available === false ||
+      !isCatalogProductAvailable(selection.product) ||
       selection.product.checkoutBlocked ||
       selection.variant.checkoutBlocked
     ) {
@@ -15688,7 +15705,10 @@ async function loadProductStatusOverrides() {
 
       const byVid = new Map();
       const clByName = new Map();
+      const clProductIds = new Set();
       for (const clProduct of clProducts) {
+        const clProductId = Number(clProduct.id);
+        if (Number.isInteger(clProductId)) clProductIds.add(clProductId);
         clByName.set(cheatsloveNormalizeName(clProduct.name), clProduct);
         for (const variation of clProduct.variations || []) {
           byVid.set(String(variation.id), {
@@ -15701,6 +15721,14 @@ async function loadProductStatusOverrides() {
           });
         }
       }
+      for (const product of products) {
+        const productId = Number(product.cheatsLoveProductId);
+        cheatsloveProductPresenceKnown.set(
+          product.slug,
+          Number.isInteger(productId) && clProductIds.has(productId)
+        );
+      }
+      cheatsloveProductPresenceReady = true;
 
       if (!cheatsloveCatalogLogged) {
         cheatsloveCatalogLogged = true;
@@ -15824,6 +15852,27 @@ async function loadProductStatusOverrides() {
     }
 
     try {
+      const catalogResponse = await fetch(`${cheatsloveStoreApiUrl}/products?per_page=100&page=1`, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!catalogResponse.ok) throw new Error(`catalog HTTP ${catalogResponse.status}`);
+      const storefrontProducts = await catalogResponse.json();
+      if (!Array.isArray(storefrontProducts) || !storefrontProducts.length) {
+        throw new Error("storefront catalog returned no products");
+      }
+      const storefrontProductIds = new Set(
+        storefrontProducts.map((product) => Number(product.id)).filter(Number.isInteger)
+      );
+      for (const product of products) {
+        const productId = Number(product.cheatsLoveProductId);
+        cheatsloveProductPresenceKnown.set(
+          product.slug,
+          Number.isInteger(productId) && storefrontProductIds.has(productId)
+        );
+      }
+      cheatsloveProductPresenceReady = true;
+
       await Promise.all(Array.from({ length: 8 }, () => worker()));
       const valid = results.filter(Boolean);
       if (valid.length < Math.ceil(variants.length * 0.8)) {
