@@ -83,6 +83,55 @@ const newProductMultiplier = 1;
 const defaultGeneralInfo = "Open the setup instructions before using this product.";
 const universalSetupNotes = [];
 
+// Stable WooCommerce IDs from Cheats.Love. Display names are intentionally
+// independent from these IDs so branding changes cannot break stock matching.
+const cheatsLoveCatalog = {
+  "rust-dullwave": { productId: 13445, variants: { day: 13447, week: 13449, month: 13450 } },
+  "rust-mason-lite": { productId: 7805, variants: { day: 7814, week: 7815, month: 7816 } },
+  "rust-mason-full": { productId: 7801, variants: { day: 7802, week: 7803, month: 7804 } },
+  "rust-mrpro": { productId: 2351, variants: { day: 2352, week: 2353, month: 2354 } },
+  "fortnite-dullwave": { productId: 13460, variants: { day: 13461, "three-day": 13462, week: 13463, month: 13464 } },
+  "fortnite-ancient": { productId: 191, variants: { day: 242, week: 243, month: 244 } },
+  "fortnite-arcane": { productId: 62, variants: { day: 117, week: 119, month: 120 } },
+  "r6s-ancient": { productId: 9482, variants: { day: 9484, week: 9485, month: 9486 } },
+  "r6s-crusader": { productId: 181, variants: { day: 194, week: 195, month: 196 } },
+  "r6s-vega": { productId: 7146, variants: { day: 7147, "three-day": 7148, week: 7149, month: 7150 } },
+  "r6s-chams": { productId: 1621, variants: { day: 1622, week: 1623, month: 1624 } },
+  "r6s-lethal": { productId: 193, variants: { day: 248, week: 249, month: 250, year: 251 } },
+  "r6s-no-recoil": { productId: 61, variants: { day: 113, week: 115, month: 116, "three-month": 112 } },
+  "apex-mason": { productId: 7818, variants: { day: 7821, week: 7822, month: 7823 } },
+  "apex-ancient": { productId: 189, variants: { day: 235, week: 236, month: 237 } },
+  "apex-dullwave": { productId: 184, variants: { day: 200, week: 201, month: 202 } },
+  "apex-arcane": { productId: 63, variants: { day: 121, week: 122, month: 123 } },
+  "cs2-predator": { productId: 1756, variants: { day: 1760, week: 1761, month: 1762, "three-month": 1763 } },
+  "cs2-arcane": { productId: 16, variants: { day: 17, "fifteen-day": 18, month: 19 } },
+  "cs2-strikeforce": { productId: 261, variants: { day: 296, week: 294, month: 295 } },
+  "cs2-skinchanger": { productId: 427, variants: { day: 428, week: 429, month: 430 } },
+  "pubg-arcane": { productId: 411, variants: { day: 412, week: 413, month: 414 } },
+  "pubg-shadow": { productId: 59, variants: { day: 106, week: 107, month: 108 } },
+  "delta-force-dullwave": { productId: 13451, variants: { day: 13456, week: 13458, month: 13459 } },
+  "delta-force-ancient": { productId: 190, variants: { day: 238, week: 239, month: 241 } },
+  "delta-force-luna-chams": { productId: 185, variants: { day: 203, week: 204, month: 205 } },
+  "marvel-rivals-dullwave": { productId: 560, variants: { day: 561, week: 562, month: 563 } },
+  "marvel-rivals-predator": { productId: 1768, variants: { day: 1769, week: 1770, month: 1771, "three-month": 1772 } },
+  "marvel-rivals-shadow": { productId: 4603, variants: { day: 4604, week: 4605, month: 4606 } },
+  "overwatch2-mason": { productId: 454, variants: { day: 455, week: 456, month: 457 } },
+  "battlefield-fecurity": { productId: 421, variants: { day: 422, week: 423, month: 424 } },
+  "battlefield6-ancient": { productId: 2694, variants: { day: 2696, week: 2697, month: 2698 } },
+  "cod-lunar": { productId: 8805, variants: { "bo6-day": 9085, "bo6-week": 9087, "bo6-month": 9089, "bo7-day": 9086, "bo7-week": 9088, "bo7-month": 9090 } },
+  "cod-dullwave": { productId: 259, variants: { day: 279, week: 280, month: 281 } },
+  "fragpunk-dullwave": { productId: 56, variants: { day: 77, week: 78, month: 76 } },
+  "eft-crusader": { productId: 53, variants: { day: 69, week: 67, month: 68 } },
+  "eft-superior": { productId: 255, variants: { day: 270, week: 271, month: 272 } },
+  "eft-sugar": { productId: 256, variants: { week: 274, month: 275 } },
+  "eft-sky": { productId: 253, variants: { day: 266, week: 264, month: 265 } },
+  "eft-chams": { productId: 254, variants: { day: 267, week: 268, month: 269 } },
+  "eft-mason": { productId: 7808, variants: { day: 7811, week: 7812, month: 7813 } },
+  "spoofer-lunar": { productId: 9497, variants: { day: 9498, week: 9499, month: 9500 } },
+  "spoofer-shadow": { productId: 4609, variants: { day: 4610, week: 4611, month: 4612 } },
+  "eac-be-spoofer": { productId: 305, variants: { day: 314, week: 312, month: 313 } },
+};
+
 const r6Meta = {
   vendor: "Rainbow Six Siege",
   game: "Rainbow Six Siege",
@@ -999,8 +1048,8 @@ const productCatalog = [
     ],
     variants: [
       keyVariant("pubg-arcane", "day", "1 Day Key", 500),
-      keyVariant("pubg-arcane", "week", "7 Day Key", 2500),
-      keyVariant("pubg-arcane", "month", "30 Day Key", 5000),
+      keyVariant("pubg-arcane", "week", "7 Day Key", 2200),
+      keyVariant("pubg-arcane", "month", "30 Day Key", 4000),
     ],
   },
   {
@@ -1026,6 +1075,7 @@ const productCatalog = [
       "CPU: Intel & AMD",
       "GPU: Nvidia & AMD",
       "OS: Windows 10 (1903, 1909, 2004, 20H2, 21H1, 21H2, 22H2), Windows 11 (21H2, 22H2, 23H2)",
+      "Full-screen mode: not supported (windowed/borderless only)",
     ],
     variants: [
       keyVariant("pubg-shadow", "day", "1 Day Key", 190),
@@ -1341,9 +1391,12 @@ const productCatalog = [
       "Full-screen mode: not supported (windowed/borderless only)",
     ],
     variants: [
-      keyVariant("cod-lunar", "day", "1 Day Key", 500),
-      keyVariant("cod-lunar", "week", "7 Day Key", 1500),
-      keyVariant("cod-lunar", "month", "30 Day Key", 3000),
+      keyVariant("cod-lunar", "bo6-day", "Black Ops 6 - 1 Day Key", 500),
+      keyVariant("cod-lunar", "bo6-week", "Black Ops 6 - 7 Day Key", 1500),
+      keyVariant("cod-lunar", "bo6-month", "Black Ops 6 - 30 Day Key", 3000),
+      keyVariant("cod-lunar", "bo7-day", "Black Ops 7 - 1 Day Key", 500),
+      keyVariant("cod-lunar", "bo7-week", "Black Ops 7 - 7 Day Key", 1500),
+      keyVariant("cod-lunar", "bo7-month", "Black Ops 7 - 30 Day Key", 3000),
     ],
   },
   {
@@ -1351,7 +1404,7 @@ const productCatalog = [
     badge: "Undetected",
     slug: "cod-dullwave",
     name: "CoD - Dullwave",
-    priceDisplay: `From ${money(465)}`,
+    priceDisplay: `From ${money(450)}`,
     summary:
       "Undetected Call of Duty cheat covering configurable aimbot targeting, a full wallhack with box/skeleton overlays, loot detection, and a real-time radar.",
     features: ["Configurable aimbot", "Player wallhack", "Loot ESP & radar"],
@@ -1373,9 +1426,9 @@ const productCatalog = [
       "Flashdrive required: No",
     ],
     variants: [
-      keyVariant("cod-dullwave", "day", "1 Day Key", 465),
-      keyVariant("cod-dullwave", "week", "7 Day Key", 1850),
-      keyVariant("cod-dullwave", "month", "30 Day Key", 3575),
+      keyVariant("cod-dullwave", "day", "1 Day Key", 450),
+      keyVariant("cod-dullwave", "week", "7 Day Key", 1717),
+      keyVariant("cod-dullwave", "month", "30 Day Key", 3314),
     ],
   },
   {
@@ -1413,38 +1466,6 @@ const productCatalog = [
   {
     ...categoryMeta("Escape from Tarkov"),
     badge: "Undetected",
-    slug: "eft-dullwave",
-    name: "EFT - Dullwave",
-    priceDisplay: `From ${money(500)}`,
-    summary:
-      "Undetected Escape from Tarkov cheat pairing a precise aimbot with a strong player ESP and loot awareness for full raid control.",
-    features: ["Aimbot", "Player ESP", "Loot ESP"],
-    featureGroups: [
-      { title: "Aimbot", items: ["Enable aimbot", "Aim key", "FOV control", "Smoothing"] },
-      { title: "ESP", items: ["Player ESP", "Loot filters", "Distance info", "Box/skeleton visuals"] },
-      { title: "Misc", items: ["Config save/load", "Low resource use"] },
-    ],
-    generalInfo: [
-      "Loader password is shared setup-wide; check the instructions page before first launch.",
-      ...universalSetupNotes,
-    ],
-    requirements: [
-      "Game version: Battlestate Games Launcher",
-      "CPU: Intel & AMD",
-      "GPU: Nvidia & AMD",
-      "OS: Windows 10, Windows 11 (21H2, 22H2, 23H2, 24H2, 25H2)",
-      "Full-screen mode: not supported (windowed/borderless only)",
-      "Flashdrive required: No",
-    ],
-    variants: [
-      keyVariant("eft-dullwave", "day", "1 Day Key", 500),
-      keyVariant("eft-dullwave", "week", "7 Day Key", 2000),
-      keyVariant("eft-dullwave", "month", "30 Day Key", 3850),
-    ],
-  },
-  {
-    ...categoryMeta("Escape from Tarkov"),
-    badge: "Undetected",
     slug: "eft-crusader",
     name: "EFT - Crusader",
     priceDisplay: `From ${money(500)}`,
@@ -1468,8 +1489,8 @@ const productCatalog = [
     ],
     variants: [
       keyVariant("eft-crusader", "day", "1 Day Key", 500),
-      keyVariant("eft-crusader", "week", "7 Day Key", 2400),
-      keyVariant("eft-crusader", "month", "30 Day Key", 4500),
+      keyVariant("eft-crusader", "week", "7 Day Key", 2600),
+      keyVariant("eft-crusader", "month", "30 Day Key", 5000),
     ],
   },
   {
@@ -1499,8 +1520,8 @@ const productCatalog = [
     ],
     variants: [
       keyVariant("eft-superior", "day", "1 Day Key", 640),
-      keyVariant("eft-superior", "week", "7 Day Key", 3000),
-      keyVariant("eft-superior", "month", "30 Day Key", 5800),
+      keyVariant("eft-superior", "week", "7 Day Key", 3200),
+      keyVariant("eft-superior", "month", "30 Day Key", 5120),
     ],
   },
   {
@@ -1702,35 +1723,34 @@ const productCatalog = [
   },
   {
     ...accountsMeta,
-    badge: "Coming soon",
+    badge: "Unavailable",
     available: false,
     slug: "r6s-nfa-account",
-    name: "R6S Ranked Ready NFA Account",
-    priceDisplay: `From ${money(400)}`,
-    summary:
-      "Non-Full Access Rainbow Six Siege account, ranked-ready with a clean standing, instant delivery, and a 3-hour replacement guarantee.",
-    features: ["Instant delivery", "Ranked-ready", "3-hour replacement guarantee"],
+    name: "R6S NFA Account",
+    priceDisplay: money(350),
+    summary: "Non-Full Access Rainbow Six Siege account listing. Purchasing is currently disabled by the upstream store.",
+    features: ["Non-Full Access account", "Currently unavailable"],
     featureGroups: [
-      { title: "Account", items: ["Non-Full Access (NFA)", "Clean standing", "Ranked-ready inventory"] },
-      { title: "Delivery", items: ["Instant delivery", "3-hour replacement guarantee", "Support handoff"] },
+      { title: "Account", items: ["Non-Full Access (NFA)", "Upstream purchasing unavailable"] },
     ],
     generalInfo: [
-      "Change any available security details immediately after receiving access.",
+      "This item cannot be purchased until the upstream listing becomes purchasable.",
       ...universalSetupNotes,
     ],
-    requirements: ["Valid contact method for delivery", "Support ticket for replacement requests"],
+    requirements: ["Purchasing is currently unavailable"],
     variants: disabledVariants("r6s-nfa-account", [
-      ["level-50-99", "Level 50-99", 400],
-      ["level-100-plus", "Level 100+", 500],
-      ["previous-platinum", "Previous Platinum", 600],
-      ["black-ices-20", "+20 Black Ices", 750],
-      ["previous-emerald", "Previous Emerald", 850],
+      ["account", "NFA Account", 350],
     ]),
   },
 ];
 
 export const products = productCatalog.map((product) => ({
   ...product,
+  cheatsLoveProductId: cheatsLoveCatalog[product.slug]?.productId || null,
+  variants: (product.variants || []).map((variant) => ({
+    ...variant,
+    cheatsLoveVariationId: cheatsLoveCatalog[product.slug]?.variants?.[variant.slug] || null,
+  })),
   generalInfo: [product.generalInfo?.[0] || defaultGeneralInfo],
-  instructionHref: `/instructions/#${product.slug}`,
+  instructionHref: product.available === false ? "" : `/instructions/#${product.slug}`,
 }));

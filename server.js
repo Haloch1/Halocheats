@@ -71,21 +71,26 @@ const cheatsloveApiKey = process.env.CHEATSLOVE_API_KEY || "";
 const cheatsloveBaseUrl = (process.env.CHEATSLOVE_BASE_URL || "https://res.cheatslove.com/api/v1").replace(/\/+$/, "");
 // Keep upstream availability fresh without approaching the reseller's
 // 30-request-per-minute limit.
-const cheatslovePollMs = 60_000;
-/* Real, confirmed-by-sync stock per inventorySlug ("In Stock" | "Out of Stock"),
-   populated by syncCheatsLoveStock() below from manual CHEATSLOVE_VID_MAP pins
-   AND safe exact-name/duration auto-matches. Anything NOT in this map has no
-   confirmed upstream stock signal yet, so callers fall back to the optimistic
-   "reseller covers it" default (real fulfillment still goes through the normal
-   buy-on-demand + staff safety net). This is what makes the live site actually
-   reflect a real "Out of Stock" from the Cheats.Love panel instead of always
-   showing "In Stock" whenever CHEATSLOVE_API_KEY is set. */
+const cheatslovePollMs = 5 * 60_000;
+/* Real, confirmed-by-sync stock per inventorySlug ("In Stock" | "Out of Stock").
+   After the first valid sync, mapped variants without a usable upstream result
+   fail closed instead of being advertised as available. */
 const cheatsloveStockKnown = new Map();
+const cheatsloveCostKnown = new Map();
+let cheatsloveBalanceCents = null;
+let cheatsloveStockSyncReady = false;
 function cheatsloveCoversInventory(inventorySlug) {
   if (!cheatsloveApiKey) return false;
   const known = cheatsloveStockKnown.get(inventorySlug);
-  if (known) return known === "In Stock";
-  return true; // no confirmed data yet — optimistic default with staff safety net
+  if (known) {
+    const costCents = cheatsloveCostKnown.get(inventorySlug);
+    const hasFunds = !Number.isFinite(costCents)
+      || !Number.isFinite(cheatsloveBalanceCents)
+      || cheatsloveBalanceCents >= costCents;
+    return known === "In Stock" && hasFunds;
+  }
+  if (cheatsloveStockSyncReady || CHEATSLOVE_VID_MAP[inventorySlug] == null) return false;
+  return true; // brief startup grace period before the first upstream response
 }
 const adminAccessKey = process.env.ADMIN_ACCESS_KEY || "";
 const ownerRequestsKey = process.env.OWNER_REQUESTS_KEY || "";
@@ -200,7 +205,6 @@ const discordStaffGuideChannelId = process.env.DISCORD_STAFF_GUIDE_CHANNEL_ID ||
 const discordStatusSourceChannelId = process.env.DISCORD_STATUS_SOURCE_CHANNEL_ID || "1531112552891813949";
 const discordStatusTargetChannelId = process.env.DISCORD_STATUS_TARGET_CHANNEL_ID || "1531148640481972284";
 const pendingSchedules = new Map(); // id -> { timer, title, postAt }
-const resellerBuyLocks = new Map(); // inventorySlug -> Promise that resolves when buy completes
 const slashCooldownByUser = new Map(); // `${command}:${userId}` -> ts of last use
 const ticketQueueAlertByChannel = new Map(); // channelId -> { key: last alerted customer message id, at: timestamp of that alert }
 const discordAiUsageByUser = new Map(); // userId -> { day, count, lastAt }
@@ -533,8 +537,6 @@ const nowpaymentsIpnKey = process.env.NOWPAYMENTS_IPN_KEY || "";
 const youtubeClientId = process.env.YOUTUBE_CLIENT_ID || "";
 const youtubeClientSecret = process.env.YOUTUBE_CLIENT_SECRET || "";
 const youtubeRefreshToken = process.env.YOUTUBE_REFRESH_TOKEN || "";
-const resellerApiKey = process.env.RESELLER_API_KEY || "";
-const resellerApiUrl = process.env.RESELLER_API_URL || "https://eagbrffgiwxqakznaahv.supabase.co/functions/v1/reseller-api-buy";
 const blueskyHandle = process.env.BLUESKY_HANDLE || "";
 const blueskyAppPassword = process.env.BLUESKY_APP_PASSWORD || "";
 const resendApiKey = process.env.RESEND_API_KEY || "";
@@ -560,10 +562,8 @@ const WHOLESALE_COSTS = {
   "cs2-strikeforce-day": 42, "cs2-strikeforce-week": 126, "cs2-strikeforce-month": 252,
   "cs2-skinchanger-day": 88, "cs2-skinchanger-week": 210, "cs2-skinchanger-month": 420,
   // PUBG — set to 70% of sell price (30% margin) until a real reseller cost is provided.
-  // pubg-arcane week/month left unpinned — source file's variation data was
-  // corrupted (cross-contaminated with cs2-arcane's cached data), only the
-  // day price ($5) was confirmed real; see chat for details.
-  "pubg-arcane-day": 350,
+  // PUBG Arcane — current live catalog pricing.
+  "pubg-arcane-day": 350, "pubg-arcane-week": 1540, "pubg-arcane-month": 2800,
   "pubg-shadow-day": 133, "pubg-shadow-week": 532, "pubg-shadow-month": 1064,
   // Delta Force — set to 70% of sell price (30% margin) until a real reseller cost is provided
   "delta-force-dullwave-day": 455, "delta-force-dullwave-week": 1575, "delta-force-dullwave-month": 2968,
@@ -579,23 +579,22 @@ const WHOLESALE_COSTS = {
   "battlefield-fecurity-day": 560, "battlefield-fecurity-week": 2450, "battlefield-fecurity-month": 4900,
   "battlefield6-ancient-day": 280, "battlefield6-ancient-week": 1400, "battlefield6-ancient-month": 2800,
   // Call of Duty — set to 70% of sell price (30% margin) until a real reseller cost is provided.
-  // cod-dullwave pricing left unpinned — source file only exposed a raw
-  // WooCommerce price range ($5-$30) with no per-variant breakdown, and
-  // conflicted with the page's own JSON-LD price; needs a fresh source file.
-  "cod-lunar-day": 350, "cod-lunar-week": 1050, "cod-lunar-month": 2100,
+  // Call of Duty — current live catalog pricing.
+  "cod-lunar-bo6-day": 350, "cod-lunar-bo6-week": 1050, "cod-lunar-bo6-month": 2100,
+  "cod-lunar-bo7-day": 350, "cod-lunar-bo7-week": 1050, "cod-lunar-bo7-month": 2100,
+  "cod-dullwave-day": 315, "cod-dullwave-week": 1202, "cod-dullwave-month": 2320,
   // FragPunk — set to 70% of sell price (30% margin) until a real reseller cost is provided
   "fragpunk-dullwave-day": 326, "fragpunk-dullwave-week": 1295, "fragpunk-dullwave-month": 2506,
   // Escape from Tarkov — set to 70% of sell price (30% margin) until a real reseller cost is provided
-  "eft-dullwave-day": 350, "eft-dullwave-week": 1400, "eft-dullwave-month": 2695,
-  "eft-crusader-day": 350, "eft-crusader-week": 1680, "eft-crusader-month": 3150,
-  "eft-superior-day": 448, "eft-superior-week": 2100, "eft-superior-month": 4060,
+  "eft-crusader-day": 350, "eft-crusader-week": 1820, "eft-crusader-month": 3500,
+  "eft-superior-day": 448, "eft-superior-week": 2240, "eft-superior-month": 3584,
   "eft-sugar-week": 3584, "eft-sugar-month": 7161,
   "eft-sky-day": 315, "eft-sky-week": 1071, "eft-sky-month": 2058,
   "eft-chams-day": 357, "eft-chams-week": 1435, "eft-chams-month": 2688,
   "eft-mason-day": 389, "eft-mason-week": 1558, "eft-mason-month": 3507,
   // Fortnite — set to 70% of sell price (30% margin) until a real reseller cost is provided
   "fortnite-dullwave-day": 326, "fortnite-dullwave-three-day": 651, "fortnite-dullwave-week": 1295, "fortnite-dullwave-month": 2503,
-  "fortnite-ancient-day": 399, "fortnite-ancient-week": 1999, "fortnite-ancient-month": 3999,
+  "fortnite-ancient-day": 280, "fortnite-ancient-week": 1400, "fortnite-ancient-month": 2800,
   "fortnite-arcane-day": 490, "fortnite-arcane-week": 2450, "fortnite-arcane-month": 4200,
   // Rust — set to 70% of sell price (30% margin) until a real reseller cost is provided
   "rust-dullwave-day": 511, "rust-dullwave-week": 2317, "rust-dullwave-month": 3248,
@@ -960,13 +959,6 @@ function getCatalogItemByInventorySlug(inventorySlug) {
 
 function getVariantInventorySlug(product, variant) {
   return variant.inventorySlug || `${product.slug}-${variant.slug}`;
-}
-
-function getResellerParams(inventorySlug) {
-  const catalogItem = getCatalogItemByInventorySlug(inventorySlug);
-  if (!catalogItem?.product || !catalogItem?.variant) return null;
-  const variantLabel = catalogItem.variant.name.replace(/\s*Key$/i, "").trim();
-  return { product_slug: catalogItem.product.slug, variant_label: variantLabel };
 }
 
 function formatKeyStockLabel(count) {
@@ -8432,9 +8424,16 @@ async function handleUnfulfilledOrder(order, session) {
       const channel = await discordBot.channels.fetch(discordLowStockChannelId);
       if (channel) {
         await channel.send({
+          content: [discordOwnerRoleId, discordAdminRoleId]
+            .filter(Boolean)
+            .map((roleId) => `<@&${roleId}>`)
+            .join(" ") || undefined,
+          allowedMentions: {
+            roles: [discordOwnerRoleId, discordAdminRoleId].filter(Boolean),
+          },
           embeds: [{
             title: "UNFULFILLED ORDER - Action Required",
-            description: `A customer paid but **no key could be delivered**.\nBoth reseller API and local stock failed.`,
+            description: `A customer paid but **no key could be delivered**.\nCheats.Love and local stock both failed.`,
             color: 0xff0000,
             fields: [
               { name: "Product", value: productLabel, inline: true },
@@ -8531,7 +8530,7 @@ function maskBuyerName(name) {
   return s.slice(0, 4);
 }
 
-async function postFulfillment(order, session, keyData, assignedAt, opts = {}) {
+async function postFulfillment(order, session, keyData, assignedAt, options = {}) {
   /* ── Fetch buyer info for webhook + DM ── */
   let buyerEmail = "Unknown";
   let buyerUsername = "Unknown";
@@ -8674,26 +8673,12 @@ async function postFulfillment(order, session, keyData, assignedAt, opts = {}) {
     }
   }
 
-  /* ── Discord: low stock / low balance alert ── */
-  if (discordBot && discordLowStockChannelId) {
+  /* ── Discord: low local-stock alert ── */
+  if (options.source !== "cheatslove" && discordBot && discordLowStockChannelId) {
     try {
       const channel = await discordBot.channels.fetch(discordLowStockChannelId);
       if (channel) {
-        if (typeof opts.resellerBalanceCents === "number") {
-          /* Reseller API path: alert on low balance */
-          const balanceDollars = (opts.resellerBalanceCents / 100).toFixed(2);
-          if (opts.resellerBalanceCents <= 5000) {
-            await channel.send({
-              embeds: [{
-                title: "Low Reseller Balance",
-                description: `**$${balanceDollars} remaining**\nTop up your reseller balance to avoid failed orders.`,
-                color: opts.resellerBalanceCents <= 1000 ? 0xff0000 : 0xffa500,
-                timestamp: new Date().toISOString(),
-              }],
-            });
-          }
-        } else {
-          /* Stock path: alert on low unused keys */
+          /* Local stock path: external supplier stock is monitored separately. */
           const { count } = await supabaseAdmin
             .from("license_keys")
             .select("id", { count: "exact", head: true })
@@ -8713,7 +8698,6 @@ async function postFulfillment(order, session, keyData, assignedAt, opts = {}) {
               }],
             });
           }
-        }
       }
     } catch (err) {
       console.error("[Discord low stock]", err.message);
@@ -8802,111 +8786,7 @@ async function syncPaidOrder(session) {
     return { keyValue: alreadyAssignedKey.key_value };
   }
 
-  /* ── 1) Try reseller API first (primary path — buy on demand after payment) ── */
-  if (resellerApiKey) {
-    const resellerParams = getResellerParams(order.product_slug);
-    if (resellerParams) {
-      /* Prevent concurrent buys for the same slug (while-loop: if several
-         callers wake from the same lock, only one may proceed at a time) */
-      while (resellerBuyLocks.has(order.product_slug)) {
-        try { await resellerBuyLocks.get(order.product_slug); } catch {}
-      }
-      let lockResolve;
-      const lockPromise = new Promise(r => { lockResolve = r; });
-      resellerBuyLocks.set(order.product_slug, lockPromise);
-      try {
-        /* Re-check inside the lock: a concurrent webhook delivery for this same
-           order may have fulfilled it while we were waiting. Without this,
-           duplicate Stripe/IPN deliveries buy two reseller keys for one order. */
-        const recheckResult = await supabaseAdmin
-          .from("license_keys")
-          .select("id, key_value")
-          .eq("assigned_order_id", order.id)
-          .limit(1);
-        const recheckKey = recheckResult.data?.[0] ?? null;
-        if (recheckKey) {
-          await supabaseAdmin
-            .from("orders")
-            .update({
-              status: "fulfilled",
-              stripe_session_id: session.id,
-              stripe_payment_intent: session.payment_intent || null,
-              fulfilled_at: new Date().toISOString(),
-            })
-            .eq("id", order.id)
-            .neq("status", "fulfilled");
-          return { keyValue: recheckKey.key_value };
-        }
-
-        const { default: fetch } = await import("node-fetch");
-        const abortCtrl = new AbortController();
-        const fetchTimeout = setTimeout(() => abortCtrl.abort(), 15000);
-        const resellerRes = await fetch(resellerApiUrl, {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${resellerApiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ product_slug: resellerParams.product_slug, variant_label: resellerParams.variant_label, quantity: 1 }),
-          signal: abortCtrl.signal,
-        });
-        clearTimeout(fetchTimeout);
-        const resellerData = await resellerRes.json();
-        if (resellerData.success && resellerData.license_key) {
-          console.log(`[Reseller Buy] Got key for ${order.product_slug}: order ${resellerData.order_number}, balance ${resellerData.new_balance_cents}c`);
-          const resAssignedAt = new Date().toISOString();
-          const { data: resKey, error: resErr } = await supabaseAdmin
-            .from("license_keys")
-            .insert({
-              product_slug: order.product_slug,
-              key_value: resellerData.license_key,
-              status: "assigned",
-              assigned_user_id: order.user_id,
-              assigned_order_id: order.id,
-              assigned_at: resAssignedAt,
-            })
-            .select("id, key_value")
-            .single();
-
-          if (!resErr && resKey) {
-            await supabaseAdmin.from("orders").update({
-              status: "fulfilled",
-              stripe_session_id: session.id,
-              stripe_payment_intent: session.payment_intent || null,
-              fulfilled_at: resAssignedAt,
-              delivered_key_value: resKey.key_value,
-            }).eq("id", order.id);
-
-            return await postFulfillment(order, session, resKey, resAssignedAt, { resellerBalanceCents: resellerData.new_balance_cents });
-          }
-        } else {
-          console.warn(`[Reseller Buy] Failed for ${order.product_slug}: ${resellerData.error || "unknown"}`);
-          /* If the reseller rejected the buy for lack of funds, trip the store
-             kill switch so no further customers can pay until balance is topped up. */
-          const errText = String(resellerData.error || "").toLowerCase();
-          const balanceCents = Number(resellerData.new_balance_cents);
-          const looksLikeBalance =
-            /insufficient|balance|funds|not enough|top ?up|no funds/.test(errText) ||
-            (Number.isFinite(balanceCents) && balanceCents <= 0);
-          if (looksLikeBalance && !storeSoldOut) {
-            await setStoreSoldOut(true, `Auto: reseller balance ran out (${resellerData.error || "insufficient funds"})`);
-            try {
-              await sendSecurityDiscordAlert("STORE AUTO-CLOSED — reseller balance ran out", [
-                { name: "Reason", value: String(resellerData.error || "insufficient funds").slice(0, 200), inline: false },
-                { name: "Action", value: "Top up your reseller balance, then reopen the store in the database (store_flags.sold_out = false).", inline: false },
-              ]);
-            } catch {}
-          }
-        }
-      } catch (resErr) {
-        console.error(`[Reseller Buy] Error for ${order.product_slug}:`, resErr.message);
-      } finally {
-        resellerBuyLocks.delete(order.product_slug);
-        lockResolve();
-      }
-    }
-  }
-
-  /* ── 1a) Try Cheats.Love reseller API (only for inventorySlugs pinned in
-     CHEATSLOVE_VID_MAP in the stock-sync block below). Buys on demand after
-     payment, same pattern as the legacy reseller block above. ── */
+  /* ── 1) Buy on demand from Cheats.Love for explicitly mapped variants. ── */
   if (cheatsloveApiKey && CHEATSLOVE_VID_MAP[order.product_slug] != null) {
     try {
       const vid = CHEATSLOVE_VID_MAP[order.product_slug];
@@ -8914,8 +8794,15 @@ async function syncPaidOrder(session) {
         method: "POST",
         body: JSON.stringify({ items: [{ vid, qty: 1 }] }),
       });
-      const keyValue = cheatsloveOrder?.lines?.[0]?.keys?.[0];
-      if (cheatsloveOrder?.fulfilled && keyValue) {
+      let keyValue = cheatsloveOrder?.lines?.[0]?.keys?.[0];
+      /* The supplier may accept payment with HTTP 202 while its license server
+         is still assigning the key. Its documented retry endpoint is safe and
+         idempotent, so try it once before treating the order as unfulfilled. */
+      if (!keyValue && cheatsloveOrder?.order_id) {
+        const retried = await cheatsloveFetch(`/orders/${cheatsloveOrder.order_id}/keys`);
+        keyValue = retried?.lines?.[0]?.keys?.[0];
+      }
+      if (keyValue) {
         console.log(`[Cheats.Love Buy] Got key for ${order.product_slug}: order ${cheatsloveOrder.order_ref}`);
         const clAssignedAt = new Date().toISOString();
         const { data: clKey, error: clErr } = await supabaseAdmin
@@ -8940,68 +8827,13 @@ async function syncPaidOrder(session) {
             delivered_key_value: clKey.key_value,
           }).eq("id", order.id);
 
-          return await postFulfillment(order, session, clKey, clAssignedAt);
+          return await postFulfillment(order, session, clKey, clAssignedAt, { source: "cheatslove" });
         }
       } else {
         console.warn(`[Cheats.Love Buy] Failed/unfulfilled for ${order.product_slug}:`, JSON.stringify(cheatsloveOrder).slice(0, 300));
       }
     } catch (clErr) {
       console.error(`[Cheats.Love Buy] Error for ${order.product_slug}:`, clErr.message);
-    }
-  }
-
-  /* ── 1b) Fallback: claim free key from XimCheats partner inventory ── */
-  const ximUrl = process.env.XIMCHEATS_SUPABASE_URL;
-  const ximAnon = process.env.XIMCHEATS_ANON_KEY;
-  const ximSecret = process.env.XIMCHEATS_PARTNER_SECRET;
-  if (ximUrl && ximAnon && ximSecret) {
-    try {
-      const { default: fetch } = await import("node-fetch");
-      const slugMap = JSON.parse(process.env.XIMCHEATS_SLUG_MAP || "{}");
-      const ximSlug = slugMap[order.product_slug] || order.product_slug;
-
-      const ximRes = await fetch(`${ximUrl}/rest/v1/rpc/claim_key_for_partner`, {
-        method: "POST",
-        headers: {
-          apikey: ximAnon,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ p_product_slug: ximSlug, p_secret: ximSecret }),
-        signal: AbortSignal.timeout(10000),
-      });
-      const ximData = await ximRes.json();
-      if (ximData?.success && ximData.license_key) {
-        console.log(`[XimCheats Partner] Got key for ${order.product_slug} (xim slug: ${ximSlug})`);
-        const ximAssignedAt = new Date().toISOString();
-        const { data: ximKey, error: ximErr } = await supabaseAdmin
-          .from("license_keys")
-          .insert({
-            product_slug: order.product_slug,
-            key_value: ximData.license_key,
-            status: "assigned",
-            assigned_user_id: order.user_id,
-            assigned_order_id: order.id,
-            assigned_at: ximAssignedAt,
-          })
-          .select("id, key_value")
-          .single();
-
-        if (!ximErr && ximKey) {
-          await supabaseAdmin.from("orders").update({
-            status: "fulfilled",
-            stripe_session_id: session.id,
-            stripe_payment_intent: session.payment_intent || null,
-            fulfilled_at: ximAssignedAt,
-            delivered_key_value: ximKey.key_value,
-          }).eq("id", order.id);
-
-          return await postFulfillment(order, session, ximKey, ximAssignedAt);
-        }
-      } else {
-        console.warn(`[XimCheats Partner] No key for ${ximSlug}: ${ximData?.error || "no_stock"}`);
-      }
-    } catch (ximErr) {
-      console.error(`[XimCheats Partner] Error:`, ximErr.message);
     }
   }
 
@@ -9217,6 +9049,7 @@ async function fulfillCartStripe(session) {
   }
   orderIds = orderIds.filter(Boolean);
 
+  const failures = [];
   for (const orderId of orderIds) {
     const syntheticSession = {
       id: `${session.id}:${orderId}`,
@@ -9227,7 +9060,12 @@ async function fulfillCartStripe(session) {
       await syncPaidOrder(syntheticSession);
     } catch (error) {
       console.error(`[cart stripe] Order ${orderId} fulfillment error:`, error.message);
+      failures.push({ orderId, error });
     }
+  }
+
+  if (failures.length) {
+    throw new Error(`Cart fulfillment failed for ${failures.length} order(s).`);
   }
 
   console.log(`[cart stripe] Fulfilled ${orderIds.length} order(s) for session ${session.id}.`);
@@ -10140,12 +9978,11 @@ app.get("/api/products", async (_req, res) => {
       variants: (product.variants || []).map((variant) => {
         const inventorySlug = getVariantInventorySlug(product, variant);
         const stockCount = keyCounts.get(inventorySlug) || 0;
-        /* If the reseller API is configured and this variant maps to a reseller product, treat it as in stock.
-           Cheats.Love coverage uses REAL synced stock when we have it (see cheatsloveCoversInventory /
-           syncCheatsLoveStock below); only falls back to the optimistic default for variants with no
-           confirmed data yet, with the existing "mark paid, alert staff" safety net covering the gap —
-           see the Cheats.Love buy block in syncPaidOrder. */
-        const resellerCovers = Boolean((resellerApiKey && getResellerParams(inventorySlug)) || cheatsloveCoversInventory(inventorySlug));
+        /* Mapped variants use confirmed Cheats.Love stock after the first sync. */
+        const hasCheatsLoveMapping = CHEATSLOVE_VID_MAP[inventorySlug] != null;
+        const resellerCovers = hasCheatsLoveMapping && cheatsloveApiKey
+          ? cheatsloveCoversInventory(inventorySlug)
+          : false;
         /* Variants with DISABLED_ stripe keys are explicitly unavailable */
         const isDisabledVariant = variant.stripeEnvKey?.startsWith("DISABLED_");
         const hasKeys = !isDisabledVariant && (stockCount > 0 || resellerCovers);
@@ -12197,17 +12034,15 @@ app.get("/api/checkout/complete", authLimiter, async (req, res) => {
 });
 
 /**
- * Check if a key is available — either local stock or reseller API is configured.
+ * Check if a key is available from local stock or Cheats.Love.
  * Does NOT buy anything. The actual purchase happens in syncPaidOrder after payment.
  */
 function isKeyAvailable(inventorySlug) {
-  /* If reseller API covers this product, treat as available (buy happens after payment) */
-  if (resellerApiKey && getResellerParams(inventorySlug)) return true;
-  /* Cheats.Love: block checkout only when we have REAL confirmed out-of-stock
-     data for this exact inventorySlug. Otherwise treat as available — falls
-     back to the existing "mark paid, alert staff" safety net for anything not
-     yet pinned/matched in CHEATSLOVE_VID_MAP. */
-  return cheatsloveCoversInventory(inventorySlug);
+  /* Mapped Cheats.Love products use the latest upstream stock snapshot. */
+  if (cheatsloveApiKey && CHEATSLOVE_VID_MAP[inventorySlug] != null) {
+    return cheatsloveCoversInventory(inventorySlug);
+  }
+  return false;
 }
 
 async function isKeyAvailableAsync(inventorySlug) {
@@ -12847,6 +12682,16 @@ app.post("/api/cart/checkout", async (req, res) => {
     return res.status(400).json({ error: "Too many items in your cart (max 20)." });
   }
 
+  for (const selection of new Map(
+    selections.map((item) => [item.inventorySlug, item])
+  ).values()) {
+    if (!(await isKeyAvailableAsync(selection.inventorySlug))) {
+      return res.status(409).json({
+        error: `${selection.product.name} - ${selection.variant.name} is out of stock. Your balance was not charged.`,
+      });
+    }
+  }
+
   const balanceCents = await getUserBalanceCents(member.id);
   if (balanceCents < totalCents) {
     return res.status(402).json({
@@ -12959,6 +12804,15 @@ app.post("/api/cart/create-stripe-session", async (req, res) => {
 
   if (units.length > 20) {
     return res.status(400).json({ error: "Too many items in your cart (max 20)." });
+  }
+
+  for (const inventorySlug of new Set(units.map((unit) => unit.inventorySlug))) {
+    if (!(await isKeyAvailableAsync(inventorySlug))) {
+      const item = getCatalogItemByInventorySlug(inventorySlug);
+      return res.status(409).json({
+        error: `${item?.name || "A cart item"} is out of stock. Nothing was charged.`,
+      });
+    }
   }
 
   try {
@@ -14005,7 +13859,7 @@ async function getLiveInventoryContext(query) {
       const variants = (product.variants || []).map((variant) => {
         const inventorySlug = getVariantInventorySlug(product, variant);
         const localCount = keyCounts.get(inventorySlug) || 0;
-        const resellerCovers = Boolean((resellerApiKey && getResellerParams(inventorySlug)) || cheatsloveCoversInventory(inventorySlug));
+        const resellerCovers = cheatsloveCoversInventory(inventorySlug);
         const disabled = variant.stripeEnvKey?.startsWith("DISABLED_");
         const ready = !storeSoldOut
           && !disabled
@@ -15686,9 +15540,16 @@ async function loadProductStatusOverrides() {
    Manual pins always win over an auto-match for the same inventorySlug.
    Everything else is left alone and logged as unmatched on the first cycle
    so you can look up the real vids from that log and add them here. */
-  const CHEATSLOVE_VID_MAP = {
-    // "rust-dullwave-day": 10802,
-  };
+  const CHEATSLOVE_VID_MAP = Object.fromEntries(
+    products.flatMap((product) =>
+      (product.variants || [])
+        .filter((variant) => Number.isInteger(variant.cheatsLoveVariationId))
+        .map((variant) => [
+          variant.inventorySlug || `${product.slug}-${variant.slug}`,
+          variant.cheatsLoveVariationId,
+        ])
+    )
+  );
 
   let cheatsloveCatalogLogged = false;
   let cheatsloveUnmatchedLogged = false;
@@ -15762,6 +15623,15 @@ async function loadProductStatusOverrides() {
       const data = await cheatsloveFetch("/products");
       const clProducts = Array.isArray(data?.products) ? data.products : [];
       if (!clProducts.length) return;
+      cheatsloveStockSyncReady = true;
+
+      try {
+        const balanceData = await cheatsloveFetch("/balance");
+        const balance = Number(balanceData?.balance);
+        if (Number.isFinite(balance)) cheatsloveBalanceCents = Math.round(balance * 100);
+      } catch (balanceError) {
+        console.warn(`[Cheats.Love] Balance check failed: ${balanceError.message}`);
+      }
 
       const byVid = new Map();
       const clByName = new Map();
@@ -15772,6 +15642,9 @@ async function loadProductStatusOverrides() {
             productName: clProduct.name,
             label: variation.label,
             stock: resolveCheatsloveStock(variation),
+            costCents: Number.isFinite(Number(variation.reseller))
+              ? Math.round(Number(variation.reseller) * 100)
+              : null,
           });
         }
       }
@@ -15833,6 +15706,9 @@ async function loadProductStatusOverrides() {
           }
 
           cheatsloveStockKnown.set(inventorySlug, stockInfo.stock);
+          if (Number.isFinite(stockInfo.costCents)) {
+            cheatsloveCostKnown.set(inventorySlug, stockInfo.costCents);
+          }
           if (variant.stockLabel !== stockInfo.stock) {
             variant.stockLabel = stockInfo.stock;
             updatedCount += 1;
