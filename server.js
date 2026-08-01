@@ -148,7 +148,8 @@ const discordOwnerRoleId = process.env.DISCORD_OWNER_ROLE_ID || "";
 if (!discordCustomerRoleId) {
   console.warn("[Discord] DISCORD_CUSTOMER_ROLE_ID is not set — the Customer role cannot be assigned until you add it to the environment.");
 }
-const discordRestockChannelId = process.env.DISCORD_RESTOCK_CHANNEL_ID || "";
+const discordRestockChannelId =
+  process.env.DISCORD_RESTOCK_CHANNEL_ID || "1528634344682422394";
 const discordReviewChannelId = process.env.DISCORD_REVIEW_CHANNEL_ID || "";
 const discordVerifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || "";
 const discordUnverifiedRoleId = process.env.DISCORD_UNVERIFIED_ROLE_ID || "";
@@ -8430,7 +8431,13 @@ async function assignDiscordCustomerRole(order, buyerDiscordId) {
   }
 }
 
+const unfulfilledAlertedAt = new Map();
+
 async function handleUnfulfilledOrder(order, session) {
+  const alertKey = String(order?.id || session?.metadata?.orderId || session?.id || "unknown");
+  const lastAlert = unfulfilledAlertedAt.get(alertKey) || 0;
+  if (Date.now() - lastAlert < 30 * 60_000) return;
+  unfulfilledAlertedAt.set(alertKey, Date.now());
   const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
   const productLabel = catalogItem?.name || order.product_slug;
 
@@ -8440,11 +8447,14 @@ async function handleUnfulfilledOrder(order, session) {
       const channel = await discordBot.channels.fetch(discordLowStockChannelId);
       if (channel) {
         await channel.send({
-          content: [discordOwnerRoleId, discordAdminRoleId]
-            .filter(Boolean)
-            .map((roleId) => `<@&${roleId}>`)
-            .join(" ") || undefined,
+          content: [
+            `<@${OWNER_ID}>`,
+            ...[discordOwnerRoleId, discordAdminRoleId]
+              .filter(Boolean)
+              .map((roleId) => `<@&${roleId}>`),
+          ].join(" "),
           allowedMentions: {
+            users: [OWNER_ID],
             roles: [discordOwnerRoleId, discordAdminRoleId].filter(Boolean),
           },
           embeds: [{
@@ -8726,7 +8736,7 @@ async function postFulfillment(order, session, keyData, assignedAt, options = {}
   return { keyValue: keyData.key_value };
 }
 
-async function syncPaidOrder(session) {
+async function syncPaidOrderCore(session) {
   if (!supabaseAdmin) {
     throw new Error("Supabase server auth is not configured.");
   }
@@ -8934,6 +8944,37 @@ async function syncPaidOrder(session) {
     console.log(`[syncPaidOrder] Order ${order.id} already marked unfulfilled, skipping duplicate alert.`);
   }
   return;
+}
+
+async function syncPaidOrder(session) {
+  try {
+    return await syncPaidOrderCore(session);
+  } catch (error) {
+    let order = null;
+    try {
+      const orderId = session?.metadata?.orderId || null;
+      if (orderId && supabaseAdmin) {
+        const result = await supabaseAdmin
+          .from("orders")
+          .select("id, user_id, product_slug, status")
+          .eq("id", orderId)
+          .maybeSingle();
+        order = result.data || null;
+      }
+    } catch (lookupError) {
+      console.error("[Unfulfilled alert lookup]", lookupError.message);
+    }
+
+    const fallbackOrder = order || {
+      id: session?.metadata?.orderId || "Unknown",
+      user_id: null,
+      product_slug: "Unknown product",
+    };
+    await handleUnfulfilledOrder(fallbackOrder, session || {}).catch((alertError) => {
+      console.error("[Unfulfilled fallback alert]", alertError.message);
+    });
+    throw error;
+  }
 }
 
 /* ── Wallet / store-credit balance helpers ── */
