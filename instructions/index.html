@@ -633,64 +633,21 @@
                 {
                   title: "Preparation",
                   content: `
-                    <p>Ancient requires specific BIOS and system settings. Check all of these before attempting setup.</p>
-                    <h3>System Requirements</h3>
-                    <ul>
-                      <li>Intel or AMD CPU</li>
-                      <li>Windows 10 or 11 (1909 - 25H2)</li>
-                      <li>16GB RAM or more</li>
-                    </ul>
-                    <h3>BIOS Settings</h3>
-                    <ul>
-                      <li><strong>AMD CPU:</strong> Enable SVM in BIOS, Disable Hyper-V in Windows</li>
-                      <li><strong>Intel CPU:</strong> Enable VT-X in BIOS, Enable Hyper-V in Windows</li>
-                      <li><strong>Intel CPU:</strong> Firmware must be in UEFI mode, disk must be GPT format</li>
-                      <li>Secure Boot must be <strong>disabled</strong></li>
-                    </ul>
-                    <div class="warn-box">Getting the BIOS settings wrong is the most common cause of Ancient failing to load. Double-check every setting.</div>
+                    <p>Disable Windows Defender, SmartScreen, and any third-party antivirus before continuing. Close Rainbow Six Siege completely if it's running.</p>
+                    <div class="warn-box">Do not open the loader through a browser extension or in-browser download manager &mdash; save the file first, then run it directly from your file explorer. This loader is Windows-only and does not work on macOS.</div>
                   `
                 },
                 {
-                  title: "Run the software",
+                  title: "Setup Guide",
                   content: `
-                    <p>Once your BIOS is configured correctly:</p>
                     <ol>
-                      <li>Disable Windows Defender real-time protection</li>
-                      <li>Run the Ancient loader as <strong>Administrator</strong></li>
-                      <li>Enter your license key</li>
-                      <li>Wait for the loader to prepare the environment</li>
-                      <li>Launch Rainbow Six Siege</li>
-                      <li>Press the load button once you are in the main menu</li>
+                      <li>Download the loader from your order and save it directly to your desktop.</li>
+                      <li>Run the loader as Administrator and enter the shared loader password along with your license key.</li>
+                      <li>Select Rainbow Six Siege from the product list and click Run.</li>
+                      <li>Launch the game in windowed or borderless mode &mdash; fullscreen is not supported.</li>
                     </ol>
                     <p>Menu toggle: <code>INSERT</code></p>
-                    <div class="info-box">Create a simple starter config before changing advanced ability settings. Save your config regularly.</div>
-                  `
-                },
-                {
-                  title: "Config Management",
-                  content: `
-                    <p>Ancient supports saving, loading, deleting, and sharing configuration profiles.</p>
-                    <h3>How to manage configs</h3>
-                    <ul>
-                      <li><strong>Save:</strong> Open menu > Config tab > Enter a name > Save</li>
-                      <li><strong>Load:</strong> Select a saved config from the list and click Load</li>
-                      <li><strong>Share:</strong> Export your config as a string to share with others</li>
-                      <li><strong>Delete:</strong> Select a config and click Delete</li>
-                    </ul>
-                  `
-                },
-                {
-                  title: "Common Errors",
-                  content: `
-                    <h3>Virtualization error</h3>
-                    <p>SVM (AMD) or VT-X (Intel) is not enabled in BIOS. Restart, enter BIOS, and enable it.</p>
-                    <h3>Hyper-V conflict</h3>
-                    <p>AMD users must disable Hyper-V. Intel users must enable it. Run <code>bcdedit /set hypervisorlaunchtype off</code> (AMD) or <code>auto</code> (Intel) in an admin command prompt, then restart.</p>
-                    <h3>Secure Boot error</h3>
-                    <p>Disable Secure Boot in BIOS. This is usually under Boot or Security settings.</p>
-                    <h3>Not enough RAM</h3>
-                    <p>Ancient requires at least 16GB of RAM. Check your system specs.</p>
-                    <div class="info-box">Use support if you are unsure about Intel or AMD-specific requirements.</div>
+                    <div class="info-box">Need help? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a> and our team will assist.</div>
                   `
                 }
               ]
@@ -851,43 +808,21 @@
                 {
                   title: "Preparation",
                   content: `
-                    <h3>1. Disable Windows Defender &amp; antivirus</h3>
-                    <p>Completely turn off Windows Defender (Real-time Protection) and uninstall third-party antivirus software. Recommended: use <a href="https://www.sordum.org/files/downloads.php?st-defender-control" target="_blank">Defender Control</a> (archive password: <code>sordum</code>) to fully disable Defender.</p>
-                    <h3>2. Nvidia &amp; AMD graphics settings</h3>
-                    <p><strong>Nvidia users:</strong> enable the GeForce Experience overlay &mdash; <a href="https://www.nvidia.com/en-eu/geforce/geforce-experience/download" target="_blank">download GeForce Experience</a>, then Settings &rarr; In-Game Overlay &rarr; Enable.</p>
-                    <p><strong>AMD users:</strong> install <a href="https://steelseries.com/gg/downloads/gg/latest/windows" target="_blank">SteelSeries GG</a> and enable Sonar &mdash; open GG, register/login, Settings &rarr; General &rarr; Enable Sonar, then Settings &rarr; Sonar &rarr; Shortcuts &rarr; Master and bind <code>F7</code> to "Volume - Up" (press this key before injecting).</p>
-                    <h3>3. Adjust your game settings</h3>
-                    <p>Start the game without the cheat loaded first and set Screen Mode to Borderless or Windowed. Fullscreen is not supported.</p>
+                    <p>Disable Windows Defender, SmartScreen, and any third-party antivirus before continuing. Close Fortnite completely if it's running.</p>
+                    <div class="warn-box">Do not open the loader through a browser extension or in-browser download manager &mdash; save the file first, then run it directly from your file explorer. This loader is Windows-only and does not work on macOS.</div>
                   `
                 },
                 {
-                  title: "Installing & Running the Cheat",
+                  title: "Setup Guide",
                   content: `
                     <ol>
-                      <li>Download the cheat loader from <a href="http://undetect.net/download/loader" target="_blank">undetect.net</a>.</li>
-                      <li>Enter the license key you received after purchase.</li>
-                      <li>Select your game in the product list and click Load. Leave the HWID spoofer checkbox enabled if you want it, or uncheck it if you don't.</li>
-                      <li>The loader closes automatically after a few moments.</li>
-                      <li>Launch the game &mdash; Nvidia users get the menu automatically; AMD users press <code>F7</code> to inject.</li>
+                      <li>Download the loader from your order and save it directly to your desktop.</li>
+                      <li>Run the loader as Administrator and enter the shared loader password along with your license key.</li>
+                      <li>Select Fortnite from the product list and click Run.</li>
+                      <li>Launch the game in windowed or borderless mode &mdash; fullscreen is not supported.</li>
                     </ol>
-                    <p>Press <code>Insert</code> to open or close the in-game menu.</p>
-                  `
-                },
-                {
-                  title: "Troubleshooting",
-                  content: `
-                    <p>Most issues come down to Windows Defender or antivirus still being active &mdash; make sure Defender is fully disabled and any third-party antivirus is uninstalled.</p>
-                    <h3>Update required software</h3>
-                    <p><a href="https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one" target="_blank">Visual C++ Redistributables</a> and <a href="https://www.microsoft.com/ru-ru/download/details.aspx?id=35" target="_blank">DirectX</a>.</p>
-                    <h3>Windows 11</h3>
-                    <p>Disable Kernel Isolation &mdash; <a href="https://mega.nz/file/81lSHTAQ#WneLGwK1XT9g110Pw9pkkNKLnf3OX7Rk3mKM61Y4WN4" target="_blank">download the fix</a>.</p>
-                    <h3>Anti-cheat conflicts</h3>
-                    <p>Uninstall FaceIt and Riot Vanguard via "Add or Remove Programs" if installed.</p>
-                    <h3>Reputation-Based Protection</h3>
-                    <p>Search for "Reputation-Based Protection" in the Start Menu and disable all options.</p>
-                    <h3>Window mode</h3>
-                    <p>The cheat will not work in Full Screen &mdash; use Borderless or Windowed.</p>
-                    <div class="info-box">Still stuck? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a>.</div>
+                    <p>Menu toggle: <code>Insert</code></p>
+                    <div class="info-box">Need help? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a> and our team will assist.</div>
                   `
                 }
               ]
@@ -1090,43 +1025,20 @@
                 {
                   title: "Preparation",
                   content: `
-                    <h3>1. Disable Windows Defender &amp; antivirus</h3>
-                    <p>Completely disable Windows Defender (Real-time Protection) and uninstall any third-party antivirus. We recommend <a href="https://www.sordum.org/files/downloads.php?st-defender-control" target="_blank">Defender Control</a> (archive password: <code>sordum</code>).</p>
-                    <h3>2. Graphics settings</h3>
-                    <p><strong>Nvidia:</strong> download <a href="https://www.nvidia.com/en-eu/geforce/geforce-experience/download" target="_blank">GeForce Experience</a>, then Settings &rarr; In-Game Overlay &rarr; Enable.</p>
-                    <p><strong>AMD:</strong> download <a href="https://steelseries.com/gg/downloads/gg/latest/windows" target="_blank">SteelSeries GG</a>, register/login, Settings &rarr; General &rarr; Enable Sonar, then Settings &rarr; Sonar &rarr; Shortcuts &rarr; Master and bind <code>F7</code> to "Volume - Up".</p>
-                    <h3>3. Game settings</h3>
-                    <p>Launch Apex Legends without the cheat loaded first, and set Screen Mode to Borderless or Windowed &mdash; Fullscreen is not supported.</p>
+                    <p>Disable Windows Defender, SmartScreen, and any third-party antivirus before continuing. Close Apex Legends completely if it's running.</p>
+                    <div class="warn-box">Do not open the loader through a browser extension or in-browser download manager &mdash; save the file first, then run it directly from your file explorer. This loader is Windows-only and does not work on macOS.</div>
                   `
                 },
                 {
-                  title: "Installing & Running the Cheat",
+                  title: "Setup Guide",
                   content: `
                     <ol>
-                      <li>Download the loader from <a href="http://undetect.net/download/loader" target="_blank">undetect.net</a> and run it as Administrator.</li>
-                      <li>Enter the license key you received after purchase.</li>
-                      <li>Select "Apex Legends" in the product list and click Load. Leave the HWID spoofer checkbox enabled if you want it, otherwise uncheck it.</li>
-                      <li>The loader closes automatically after a few moments.</li>
-                      <li>Launch the game &mdash; Nvidia users get the menu automatically; AMD users press <code>F7</code> to inject.</li>
+                      <li>Download the loader from your order and save it directly to your desktop.</li>
+                      <li>Run the loader as Administrator and enter the shared loader password along with your license key.</li>
+                      <li>Select Apex Legends from the product list and click Run.</li>
+                      <li>Launch the game in windowed or borderless mode &mdash; fullscreen is not supported.</li>
                     </ol>
-                  `
-                },
-                {
-                  title: "Troubleshooting",
-                  content: `
-                    <h3>Windows Defender / antivirus</h3>
-                    <p>Make sure Defender is fully disabled as described earlier, and uninstall any third-party antivirus.</p>
-                    <h3>Update required system files</h3>
-                    <p><a href="https://www.techpowerup.com/download/visual-c-redistributable-runtime-package-all-in-one" target="_blank">Visual C++ Redistributables</a> and <a href="https://www.microsoft.com/ru-ru/download/details.aspx?id=35" target="_blank">DirectX</a>.</p>
-                    <h3>Anti-cheat conflicts</h3>
-                    <p>FaceIt and Riot Vanguard can interfere &mdash; uninstall them via "Add or Remove Programs".</p>
-                    <h3>Windows 11</h3>
-                    <p>Disable Kernel Isolation &mdash; <a href="https://mega.nz/file/81lSHTAQ#WneLGwK1XT9g110Pw9pkkNKLnf3OX7Rk3mKM61Y4WN4" target="_blank">download the fix</a>.</p>
-                    <h3>Reputation-Based Protection</h3>
-                    <p>Search for "Reputation-Based Protection" in the Start Menu and disable all options.</p>
-                    <h3>Window mode</h3>
-                    <p>Apex Legends must run in Borderless or Windowed mode &mdash; Fullscreen will cause issues.</p>
-                    <div class="info-box">Still stuck? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a>.</div>
+                    <div class="info-box">Need help? Open a ticket in <a href="https://discord.gg/xencheats" target="_blank">Discord</a> and our team will assist.</div>
                   `
                 }
               ]
