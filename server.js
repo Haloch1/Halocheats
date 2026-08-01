@@ -79,6 +79,8 @@ const discordAlertsWebhookUrl = process.env.DISCORD_ALERTS_WEBHOOK_URL || "";
    on Render. See syncCheatsLoveStock() below for the polling job. */
 const cheatsloveApiKey = process.env.CHEATSLOVE_API_KEY || "";
 const cheatsloveBaseUrl = (process.env.CHEATSLOVE_BASE_URL || "https://res.cheatslove.com/api/v1").replace(/\/+$/, "");
+const cheatsloveStoreApiUrl = (process.env.CHEATSLOVE_STORE_API_URL
+  || "https://backend.cheats.love/wp-json/wc/store/v1").replace(/\/+$/, "");
 // Keep upstream availability fresh without approaching the reseller's
 // 30-request-per-minute limit.
 const cheatslovePollMs = 5 * 60_000;
@@ -86,10 +88,13 @@ const cheatslovePollMs = 5 * 60_000;
    After the first valid sync, mapped variants without a usable upstream result
    fail closed instead of being advertised as available. */
 const cheatsloveStockKnown = new Map();
+const cheatsloveStoreStockKnown = new Map();
 const cheatsloveCostKnown = new Map();
 let cheatsloveBalanceCents = null;
 let cheatsloveStockSyncReady = false;
 let cheatsloveLastStockSyncAt = 0;
+let cheatsloveStoreStockSyncReady = false;
+let cheatsloveLastStoreStockSyncAt = 0;
 function cheatsloveCoversInventory(inventorySlug) {
   if (!cheatsloveApiKey) return false;
   const known = cheatsloveStockKnown.get(inventorySlug);
@@ -97,7 +102,8 @@ function cheatsloveCoversInventory(inventorySlug) {
     const costCents = cheatsloveCostKnown.get(inventorySlug);
     const hasFunds = !Number.isFinite(costCents)
       || (Number.isFinite(cheatsloveBalanceCents) && cheatsloveBalanceCents >= costCents);
-    return known === "In Stock" && hasFunds;
+    const storefrontInStock = cheatsloveStoreStockKnown.get(inventorySlug) === "In Stock";
+    return known === "In Stock" && storefrontInStock && hasFunds;
   }
   if (cheatsloveStockSyncReady || CHEATSLOVE_VID_MAP[inventorySlug] == null) return false;
   return true; // brief startup grace period before the first upstream response
@@ -9968,6 +9974,9 @@ app.get("/api/products", async (_req, res) => {
     if (cheatsloveApiKey && Date.now() - cheatsloveLastStockSyncAt > 55_000) {
       await syncCheatsLoveStock();
     }
+    if (cheatsloveApiKey && Date.now() - cheatsloveLastStoreStockSyncAt > cheatslovePollMs) {
+      void syncCheatsLoveStoreStock();
+    }
     const keyCounts = await getUnusedLicenseKeyCounts();
     const catalog = products.map((product) => ({
       slug: product.slug,
@@ -15557,6 +15566,7 @@ async function loadProductStatusOverrides() {
   let cheatsloveUnmatchedLogged = false;
   let cheatsloveAutoMatchLogged = false;
   let cheatsloveSyncRunning = false;
+  let cheatsloveStoreSyncRunning = false;
 
   async function cheatsloveFetch(path, options = {}) {
     const res = await fetch(`${cheatsloveBaseUrl}${path}`, {
@@ -15735,12 +15745,92 @@ async function loadProductStatusOverrides() {
     }
   }
 
+  async function syncCheatsLoveStoreStock() {
+    if (!cheatsloveApiKey || cheatsloveStoreSyncRunning) return;
+    cheatsloveStoreSyncRunning = true;
+
+    const variants = products.flatMap((product) =>
+      (product.variants || [])
+        .filter((variant) => Number.isInteger(variant.cheatsLoveVariationId))
+        .map((variant) => ({
+          inventorySlug: variant.inventorySlug || `${product.slug}-${variant.slug}`,
+          variationId: variant.cheatsLoveVariationId,
+          label: `${product.name} - ${variant.name}`,
+        }))
+    );
+    const results = new Array(variants.length);
+    let cursor = 0;
+
+    async function worker() {
+      while (cursor < variants.length) {
+        const index = cursor++;
+        const variant = variants[index];
+        try {
+          const response = await fetch(`${cheatsloveStoreApiUrl}/products/${variant.variationId}`, {
+            headers: { Accept: "application/json" },
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+          results[index] = {
+            ...variant,
+            stock: data?.is_in_stock === true ? "In Stock" : "Out of Stock",
+          };
+        } catch (error) {
+          console.warn(`[Cheats.Love Store] ${variant.variationId} check failed: ${error.message}`);
+        }
+      }
+    }
+
+    try {
+      await Promise.all(Array.from({ length: 8 }, () => worker()));
+      const valid = results.filter(Boolean);
+      if (valid.length < Math.ceil(variants.length * 0.8)) {
+        throw new Error(`only ${valid.length}/${variants.length} stock checks succeeded`);
+      }
+
+      const newlyOut = [];
+      for (const result of valid) {
+        const previous = cheatsloveStoreStockKnown.get(result.inventorySlug);
+        cheatsloveStoreStockKnown.set(result.inventorySlug, result.stock);
+        if (result.stock === "Out of Stock" && previous === "In Stock") newlyOut.push(result.label);
+      }
+      cheatsloveStoreStockSyncReady = true;
+      cheatsloveLastStoreStockSyncAt = Date.now();
+      const outCount = valid.filter((result) => result.stock === "Out of Stock").length;
+      console.log(`[Cheats.Love Store] Confirmed ${valid.length} variant(s); ${outCount} out of stock.`);
+
+      if (newlyOut.length && discordBot && discordLowStockChannelId) {
+        try {
+          const channel = await discordBot.channels.fetch(discordLowStockChannelId);
+          await channel?.send({
+            embeds: [{
+              title: "Supplier stock changed",
+              description: newlyOut.map((label) => `- ${label}`).join("\n").slice(0, 3900),
+              color: 0xed4245,
+              footer: { text: "These variants are now disabled on XenCheats." },
+              timestamp: new Date().toISOString(),
+            }],
+          });
+        } catch (error) {
+          console.error("[Cheats.Love Store alert]", error.message);
+        }
+      }
+    } catch (error) {
+      console.error("[Cheats.Love Store] Stock sync error:", error.message);
+    } finally {
+      cheatsloveStoreSyncRunning = false;
+    }
+  }
+
 Promise.all([loadProductOverrides(), loadProductStatusOverrides()]).then(() => {
   setInterval(loadProductStatusOverrides, 5 * 60 * 1000).unref();
 
   if (cheatsloveApiKey) {
     setInterval(syncCheatsLoveStock, cheatslovePollMs).unref();
+    setInterval(syncCheatsLoveStoreStock, cheatslovePollMs).unref();
     setTimeout(syncCheatsLoveStock, 5_000); // first sync 5s after boot
+    setTimeout(syncCheatsLoveStoreStock, 5_000);
     console.log(`[Cheats.Love] Stock sync enabled, polling every ${Math.round(cheatslovePollMs / 1000)}s.`);
   } else {
     console.log("[Cheats.Love] CHEATSLOVE_API_KEY not set — stock sync disabled.");
