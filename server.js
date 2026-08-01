@@ -31,6 +31,16 @@ process.on("uncaughtException", (error) => {
 
 // Mutable products ref — self-heals if Render starts the server before files finish updating
 let products = _initialProducts;
+const CHEATSLOVE_VID_MAP = Object.fromEntries(
+  products.flatMap((product) =>
+    (product.variants || [])
+      .filter((variant) => Number.isInteger(variant.cheatsLoveVariationId))
+      .map((variant) => [
+        variant.inventorySlug || `${product.slug}-${variant.slug}`,
+        String(variant.cheatsLoveVariationId),
+      ])
+  )
+);
 const app = express();
 app.set("trust proxy", 1);
 const port = Number(process.env.PORT || 4242);
@@ -79,14 +89,14 @@ const cheatsloveStockKnown = new Map();
 const cheatsloveCostKnown = new Map();
 let cheatsloveBalanceCents = null;
 let cheatsloveStockSyncReady = false;
+let cheatsloveLastStockSyncAt = 0;
 function cheatsloveCoversInventory(inventorySlug) {
   if (!cheatsloveApiKey) return false;
   const known = cheatsloveStockKnown.get(inventorySlug);
   if (known) {
     const costCents = cheatsloveCostKnown.get(inventorySlug);
     const hasFunds = !Number.isFinite(costCents)
-      || !Number.isFinite(cheatsloveBalanceCents)
-      || cheatsloveBalanceCents >= costCents;
+      || (Number.isFinite(cheatsloveBalanceCents) && cheatsloveBalanceCents >= costCents);
     return known === "In Stock" && hasFunds;
   }
   if (cheatsloveStockSyncReady || CHEATSLOVE_VID_MAP[inventorySlug] == null) return false;
@@ -9955,6 +9965,9 @@ app.get("/api/auth/role", async (req, res) => {
 app.get("/api/products", async (_req, res) => {
   try {
     res.set("Cache-Control", "no-store, max-age=0");
+    if (cheatsloveApiKey && Date.now() - cheatsloveLastStockSyncAt > 55_000) {
+      await syncCheatsLoveStock();
+    }
     const keyCounts = await getUnusedLicenseKeyCounts();
     const catalog = products.map((product) => ({
       slug: product.slug,
@@ -15540,17 +15553,6 @@ async function loadProductStatusOverrides() {
    Manual pins always win over an auto-match for the same inventorySlug.
    Everything else is left alone and logged as unmatched on the first cycle
    so you can look up the real vids from that log and add them here. */
-  const CHEATSLOVE_VID_MAP = Object.fromEntries(
-    products.flatMap((product) =>
-      (product.variants || [])
-        .filter((variant) => Number.isInteger(variant.cheatsLoveVariationId))
-        .map((variant) => [
-          variant.inventorySlug || `${product.slug}-${variant.slug}`,
-          variant.cheatsLoveVariationId,
-        ])
-    )
-  );
-
   let cheatsloveCatalogLogged = false;
   let cheatsloveUnmatchedLogged = false;
   let cheatsloveAutoMatchLogged = false;
@@ -15638,7 +15640,7 @@ async function loadProductStatusOverrides() {
       for (const clProduct of clProducts) {
         clByName.set(cheatsloveNormalizeName(clProduct.name), clProduct);
         for (const variation of clProduct.variations || []) {
-          byVid.set(variation.id, {
+          byVid.set(String(variation.id), {
             productName: clProduct.name,
             label: variation.label,
             stock: resolveCheatsloveStock(variation),
@@ -15678,7 +15680,7 @@ async function loadProductStatusOverrides() {
             (v) => cheatsloveDurationKey(v.label) === wantKey
           );
           if (match) {
-            autoMatchedVids.set(inventorySlug, match.id);
+            autoMatchedVids.set(inventorySlug, String(match.id));
             autoMatchLog.push(`${inventorySlug}->${match.id}`);
           }
         }
@@ -15699,9 +15701,10 @@ async function loadProductStatusOverrides() {
           const inventorySlug = variant.inventorySlug || `${product.slug}-${variant.slug}`;
           if (!resolvedVidBySlug.has(inventorySlug)) continue; // not pinned/matched — leave as-is
 
-          const stockInfo = byVid.get(resolvedVidBySlug.get(inventorySlug)) || null;
+          const stockInfo = byVid.get(String(resolvedVidBySlug.get(inventorySlug))) || null;
           if (!stockInfo || stockInfo.stock == null) {
             unmatched.push(inventorySlug);
+            cheatsloveStockKnown.set(inventorySlug, "Out of Stock");
             continue;
           }
 
@@ -15715,6 +15718,8 @@ async function loadProductStatusOverrides() {
           }
         }
       }
+
+      cheatsloveLastStockSyncAt = Date.now();
 
       if (updatedCount) {
         console.log(`[Cheats.Love] Updated stock for ${updatedCount} variant(s).`);
