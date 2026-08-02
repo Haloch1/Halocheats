@@ -838,6 +838,11 @@ function ensureVariantModal() {
         <div class="variant-art-brand" aria-hidden="true"><span>XenCheats</span></div>
         <span class="product-status-badge variant-art-status" data-variant-art-badge></span>
         <div class="variant-art-caption" data-variant-art-caption aria-hidden="true"></div>
+        <div class="variant-art-gallery" data-variant-art-gallery aria-hidden="true">
+          <span class="variant-art-gallery-thumb is-active">
+            <img data-variant-gallery-thumb alt="" />
+          </span>
+        </div>
       </div>
       <div class="variant-details">
         <p class="eyebrow">Product view</p>
@@ -1321,6 +1326,13 @@ function openVariantModal(product, { updateUrl = true } = {}) {
   if (artwork) {
     artwork.src = productImageSrc(product);
     artwork.alt = `${product.name} artwork`;
+  }
+
+  const galleryThumb = modal.querySelector("[data-variant-gallery-thumb]");
+
+  if (galleryThumb) {
+    galleryThumb.src = productImageSrc(product);
+    galleryThumb.alt = `${product.name} thumbnail`;
   }
 
   modal.querySelectorAll("[data-variant-product-blur]").forEach((image) => {
