@@ -2878,8 +2878,9 @@ if (isConfiguredValue(discordBotToken)) {
           .addStringOption(o => o.setName("type").setDescription("Test type: fulfilled or unfulfilled").setRequired(false).addChoices({ name: "Fulfilled (key delivered)", value: "fulfilled" }, { name: "Unfulfilled (no key)", value: "unfulfilled" })),
         new SlashCommandBuilder()
           .setName("retryunfulfilled")
-          .setDescription("Retry key delivery for paid-but-unfulfilled orders (admin only)")
-          .addStringOption(o => o.setName("product").setDescription("Product name, or \"All products\"").setRequired(true).setAutocomplete(true)),
+          .setDescription("Retry key delivery for paid-but-unfulfilled orders — shows the pulled key(s) (admin only)")
+          .addStringOption(o => o.setName("product").setDescription("Product name, or \"All products\"").setRequired(true).setAutocomplete(true))
+          .addStringOption(o => o.setName("variant").setDescription("Narrow to one duration/variant (optional — default: every variant)").setRequired(false).setAutocomplete(true)),
         new SlashCommandBuilder()
           .setName("customers")
           .setDescription("View recent purchases (admin only)")
@@ -4574,6 +4575,22 @@ ${rows || '<div class="ct">No messages.</div>'}
     if (interaction.isAutocomplete && interaction.isAutocomplete() && interaction.commandName === "retryunfulfilled") {
       const focused = interaction.options.getFocused(true);
       const query = focused.value.toLowerCase();
+
+      if (focused.name === "variant") {
+        const productInput = interaction.options.getString("product") || "";
+        const matchedProduct = products.find(
+          (p) => p.slug === productInput || p.name.toLowerCase() === productInput.toLowerCase()
+        );
+        if (!matchedProduct?.variants?.length) {
+          return interaction.respond([]); // no product picked yet, or "All products" — no single variant list makes sense
+        }
+        const variantMatches = matchedProduct.variants
+          .filter((v) => !query || v.name.toLowerCase().includes(query) || v.slug.toLowerCase().includes(query))
+          .slice(0, 25)
+          .map((v) => ({ name: v.name, value: v.slug }));
+        return interaction.respond(variantMatches);
+      }
+
       const productMatches = products
         .filter(p => !query || p.name.toLowerCase().includes(query) || p.slug.toLowerCase().includes(query))
         .slice(0, 24)
@@ -5525,7 +5542,7 @@ ${rows || '<div class="ct">No messages.</div>'}
           "`/announce` `/verify-panel` `/uptime`",
           "`/upload` `/schedule` `/pendingschedules` `/cancelschedule` `/stats`",
           "`/togglebot` `/payments` `/transcriptdemo`",
-          "`/retryunfulfilled <product>` — retry key delivery for paid-but-unfulfilled orders (run manually, not scheduled)",
+          "`/retryunfulfilled <product> [variant]` — retry key delivery for paid-but-unfulfilled orders and show the pulled key(s) (run manually, not scheduled)",
         ];
         embed.fields.push({ name: "Admin", value: adminCmds.join("\n"), inline: false });
       }
@@ -5860,6 +5877,7 @@ ${rows || '<div class="ct">No messages.</div>'}
       activeRetryUnfulfilledRun = run;
       try {
         const productInput = interaction.options.getString("product");
+        const variantInput = interaction.options.getString("variant");
         let inventorySlugs = null; // null = every product
         let productLabel = "All products";
 
@@ -5875,6 +5893,24 @@ ${rows || '<div class="ct">No messages.</div>'}
           }
           inventorySlugs = (matchedProduct.variants || []).map((v) => v.inventorySlug || `${matchedProduct.slug}-${v.slug}`);
           productLabel = matchedProduct.name;
+
+          if (variantInput) {
+            const matchedVariant = matchedProduct.variants?.find((v) => v.slug === variantInput || v.name.toLowerCase() === variantInput.toLowerCase());
+            if (!matchedVariant) {
+              activeRetryUnfulfilledRun = null;
+              const available = (matchedProduct.variants || []).map((v) => v.name).join(", ");
+              return interaction.editReply({
+                embeds: [{ description: `Invalid variant for ${matchedProduct.name}. Available: ${available}`, color: 0xff4444 }],
+              });
+            }
+            inventorySlugs = [matchedVariant.inventorySlug || `${matchedProduct.slug}-${matchedVariant.slug}`];
+            productLabel = `${matchedProduct.name} — ${matchedVariant.name}`;
+          }
+        } else if (variantInput) {
+          activeRetryUnfulfilledRun = null;
+          return interaction.editReply({
+            embeds: [{ description: 'Pick a specific product to narrow by variant — "All products" covers every variant already.', color: 0xff4444 }],
+          });
         }
 
         const RETRY_CAP = 25;
@@ -5915,6 +5951,7 @@ ${rows || '<div class="ct">No messages.</div>'}
         let stillUnfulfilled = 0;
         let attempted = 0;
         let stoppedEarly = false;
+        const pulledKeys = []; // { orderId, keyValue } — so staff can hand these off directly, no separate lookup needed
         for (const order of batch) {
           if (run.cancelled) {
             stoppedEarly = true;
@@ -5922,18 +5959,17 @@ ${rows || '<div class="ct">No messages.</div>'}
           }
           attempted += 1;
           try {
-            await syncPaidOrder({
+            const result = await syncPaidOrder({
               id: order.stripe_session_id || null,
               payment_intent: order.stripe_payment_intent || null,
               metadata: { orderId: order.id },
             });
-            const { data: refreshed } = await supabaseAdmin
-              .from("orders")
-              .select("status")
-              .eq("id", order.id)
-              .maybeSingle();
-            if (refreshed?.status === "fulfilled") delivered += 1;
-            else stillUnfulfilled += 1;
+            if (result?.keyValue) {
+              delivered += 1;
+              pulledKeys.push({ orderId: order.id, keyValue: result.keyValue });
+            } else {
+              stillUnfulfilled += 1;
+            }
           } catch (retryErr) {
             console.error(`[retryunfulfilled] Order ${order.id} retry failed:`, retryErr.message);
             stillUnfulfilled += 1;
@@ -5947,15 +5983,34 @@ ${rows || '<div class="ct">No messages.</div>'}
         if (skipped > 0) descriptionParts.push(`${skipped} order(s) were left untouched — run it again to pick up where this left off.`);
         if (!stoppedEarly && hasMore) descriptionParts.push(`More than ${RETRY_CAP} were waiting in total — run again to keep going.`);
 
+        const fields = [
+          { name: "Delivered just now", value: String(delivered), inline: true },
+          { name: "Still unfulfilled", value: String(stillUnfulfilled), inline: true },
+        ];
+
+        if (pulledKeys.length) {
+          // Each order's key is already delivered to that customer's account too —
+          // this is just so staff have it on hand without a separate lookup.
+          const lines = pulledKeys.map((k) => `\`${k.orderId.slice(0, 8)}\` → \`${k.keyValue}\``);
+          let keysBlock = "";
+          let shown = 0;
+          for (const line of lines) {
+            if (keysBlock.length + line.length + 1 > 950) break;
+            keysBlock += (keysBlock ? "\n" : "") + line;
+            shown += 1;
+          }
+          if (shown < lines.length) {
+            keysBlock += `\n…and ${lines.length - shown} more (see the orders directly).`;
+          }
+          fields.push({ name: "Pulled key(s)", value: keysBlock, inline: false });
+        }
+
         return interaction.editReply({
           embeds: [{
             title: stoppedEarly ? "Retry stopped" : "Retry complete",
             description: descriptionParts.join(" "),
             color: delivered > 0 ? 0x00c851 : 0xf59e0b,
-            fields: [
-              { name: "Delivered just now", value: String(delivered), inline: true },
-              { name: "Still unfulfilled", value: String(stillUnfulfilled), inline: true },
-            ],
+            fields,
             footer: { text: "This is manual — nothing runs this automatically." },
           }],
           components: [],
