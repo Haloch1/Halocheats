@@ -83,11 +83,21 @@ const cheatsloveStoreApiUrl = (process.env.CHEATSLOVE_STORE_API_URL
   || "https://backend.cheats.love/wp-json/wc/store/v1").replace(/\/+$/, "");
 // Keep upstream availability fresh without approaching the reseller's
 // 30-request-per-minute limit. This now drives ONLY the single-call catalog
-// sync (syncCheatsLoveStock: one /products + one /balance request per cycle,
-// regardless of catalog size) — the old per-variant storefront double-check
+// sync (syncCheatsLoveStock: one /products request per customer-driven refresh;
+// boot also reads /balance once) - the old per-variant storefront double-check
 // (syncCheatsLoveStoreStock, 140 requests per cycle) is retired, see the
 // project-xencheats-cheatslove-ban memory / comment near cheatsloveCoversInventory.
-const cheatslovePollMs = 15 * 60_000;
+const cheatslovePollMs = 5 * 60_000;
+/* HARD PROVIDER SAFETY LIMIT: Cheats.Love documents 30 requests/minute.
+   Every reseller request must pass through cheatsloveFetch(), which serializes
+   starts at least four seconds apart (maximum 15/minute). Keep this fixed
+   rather than configurable so a bad environment value cannot remove the 50%
+   safety margin. A provider 429 also pauses the entire queue for >= 60s. */
+const CHEATSLOVE_MIN_REQUEST_INTERVAL_MS = 4_000;
+const CHEATSLOVE_MIN_429_COOLDOWN_MS = 60_000;
+let cheatsloveRequestQueue = Promise.resolve();
+let cheatsloveLastRequestStartedAt = 0;
+let cheatsloveBlockedUntil = 0;
 /* Real, confirmed-by-sync stock per inventorySlug ("In Stock" | "Out of Stock").
    After the first valid sync, mapped variants without a usable upstream result
    fail closed instead of being advertised as available. */
@@ -10710,7 +10720,7 @@ app.get("/api/products", async (_req, res) => {
     /* Demand-driven Cheats.Love catalog refresh, redesigned 2026-08-02. No
        background clock exists anymore (see the boot Promise.all block) — this
        is the ONLY place syncCheatsLoveStock() gets triggered after the initial
-       boot warm-up. It fires at most once per cheatslovePollMs (15 min)
+       boot warm-up. It fires at most once per cheatslovePollMs (5 min)
        regardless of how much traffic hits this route, and zero times if there's
        no traffic at all in a given window. It's fire-and-forget (not awaited)
        so a slow/down upstream never delays this response — the badge just
@@ -10721,7 +10731,11 @@ app.get("/api/products", async (_req, res) => {
        permanently retired for causing the original API ban. See the
        project-xencheats-cheatslove-ban memory for the full history. */
     if (cheatsloveApiKey && Date.now() - cheatsloveLastStockSyncAt > cheatslovePollMs) {
-      void syncCheatsLoveStock();
+      /* Wait for the fresh catalog snapshot instead of returning stale badges
+         and hoping a later page load sees the completed refresh. This is still
+         demand-driven and cached for five minutes, so normal traffic cannot
+         multiply provider calls. Balance refreshes remain boot-only here. */
+      await syncCheatsLoveStock({ refreshBalance: false });
     }
     const keyCounts = await getUnusedLicenseKeyCounts();
     const catalog = products.map((product) => {
@@ -16873,23 +16887,54 @@ async function loadProductStatusOverrides() {
   let cheatsloveSyncRunning = false;
   let cheatsloveStoreSyncRunning = false;
 
+  function parseCheatsloveRetryAfter(value) {
+    if (!value) return CHEATSLOVE_MIN_429_COOLDOWN_MS;
+    const seconds = Number(value);
+    if (Number.isFinite(seconds)) {
+      return Math.max(CHEATSLOVE_MIN_429_COOLDOWN_MS, Math.ceil(seconds * 1_000));
+    }
+    const retryAt = Date.parse(value);
+    return Number.isFinite(retryAt)
+      ? Math.max(CHEATSLOVE_MIN_429_COOLDOWN_MS, retryAt - Date.now())
+      : CHEATSLOVE_MIN_429_COOLDOWN_MS;
+  }
+
   async function cheatsloveFetch(path, options = {}) {
-    const res = await fetch(`${cheatsloveBaseUrl}${path}`, {
-      method: options.method || "GET",
-      headers: {
-        Authorization: `Bearer ${cheatsloveApiKey}`,
-        ...(options.body ? { "Content-Type": "application/json" } : {}),
-      },
-      body: options.body,
-      signal: AbortSignal.timeout(15_000),
+    const request = cheatsloveRequestQueue.then(async () => {
+      const earliestStart = Math.max(
+        cheatsloveBlockedUntil,
+        cheatsloveLastRequestStartedAt + CHEATSLOVE_MIN_REQUEST_INTERVAL_MS,
+      );
+      const waitMs = earliestStart - Date.now();
+      if (waitMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+
+      cheatsloveLastRequestStartedAt = Date.now();
+      const res = await fetch(`${cheatsloveBaseUrl}${path}`, {
+        method: options.method || "GET",
+        headers: {
+          Authorization: `Bearer ${cheatsloveApiKey}`,
+          ...(options.body ? { "Content-Type": "application/json" } : {}),
+        },
+        body: options.body,
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (res.status === 429) {
+        const cooldownMs = parseCheatsloveRetryAfter(res.headers.get("retry-after"));
+        cheatsloveBlockedUntil = Math.max(cheatsloveBlockedUntil, Date.now() + cooldownMs);
+        throw new Error(`Cheats.Love rate limit hit (429) - queue paused for ${Math.ceil(cooldownMs / 1_000)}s`);
+      }
+      if (!res.ok) {
+        throw new Error(`Cheats.Love API ${path} failed: ${res.status}`);
+      }
+      return res.json();
     });
-    if (res.status === 429) {
-      throw new Error("Cheats.Love rate limit hit (429) — will retry next cycle");
-    }
-    if (!res.ok) {
-      throw new Error(`Cheats.Love API ${path} failed: ${res.status}`);
-    }
-    return res.json();
+
+    /* Keep later calls moving even if this request fails. Returning `request`
+       still preserves the original rejection for its caller. */
+    cheatsloveRequestQueue = request.catch(() => undefined);
+    return request;
   }
 
   function resolveCheatsloveStock(variation) {
@@ -16933,7 +16978,7 @@ async function loadProductStatusOverrides() {
     return `${n}${unit}`;
   }
 
-  async function syncCheatsLoveStock() {
+  async function syncCheatsLoveStock({ refreshBalance = true } = {}) {
     if (!cheatsloveApiKey || cheatsloveSyncRunning) return;
     cheatsloveSyncRunning = true;
     try {
@@ -16942,12 +16987,14 @@ async function loadProductStatusOverrides() {
       if (!clProducts.length) return;
       cheatsloveStockSyncReady = true;
 
-      try {
-        const balanceData = await cheatsloveFetch("/balance");
-        const balance = Number(balanceData?.balance);
-        if (Number.isFinite(balance)) cheatsloveBalanceCents = Math.round(balance * 100);
-      } catch (balanceError) {
-        console.warn(`[Cheats.Love] Balance check failed: ${balanceError.message}`);
+      if (refreshBalance) {
+        try {
+          const balanceData = await cheatsloveFetch("/balance");
+          const balance = Number(balanceData?.balance);
+          if (Number.isFinite(balance)) cheatsloveBalanceCents = Math.round(balance * 100);
+        } catch (balanceError) {
+          console.warn(`[Cheats.Love] Balance check failed: ${balanceError.message}`);
+        }
       }
 
       const byVid = new Map();
@@ -17181,7 +17228,7 @@ Promise.all([loadProductOverrides(), loadProductStatusOverrides()]).then(() => {
      this, and was never affected. */
   if (cheatsloveApiKey) {
     setTimeout(syncCheatsLoveStock, 5_000); // one-time warm-up 5s after boot, not recurring
-    console.log("[Cheats.Love] Catalog stock sync is demand-driven (no timer) — refreshes lazily from GET /api/products, at most once per " + Math.round(cheatslovePollMs / 60_000) + " min.");
+    console.log("[Cheats.Love] Catalog stock sync is demand-driven (no timer) - refreshes lazily from GET /api/products, at most once per " + Math.round(cheatslovePollMs / 60_000) + " min.");
   } else {
     console.log("[Cheats.Love] CHEATSLOVE_API_KEY not set — stock sync disabled.");
   }

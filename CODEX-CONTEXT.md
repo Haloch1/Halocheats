@@ -75,6 +75,7 @@ Rollback branch for pre-rebrand site: `backup-live-halo-2026-07-13`
 - **Public repo** — all secrets must be env vars only, never hardcode anything
 - **Git author:** always `Haloch1 <Haloch1@users.noreply.github.com>`
 - **Always commit+push** after code changes so Render auto-deploys
+- **Cheats.Love rate-limit invariant:** never bypass `cheatsloveFetch()` or call the reseller API directly. The provider ceiling is 30 requests/minute; the app intentionally serializes requests at a hard maximum of 15/minute and pauses at least 60 seconds after any 429. Never weaken or remove this safety margin.
 - **Never touch payments/checkout/Stripe/backend** during visual/design work
 - **After every edit**, summarize what changed and list the files touched
 - **Verify live deploy** before editing frontend — check what's actually serving, don't blindly tweak CSS
