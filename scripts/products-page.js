@@ -56,6 +56,22 @@ import productR6sVegaImage from "../assets/product-r6s-vega.webp";
 import productRustDullwaveImage from "../assets/product-rust-dullwave.webp";
 import productRustMasonFullImage from "../assets/product-rust-mason-full.webp";
 import productRustMasonLiteImage from "../assets/product-rust-mason-lite.webp";
+// New per-product tablet images (2026-08-02 batch 2)
+import productBattlefieldFecurityImage from "../assets/product-battlefield-fecurity.webp";
+import productCodDullwaveImage from "../assets/product-cod-dullwave.webp";
+import productCodLunarImage from "../assets/product-cod-lunar.webp";
+import productEftMasonImage from "../assets/product-eft-mason.webp";
+import productEftSkyImage from "../assets/product-eft-sky.webp";
+import productEftSugarImage from "../assets/product-eft-sugar.webp";
+import productEacBeSpooferImage from "../assets/product-eac-be-spoofer.webp";
+import productBattlefield6AncientImage from "../assets/product-battlefield6-ancient.webp";
+import productEftChamsImage from "../assets/product-eft-chams.webp";
+import productEftCrusaderImage from "../assets/product-eft-crusader.webp";
+import productEftSuperiorImage from "../assets/product-eft-superior.webp";
+import productFragpunkDullwaveImage from "../assets/product-fragpunk-dullwave.webp";
+import productR6sNfaAccountImage from "../assets/product-r6s-nfa-account.webp";
+import productSpooferLunarImage from "../assets/product-spoofer-lunar.webp";
+import productSpooferShadowImage from "../assets/product-spoofer-shadow.webp";
 
 initReveal();
 
@@ -139,6 +155,22 @@ const productArtwork = {
   "rust-dullwave": productRustDullwaveImage,
   "rust-mason-full": productRustMasonFullImage,
   "rust-mason-lite": productRustMasonLiteImage,
+  // New per-product tablet images (2026-08-02 batch 2)
+  "battlefield-fecurity": productBattlefieldFecurityImage,
+  "cod-dullwave": productCodDullwaveImage,
+  "cod-lunar": productCodLunarImage,
+  "eft-mason": productEftMasonImage,
+  "eft-sky": productEftSkyImage,
+  "eft-sugar": productEftSugarImage,
+  "eac-be-spoofer": productEacBeSpooferImage,
+  "battlefield6-ancient": productBattlefield6AncientImage,
+  "eft-chams": productEftChamsImage,
+  "eft-crusader": productEftCrusaderImage,
+  "eft-superior": productEftSuperiorImage,
+  "fragpunk-dullwave": productFragpunkDullwaveImage,
+  "r6s-nfa-account": productR6sNfaAccountImage,
+  "spoofer-lunar": productSpooferLunarImage,
+  "spoofer-shadow": productSpooferShadowImage,
 };
 
 /* Account nav button is rendered icon-only by initWallet(); no text set here. */
