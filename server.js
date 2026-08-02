@@ -3590,6 +3590,57 @@ if (isConfiguredValue(discordBotToken)) {
       return;
     }
 
+    /* Deterministic order-ID handling takes priority over the AI here too —
+       mirrors the website live desk (handleOrderIdSubmission /
+       resolveOrderIdSubmission above) so a customer pasting a real Order ID
+       into a Discord ticket gets verified against their linked account
+       instead of just becoming more freeform chat text for the LLM. This
+       was the actual bug: previously an Order ID pasted here got no special
+       handling at all and the AI just guessed at a reply. */
+    const ticketOrderId = extractOrderIdFromText(message.content);
+    if (ticketOrderId) {
+      try {
+        const topicMatch = /^Opened by (\d+)/.exec(message.channel.topic || "");
+        if (topicMatch) {
+          const discordUserId = topicMatch[1];
+          let siteUser = null;
+          let page = 1;
+          while (!siteUser) {
+            const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 });
+            if (!list?.users?.length) break;
+            siteUser = list.users.find((u) => discordIdOf(u) === discordUserId);
+            if (list.users.length < 1000) break;
+            page++;
+          }
+
+          if (!siteUser) {
+            await message.reply({
+              content:
+                "I can verify Order IDs for accounts linked to this Discord — if you haven't signed in with Discord on the site, please provide your email instead or ask staff for help.",
+              allowedMentions: { repliedUser: false },
+            });
+            return;
+          }
+
+          const result = await resolveOrderIdSubmission(ticketOrderId, siteUser.id, {
+            discord_channel_id: message.channel.id,
+          });
+          await message.reply({
+            content: buildDiscordOrderIdReply(result),
+            allowedMentions: { repliedUser: false },
+          });
+          return;
+        }
+        // No "Opened by <id>" match in the topic (shouldn't happen in
+        // practice) — fall through to the normal AI path below instead of
+        // silently dropping the message.
+      } catch (error) {
+        console.error("[Discord pending ticket order ID]", error.message);
+        await escalatePendingDiscordTicket(message.channel, "Automated order lookup encountered an error.");
+        return;
+      }
+    }
+
     const turns = pendingTicketAiTurns.get(message.channel.id) || 0;
     if (turns >= discordTicketAiMaxReplies) {
       await escalatePendingDiscordTicket(message.channel, "The automated reply limit was reached.");
@@ -10520,60 +10571,48 @@ async function postDeterministicSupportReply(thread, discordThreadId, body) {
   return body;
 }
 
-/* Handles an Order ID pasted into live desk chat. Ownership + status are
-   verified in one query (`.eq("user_id", member.id)`) so a guessed or
-   overheard ID can never surface someone else's order or even confirm it
-   exists — wrong owner, malformed ID, and "doesn't exist" all look the same
-   (no row found) from the outside. */
-async function handleOrderIdSubmission(thread, discordThreadId, member, orderId) {
+/* Core order-ID verification + retry logic, shared by the website live desk
+   (System A) and the Discord-native /ticket flow (System B). This is the
+   actual security boundary — ownership is enforced in one query
+   (`.eq("user_id", userId)`) so a guessed or overheard ID can never surface
+   someone else's order or even confirm it exists (wrong owner, malformed
+   ID, and "doesn't exist" all look the same: no row found). Deliberately
+   kept as a single copy so this logic can never drift between entry points.
+   It does NOT know how to post a reply — it only returns a plain
+   `{kind, ...}` result describing what happened; each caller turns that
+   into its own reply text and posts it its own way. `jobLinkFields` is
+   spread into any new order_retry_jobs row so the background processor
+   knows where to post updates later (e.g. `{thread_id}` for a website
+   thread, `{discord_channel_id}` for a Discord ticket channel). */
+async function resolveOrderIdSubmission(orderId, userId, jobLinkFields) {
   try {
-    checkRateLimit(orderIdRateLimitByUser, `orderid:${member.id}`, 15_000, "Too many order ID checks.");
+    checkRateLimit(orderIdRateLimitByUser, `orderid:${userId}`, 15_000, "Too many order ID checks.");
   } catch {
-    return postDeterministicSupportReply(
-      thread,
-      discordThreadId,
-      "Slow down a little — give it a few seconds between order ID checks and I'll take another look."
-    );
+    return { kind: "rate_limited" };
   }
 
   const { data: order, error } = await supabaseAdmin
     .from("orders")
     .select("id, status, product_slug, stripe_session_id, stripe_payment_intent, delivered_key_value, fulfilled_at")
     .eq("id", orderId)
-    .eq("user_id", member.id)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (error) {
     console.error("[Order ID desk] Lookup error:", error.message);
-    return postDeterministicSupportReply(
-      thread,
-      discordThreadId,
-      "I couldn't look that order up right now — please try again in a moment or reach out on Discord if it keeps happening."
-    );
+    return { kind: "lookup_error" };
   }
 
   if (!order) {
-    return postDeterministicSupportReply(
-      thread,
-      discordThreadId,
-      "I couldn't find that Order ID on your account. Double check it from your Account page (Order History -> Copy Order ID) and send it again."
-    );
+    return { kind: "not_found" };
   }
 
   if (order.status === "fulfilled") {
-    return postDeterministicSupportReply(
-      thread,
-      discordThreadId,
-      `That order's already been delivered — check your Account page for the key.${order.delivered_key_value ? ` Your key: \`${order.delivered_key_value}\`` : ""}`
-    );
+    return { kind: "already_fulfilled", keyValue: order.delivered_key_value || null };
   }
 
   if (order.status !== "paid") {
-    return postDeterministicSupportReply(
-      thread,
-      discordThreadId,
-      `That order shows as "${order.status}" — not a completed payment. If you already paid, give it a minute and refresh your account page, or let me know if it's been a while.`
-    );
+    return { kind: "other_status", status: order.status };
   }
 
   /* order.status === "paid": a genuine, verified unfulfilled order. */
@@ -10585,11 +10624,7 @@ async function handleOrderIdSubmission(thread, discordThreadId, member, orderId)
     .maybeSingle();
 
   if (existingJob) {
-    return postDeterministicSupportReply(
-      thread,
-      discordThreadId,
-      `Already retrying this one — next attempt in ${formatRetryEta(existingJob.next_attempt_at)}, up to 4 times a day. I'll let you know here the moment it comes through.`
-    );
+    return { kind: "job_active", nextAttemptAt: existingJob.next_attempt_at };
   }
 
   let syncResult;
@@ -10605,11 +10640,7 @@ async function handleOrderIdSubmission(thread, discordThreadId, member, orderId)
   }
 
   if (syncResult?.keyValue) {
-    return postDeterministicSupportReply(
-      thread,
-      discordThreadId,
-      `Good news — your key just came through: \`${syncResult.keyValue}\`. Enjoy!`
-    );
+    return { kind: "delivered_now", keyValue: syncResult.keyValue };
   }
 
   /* syncPaidOrder returns undefined both when the order is still unfulfilled
@@ -10622,21 +10653,17 @@ async function handleOrderIdSubmission(thread, discordThreadId, member, orderId)
     .maybeSingle();
 
   if (freshOrder?.status === "fulfilled") {
-    return postDeterministicSupportReply(
-      thread,
-      discordThreadId,
-      `Good news — your key just came through: \`${freshOrder.delivered_key_value || ""}\`. Enjoy!`
-    );
+    return { kind: "delivered_now", keyValue: freshOrder.delivered_key_value || null };
   }
 
   const nextAttemptAt = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
   const jobInsert = await supabaseAdmin.from("order_retry_jobs").insert({
     order_id: order.id,
-    thread_id: thread.id,
     status: "active",
     attempts: 1,
     max_attempts: 12,
     next_attempt_at: nextAttemptAt,
+    ...jobLinkFields,
   });
 
   /* Unique partial index only allows one active job per order — a 23505 here
@@ -10646,11 +10673,92 @@ async function handleOrderIdSubmission(thread, discordThreadId, member, orderId)
     console.error("[Order ID desk] Retry job insert error:", jobInsert.error.message);
   }
 
-  return postDeterministicSupportReply(
-    thread,
-    discordThreadId,
-    "Confirmed — that order's genuinely unfulfilled. I've started automatic retries with our supplier, up to 4 times a day. This attempt didn't land, but I'll try again in about 6 hours and message you here the moment it delivers."
-  );
+  return { kind: "job_started", nextAttemptAt };
+}
+
+/* Handles an Order ID pasted into website live desk chat — turns a
+   resolveOrderIdSubmission() result into the exact same reply wording the
+   website flow has always used, posted via postDeterministicSupportReply. */
+async function handleOrderIdSubmission(thread, discordThreadId, member, orderId) {
+  const result = await resolveOrderIdSubmission(orderId, member.id, { thread_id: thread.id });
+
+  switch (result.kind) {
+    case "rate_limited":
+      return postDeterministicSupportReply(
+        thread,
+        discordThreadId,
+        "Slow down a little — give it a few seconds between order ID checks and I'll take another look."
+      );
+    case "lookup_error":
+      return postDeterministicSupportReply(
+        thread,
+        discordThreadId,
+        "I couldn't look that order up right now — please try again in a moment or reach out on Discord if it keeps happening."
+      );
+    case "not_found":
+      return postDeterministicSupportReply(
+        thread,
+        discordThreadId,
+        "I couldn't find that Order ID on your account. Double check it from your Account page (Order History -> Copy Order ID) and send it again."
+      );
+    case "already_fulfilled":
+      return postDeterministicSupportReply(
+        thread,
+        discordThreadId,
+        `That order's already been delivered — check your Account page for the key.${result.keyValue ? ` Your key: \`${result.keyValue}\`` : ""}`
+      );
+    case "other_status":
+      return postDeterministicSupportReply(
+        thread,
+        discordThreadId,
+        `That order shows as "${result.status}" — not a completed payment. If you already paid, give it a minute and refresh your account page, or let me know if it's been a while.`
+      );
+    case "job_active":
+      return postDeterministicSupportReply(
+        thread,
+        discordThreadId,
+        `Already retrying this one — next attempt in ${formatRetryEta(result.nextAttemptAt)}, up to 4 times a day. I'll let you know here the moment it comes through.`
+      );
+    case "delivered_now":
+      return postDeterministicSupportReply(
+        thread,
+        discordThreadId,
+        `Good news — your key just came through: \`${result.keyValue || ""}\`. Enjoy!`
+      );
+    case "job_started":
+    default:
+      return postDeterministicSupportReply(
+        thread,
+        discordThreadId,
+        "Confirmed — that order's genuinely unfulfilled. I've started automatic retries with our supplier, up to 4 times a day. This attempt didn't land, but I'll try again in about 6 hours and message you here the moment it delivers."
+      );
+  }
+}
+
+/* Turns a resolveOrderIdSubmission() result into a Discord-appropriate
+   reply string for the Discord-native /ticket flow (System B). Wording
+   mirrors handleOrderIdSubmission's website replies for the same `kind` so
+   the two support surfaces don't say materially different things. */
+function buildDiscordOrderIdReply(result) {
+  switch (result.kind) {
+    case "rate_limited":
+      return "Slow down a little — give it a few seconds between order ID checks and I'll take another look.";
+    case "lookup_error":
+      return "I couldn't look that order up right now — please try again in a moment or ask staff for help if it keeps happening.";
+    case "not_found":
+      return "I couldn't find that Order ID on your account. Double check it from your Account page (Order History -> Copy Order ID) and send it again.";
+    case "already_fulfilled":
+      return `That order's already been delivered — check your Account page for the key.${result.keyValue ? ` Your key: \`${result.keyValue}\`` : ""}`;
+    case "other_status":
+      return `That order shows as "${result.status}" — not a completed payment. If you already paid, give it a minute and refresh your account page, or let me know if it's been a while.`;
+    case "job_active":
+      return `Already retrying this one — next attempt in ${formatRetryEta(result.nextAttemptAt)}, up to 4 times a day. I'll let you know here the moment it comes through.`;
+    case "delivered_now":
+      return `Good news — your key just came through: \`${result.keyValue || ""}\`. Enjoy!`;
+    case "job_started":
+    default:
+      return "Confirmed — that order's genuinely unfulfilled. I've started automatic retries with our supplier, up to 4 times a day. This attempt didn't land, but I'll try again in about 6 hours and message you here in this ticket the moment it delivers.";
+  }
 }
 
 app.post("/api/live-desk", async (req, res) => {
@@ -16094,7 +16202,7 @@ async function processDueOrderRetryJobs() {
   try {
     const { data: dueJobs, error } = await supabaseAdmin
       .from("order_retry_jobs")
-      .select("id, order_id, thread_id, attempts, max_attempts")
+      .select("id, order_id, thread_id, discord_channel_id, attempts, max_attempts")
       .eq("status", "active")
       .lte("next_attempt_at", new Date().toISOString());
 
@@ -16139,21 +16247,58 @@ async function processOneOrderRetryJob(job) {
     thread = data || null;
   }
 
-  const postToThread = async (body, prefix = "AI") => {
-    if (!thread) return;
-    const insertResult = await supabaseAdmin.from("support_messages").insert({
-      thread_id: thread.id,
-      sender_type: "bot",
-      body,
-    });
-    if (insertResult.error) {
-      console.error(`[Order retry jobs] Message insert error for job ${job.id}:`, insertResult.error.message);
+  /* Discord-ticket-linked jobs (no thread_id) post straight into the ticket
+     channel instead of a mirrored support thread. Resolve it once up front
+     — if the channel is gone (ticket closed/archived, channel deleted), give
+     up on this job now rather than retrying forever against a channel that
+     no longer exists. If the bot just isn't connected at this exact tick,
+     leave the job active so the next 30-minute sweep can try again. */
+  let discordTicketChannel = null;
+  if (!thread && job.discord_channel_id) {
+    if (!discordBot) return;
+    try {
+      discordTicketChannel = await discordBot.channels.fetch(job.discord_channel_id);
+    } catch (fetchError) {
+      console.error(`[Order retry jobs] Discord ticket channel unavailable for job ${job.id}:`, fetchError.message);
     }
-    await supabaseAdmin
-      .from("support_threads")
-      .update({ updated_at: new Date().toISOString(), last_message_at: new Date().toISOString() })
-      .eq("id", thread.id);
-    await mirrorToSupportThread(thread.id, thread.discord_thread_id, prefix, body);
+    if (!discordTicketChannel) {
+      await supabaseAdmin
+        .from("order_retry_jobs")
+        .update({
+          status: "cancelled",
+          last_error: "Discord ticket channel no longer exists",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
+      return;
+    }
+  }
+
+  const postUpdate = async (body, prefix = "AI") => {
+    if (thread) {
+      const insertResult = await supabaseAdmin.from("support_messages").insert({
+        thread_id: thread.id,
+        sender_type: "bot",
+        body,
+      });
+      if (insertResult.error) {
+        console.error(`[Order retry jobs] Message insert error for job ${job.id}:`, insertResult.error.message);
+      }
+      await supabaseAdmin
+        .from("support_threads")
+        .update({ updated_at: new Date().toISOString(), last_message_at: new Date().toISOString() })
+        .eq("id", thread.id);
+      await mirrorToSupportThread(thread.id, thread.discord_thread_id, prefix, body);
+      return;
+    }
+
+    if (discordTicketChannel) {
+      try {
+        await discordTicketChannel.send(body);
+      } catch (sendError) {
+        console.error(`[Order retry jobs] Discord channel send failed for job ${job.id}:`, sendError.message);
+      }
+    }
   };
 
   /* Already fulfilled through some other path (e.g. /retryunfulfilled, the
@@ -16163,7 +16308,7 @@ async function processOneOrderRetryJob(job) {
       .from("order_retry_jobs")
       .update({ status: "completed", updated_at: new Date().toISOString() })
       .eq("id", job.id);
-    await postToThread(`Good news — your key just came through: \`${order.delivered_key_value || ""}\`. Enjoy!`);
+    await postUpdate(`Good news — your key just came through: \`${order.delivered_key_value || ""}\`. Enjoy!`);
     return;
   }
 
@@ -16185,7 +16330,7 @@ async function processOneOrderRetryJob(job) {
       .from("order_retry_jobs")
       .update({ status: "completed", updated_at: new Date().toISOString() })
       .eq("id", job.id);
-    await postToThread(`Good news — your key just came through: \`${syncResult.keyValue}\`. Enjoy!`);
+    await postUpdate(`Good news — your key just came through: \`${syncResult.keyValue}\`. Enjoy!`);
     return;
   }
 
@@ -16203,7 +16348,7 @@ async function processOneOrderRetryJob(job) {
       .from("order_retry_jobs")
       .update({ status: "completed", updated_at: new Date().toISOString() })
       .eq("id", job.id);
-    await postToThread(`Good news — your key just came through: \`${freshOrder.delivered_key_value || ""}\`. Enjoy!`);
+    await postUpdate(`Good news — your key just came through: \`${freshOrder.delivered_key_value || ""}\`. Enjoy!`);
     return;
   }
 
@@ -16221,11 +16366,11 @@ async function processOneOrderRetryJob(job) {
       })
       .eq("id", job.id);
 
-    await postToThread("This is taking longer than expected — I've flagged it for our team to look at manually, sorry for the wait.");
+    await postUpdate("This is taking longer than expected — I've flagged it for our team to look at manually, sorry for the wait.");
 
-    /* Extra staff-alert line so this doesn't sit silently in the mirrored
-       Discord thread — same idea as the @-mention handleUnfulfilledOrder
-       sends to the low-stock channel, just aimed at this ticket's thread. */
+    /* Extra staff-alert line so this doesn't sit silently unnoticed — same
+       idea as the @-mention handleUnfulfilledOrder sends to the low-stock
+       channel, just aimed at wherever this ticket lives. */
     if (thread) {
       const staffMention = BOT_ADMINS.map((id) => `<@${id}>`).join(" ");
       await mirrorToSupportThread(
@@ -16234,6 +16379,18 @@ async function processOneOrderRetryJob(job) {
         "System",
         `${staffMention} Order ${order.id} has failed automatic retry ${maxAttempts} times and needs manual attention.`
       );
+    } else if (discordTicketChannel) {
+      const staffMentionRoleId = discordEmployeeRoleId || discordAdminRoleId || discordOwnerRoleId;
+      if (staffMentionRoleId) {
+        try {
+          await discordTicketChannel.send({
+            content: `<@&${staffMentionRoleId}> Order ${order.id} has failed automatic retry ${maxAttempts} times and needs manual attention.`,
+            allowedMentions: { roles: [staffMentionRoleId] },
+          });
+        } catch (mentionError) {
+          console.error(`[Order retry jobs] Discord staff ping failed for job ${job.id}:`, mentionError.message);
+        }
+      }
     }
     return;
   }
@@ -16249,7 +16406,7 @@ async function processOneOrderRetryJob(job) {
     })
     .eq("id", job.id);
 
-  await postToThread("Retried again — still not there, next attempt in about 6 hours.");
+  await postUpdate("Retried again — still not there, next attempt in about 6 hours.");
 }
 
 setInterval(() => {
