@@ -2973,6 +2973,9 @@ if (isConfiguredValue(discordBotToken)) {
           .addStringOption(o => o.setName("product").setDescription("Product name, or \"All products\"").setRequired(true).setAutocomplete(true))
           .addStringOption(o => o.setName("variant").setDescription("Narrow to one duration/variant (optional — default: every variant)").setRequired(false).setAutocomplete(true)),
         new SlashCommandBuilder()
+          .setName("retryjobs")
+          .setDescription("List orders currently queued in the background auto-retry system (admin only)"),
+        new SlashCommandBuilder()
           .setName("customers")
           .setDescription("View recent purchases (admin only)")
           .addIntegerOption(o => o.setName("count").setDescription("Number of recent orders to show (default: 10)").setRequired(false)),
@@ -5767,6 +5770,7 @@ ${rows || '<div class="ct">No messages.</div>'}
           "`/upload` `/schedule` `/pendingschedules` `/cancelschedule` `/stats`",
           "`/togglebot` `/ticketbot <on|off>` `/payments` `/transcriptdemo`",
           "`/retryunfulfilled <product> [variant]` — retry paid-but-unfulfilled orders and show the pulled key(s); with nothing stuck and a specific variant picked, it force-pulls a fresh key from Cheats.Love instead (run manually, not scheduled)",
+          "`/retryjobs` — read-only view of orders currently queued in the background auto-retry system",
         ];
         embed.fields.push({ name: "Admin", value: adminCmds.join("\n"), inline: false });
       }
@@ -6316,6 +6320,71 @@ ${rows || '<div class="ct">No messages.</div>'}
         return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }], components: [] });
       } finally {
         activeRetryUnfulfilledRun = null;
+      }
+    }
+
+    /* ── /retryjobs — read-only visibility into the background auto-retry
+       queue (order_retry_jobs). Staff previously had no way to see which
+       orders were actively being retried without happening to be in the
+       right ticket when a status update landed. This never calls
+       syncPaidOrder or touches Cheats.Love — it only reads Supabase. */
+    if (interaction.commandName === "retryjobs") {
+      if (!isDiscordAdminInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      try {
+        await interaction.deferReply({ ephemeral: true });
+        const JOBS_CAP = 25;
+        const { data: jobs, error } = await supabaseAdmin
+          .from("order_retry_jobs")
+          .select("id, order_id, thread_id, discord_channel_id, status, attempts, max_attempts, next_attempt_at, created_at")
+          .eq("status", "active")
+          .order("next_attempt_at", { ascending: true })
+          .limit(JOBS_CAP + 1); // +1 so we can tell staff there's more waiting
+
+        if (error) throw error;
+
+        if (!jobs || !jobs.length) {
+          return interaction.editReply({
+            embeds: [{ description: "Nothing currently retrying.", color: 0x00c851 }],
+          });
+        }
+
+        const hasMore = jobs.length > JOBS_CAP;
+        const batch = jobs.slice(0, JOBS_CAP);
+
+        const orderIds = batch.map((j) => j.order_id);
+        const { data: orders, error: ordersError } = await supabaseAdmin
+          .from("orders")
+          .select("id, product_slug")
+          .in("id", orderIds);
+        if (ordersError) throw ordersError;
+        const ordersById = new Map((orders || []).map((o) => [o.id, o]));
+
+        const lines = batch.map((job) => {
+          const order = ordersById.get(job.order_id);
+          const productName = order ? (getCatalogItemByInventorySlug(order.product_slug)?.name || order.product_slug) : "Unknown product";
+          const shortId = job.order_id ? job.order_id.slice(0, 8) : "unknown";
+          const nextAttempt = job.next_attempt_at ? `<t:${Math.floor(new Date(job.next_attempt_at).getTime() / 1000)}:R>` : "unknown";
+          const where = job.discord_channel_id ? `<#${job.discord_channel_id}>` : (job.thread_id ? "website chat" : "unknown");
+          return `**${productName}** — \`${shortId}\`\n${job.attempts}/${job.max_attempts} attempts — next ${nextAttempt} — ${where}`;
+        });
+
+        let description = lines.join("\n\n");
+        if (description.length > 3900) description = description.slice(0, 3900) + "…";
+        if (hasMore) description += `\n\n…and ${jobs.length - JOBS_CAP} more.`;
+
+        return interaction.editReply({
+          embeds: [{
+            title: "Active retry jobs",
+            description,
+            color: 0x5865f2,
+            footer: { text: "Read-only — this doesn't retry anything itself." },
+          }],
+        });
+      } catch (err) {
+        console.error("[Slash /retryjobs]", err.message);
+        return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
       }
     }
 
