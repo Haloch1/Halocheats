@@ -130,7 +130,7 @@ function cheatsloveCoversInventory(inventorySlug) {
 const adminAccessKey = process.env.ADMIN_ACCESS_KEY || "";
 const ownerRequestsKey = process.env.OWNER_REQUESTS_KEY || "";
 const geminiApiKey = process.env.GEMINI_API_KEY || "";
-const geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const geminiModel = process.env.GEMINI_MODEL || "gemini-3.6-flash";
 const groqApiKey = process.env.GROQ_API_KEY || "";
 /* Groq model. llama-3.1-8b-instant was deprecated by Groq on 2026-06-17;
    openai/gpt-oss-20b is the recommended replacement. Override via env if needed. */
@@ -4135,7 +4135,7 @@ if (isConfiguredValue(discordBotToken)) {
       const content = message.content || "";
 
       /* 1) Link filter — delete non-staff messages with a non-allowlisted link. */
-      if (!linkAllowChannels.includes(channelId)) {
+      if (!linkAllowChannels.includes(channelId) && !isManagedDiscordTicket(message.channel)) {
         const tokens = content.match(linkRegexG) || [];
         const disallowed = tokens.some((tok) => {
           const host = linkHost(tok);
