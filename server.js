@@ -168,7 +168,7 @@ if (!discordCustomerRoleId) {
   console.warn("[Discord] DISCORD_CUSTOMER_ROLE_ID is not set — the Customer role cannot be assigned until you add it to the environment.");
 }
 const discordRestockChannelId =
-  process.env.DISCORD_RESTOCK_CHANNEL_ID || "1528634344682422394";
+  process.env.DISCORD_RESTOCK_CHANNEL_ID || "1533570508845486272";
 const discordReviewChannelId = process.env.DISCORD_REVIEW_CHANNEL_ID || "";
 const discordVerifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || "";
 const discordUnverifiedRoleId = process.env.DISCORD_UNVERIFIED_ROLE_ID || "";
