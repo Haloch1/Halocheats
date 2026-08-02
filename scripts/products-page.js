@@ -53,6 +53,7 @@ import productR6sChamsImage from "../assets/product-r6s-chams.webp";
 import productR6sCrusaderImage from "../assets/product-r6s-crusader.webp";
 import productR6sNoRecoilImage from "../assets/product-r6s-no-recoil.webp";
 import productR6sVegaImage from "../assets/product-r6s-vega.webp";
+import productR6sLethalImage from "../assets/product-r6s-lethal.webp";
 import productRustDullwaveImage from "../assets/product-rust-dullwave.webp";
 import productRustMasonFullImage from "../assets/product-rust-mason-full.webp";
 import productRustMasonLiteImage from "../assets/product-rust-mason-lite.webp";
@@ -171,6 +172,7 @@ const productArtwork = {
   "r6s-nfa-account": productR6sNfaAccountImage,
   "spoofer-lunar": productSpooferLunarImage,
   "spoofer-shadow": productSpooferShadowImage,
+  "r6s-lethal": productR6sLethalImage,
 };
 
 /* Account nav button is rendered icon-only by initWallet(); no text set here. */
