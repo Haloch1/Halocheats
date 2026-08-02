@@ -5849,7 +5849,15 @@ ${rows || '<div class="ct">No messages.</div>'}
       if (!isDiscordAdminInteraction(interaction)) {
         return interaction.reply({ embeds: [{ description: "Admin only — this can spend the Cheats.Love balance in bulk.", color: 0xff4444 }], ephemeral: true });
       }
+      if (activeRetryUnfulfilledRun) {
+        return interaction.reply({
+          embeds: [{ description: "A retry is already running — use the Stop button on that message, or wait for it to finish.", color: 0xff4444 }],
+          ephemeral: true,
+        });
+      }
       await interaction.deferReply({ ephemeral: true });
+      const run = { cancelled: false };
+      activeRetryUnfulfilledRun = run;
       try {
         const productInput = interaction.options.getString("product");
         let inventorySlugs = null; // null = every product
@@ -5860,6 +5868,7 @@ ${rows || '<div class="ct">No messages.</div>'}
             (p) => p.slug === productInput || p.name.toLowerCase() === productInput.toLowerCase() || p.name.toLowerCase().includes(productInput.toLowerCase())
           );
           if (!matchedProduct) {
+            activeRetryUnfulfilledRun = null;
             return interaction.editReply({
               embeds: [{ description: 'Product not found. Start typing to search, or pick "All products".', color: 0xff4444 }],
             });
@@ -5881,6 +5890,7 @@ ${rows || '<div class="ct">No messages.</div>'}
         if (error) throw error;
 
         if (!paidOrders || !paidOrders.length) {
+          activeRetryUnfulfilledRun = null;
           return interaction.editReply({
             embeds: [{ title: "Nothing to retry", description: `No unfulfilled orders found for **${productLabel}**.`, color: 0x00c851 }],
           });
@@ -5889,9 +5899,28 @@ ${rows || '<div class="ct">No messages.</div>'}
         const hasMore = paidOrders.length > RETRY_CAP;
         const batch = paidOrders.slice(0, RETRY_CAP);
 
+        const stopRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId("retryunfulfilled_stop").setLabel("Stop").setStyle(ButtonStyle.Danger)
+        );
+        await interaction.editReply({
+          embeds: [{
+            title: "Retrying…",
+            description: `**${productLabel}** — working through ${batch.length} unfulfilled order(s). This can take a bit since it's done one at a time.`,
+            color: 0xf59e0b,
+          }],
+          components: [stopRow],
+        });
+
         let delivered = 0;
         let stillUnfulfilled = 0;
+        let attempted = 0;
+        let stoppedEarly = false;
         for (const order of batch) {
+          if (run.cancelled) {
+            stoppedEarly = true;
+            break;
+          }
+          attempted += 1;
           try {
             await syncPaidOrder({
               id: order.stripe_session_id || null,
@@ -5911,10 +5940,17 @@ ${rows || '<div class="ct">No messages.</div>'}
           }
         }
 
+        const skipped = batch.length - attempted;
+        const descriptionParts = [
+          `**${productLabel}** — ${stoppedEarly ? "stopped early by staff after" : "checked"} ${attempted} of ${batch.length} unfulfilled order(s).`,
+        ];
+        if (skipped > 0) descriptionParts.push(`${skipped} order(s) were left untouched — run it again to pick up where this left off.`);
+        if (!stoppedEarly && hasMore) descriptionParts.push(`More than ${RETRY_CAP} were waiting in total — run again to keep going.`);
+
         return interaction.editReply({
           embeds: [{
-            title: "Retry complete",
-            description: `**${productLabel}** — checked ${batch.length} unfulfilled order(s)${hasMore ? ` (more than ${RETRY_CAP} were waiting — run again to keep going)` : ""}.`,
+            title: stoppedEarly ? "Retry stopped" : "Retry complete",
+            description: descriptionParts.join(" "),
             color: delivered > 0 ? 0x00c851 : 0xf59e0b,
             fields: [
               { name: "Delivered just now", value: String(delivered), inline: true },
@@ -5922,11 +5958,29 @@ ${rows || '<div class="ct">No messages.</div>'}
             ],
             footer: { text: "This is manual — nothing runs this automatically." },
           }],
+          components: [],
         });
       } catch (err) {
         console.error("[Slash /retryunfulfilled]", err.message);
-        return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
+        return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }], components: [] });
+      } finally {
+        activeRetryUnfulfilledRun = null;
       }
+    }
+
+    /* Stop button attached to the /retryunfulfilled progress message. Sets the
+       cancellation flag the running loop checks between orders — it can't
+       abort a Cheats.Love request already in flight, but it stops before
+       starting the next one. */
+    if (interaction.isButton && interaction.isButton() && interaction.customId === "retryunfulfilled_stop") {
+      if (!isDiscordAdminInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      if (!activeRetryUnfulfilledRun) {
+        return interaction.reply({ embeds: [{ description: "Nothing is currently running.", color: 0xf59e0b }], ephemeral: true });
+      }
+      activeRetryUnfulfilledRun.cancelled = true;
+      return interaction.reply({ embeds: [{ description: "Stopping after the current order finishes…", color: 0xf59e0b }], ephemeral: true });
     }
 
     if (interaction.commandName === "lookup") {
@@ -8567,6 +8621,11 @@ async function assignDiscordCustomerRole(order, buyerDiscordId) {
 }
 
 const unfulfilledAlertedAt = new Map();
+
+/* Tracks the single in-flight /retryunfulfilled run so it can be cancelled
+   mid-way via the Stop button, and so a second run can't start while one is
+   already going. Null when nothing is running. */
+let activeRetryUnfulfilledRun = null;
 
 async function handleUnfulfilledOrder(order, session) {
   const alertKey = String(order?.id || session?.metadata?.orderId || session?.id || "unknown");
