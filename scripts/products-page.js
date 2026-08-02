@@ -73,6 +73,21 @@ import productFragpunkDullwaveImage from "../assets/product-fragpunk-dullwave.we
 import productR6sNfaAccountImage from "../assets/product-r6s-nfa-account.webp";
 import productSpooferLunarImage from "../assets/product-spoofer-lunar.webp";
 import productSpooferShadowImage from "../assets/product-spoofer-shadow.webp";
+// New per-product tablet images (2026-08-02 batch 3)
+import productRustMrProImage from "../assets/product-rust-mrpro.webp";
+import productApexMasonImage from "../assets/product-apex-mason.webp";
+import productApexAncientImage from "../assets/product-apex-ancient.webp";
+import productApexDullwaveImage from "../assets/product-apex-dullwave.webp";
+import productApexArcaneImage from "../assets/product-apex-arcane.webp";
+import productPubgArcaneImage from "../assets/product-pubg-arcane.webp";
+import productPubgShadowImage from "../assets/product-pubg-shadow.webp";
+import productDeltaForceDullwaveImage from "../assets/product-delta-force-dullwave.webp";
+import productDeltaForceAncientImage from "../assets/product-delta-force-ancient.webp";
+import productDeltaForceLunaChamsImage from "../assets/product-delta-force-luna-chams.webp";
+import productMarvelRivalsDullwaveImage from "../assets/product-marvel-rivals-dullwave.webp";
+import productMarvelRivalsPredatorImage from "../assets/product-marvel-rivals-predator.webp";
+import productMarvelRivalsShadowImage from "../assets/product-marvel-rivals-shadow.webp";
+import productOverwatch2MasonImage from "../assets/product-overwatch2-mason.webp";
 
 initReveal();
 
@@ -173,6 +188,21 @@ const productArtwork = {
   "spoofer-lunar": productSpooferLunarImage,
   "spoofer-shadow": productSpooferShadowImage,
   "r6s-lethal": productR6sLethalImage,
+  // New per-product tablet images (2026-08-02 batch 3)
+  "rust-mrpro": productRustMrProImage,
+  "apex-mason": productApexMasonImage,
+  "apex-ancient": productApexAncientImage,
+  "apex-dullwave": productApexDullwaveImage,
+  "apex-arcane": productApexArcaneImage,
+  "pubg-arcane": productPubgArcaneImage,
+  "pubg-shadow": productPubgShadowImage,
+  "delta-force-dullwave": productDeltaForceDullwaveImage,
+  "delta-force-ancient": productDeltaForceAncientImage,
+  "delta-force-luna-chams": productDeltaForceLunaChamsImage,
+  "marvel-rivals-dullwave": productMarvelRivalsDullwaveImage,
+  "marvel-rivals-predator": productMarvelRivalsPredatorImage,
+  "marvel-rivals-shadow": productMarvelRivalsShadowImage,
+  "overwatch2-mason": productOverwatch2MasonImage,
 };
 
 /* Account nav button is rendered icon-only by initWallet(); no text set here. */
