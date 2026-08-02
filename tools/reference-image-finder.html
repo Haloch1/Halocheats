@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>XenCheats — Reference Image Finder</title>
+<style>
+  :root {
+    --red: #e0263c;
+    --red-dark: #a4172a;
+    --bg: #0c0c0e;
+    --panel: #161618;
+    --border: #2a2a2e;
+    --text: #f2f2f2;
+    --muted: #9a9a9e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 50% 0%, #1a0d0f 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 48px 20px;
+  }
+  .wrap { width: 100%; max-width: 560px; }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: 0.5px; }
+  h1 span { color: var(--red); }
+  p.sub { color: var(--muted); margin: 0 0 28px; font-size: 14px; }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  input[type="text"] {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 15px;
+    margin-bottom: 18px;
+    outline: none;
+  }
+  input[type="text"]:focus { border-color: var(--red); }
+  button {
+    width: 100%;
+    background: linear-gradient(180deg, var(--red), var(--red-dark));
+    color: #fff;
+    border: none;
+    padding: 13px 20px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 20px;
+  }
+  button:hover { filter: brightness(1.08); }
+  .links { display: flex; flex-direction: column; gap: 8px; }
+  .link-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .link-row span { font-size: 14px; color: var(--muted); }
+  .link-row a {
+    color: var(--text);
+    font-size: 13px;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    border-radius: 6px;
+  }
+  .link-row a:hover { border-color: var(--red); color: var(--red); }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 14px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Xen<span>Cheats</span> — Reference Image Finder</h1>
+    <p class="sub">Type a game name, open Google Image searches for its operators, logo, and background art — for pulling reference images into the category image prompt.</p>
+
+    <label for="game">Game name</label>
+    <input type="text" id="game" placeholder="e.g. Fortnite, CS2, Apex Legends" />
+
+    <button onclick="openAll()">Open all 3 searches</button>
+
+    <div class="links">
+      <div class="link-row"><span id="label-operators">— operators</span><a id="link-operators" href="#" target="_blank">Open</a></div>
+      <div class="link-row"><span id="label-logo">— logo</span><a id="link-logo" href="#" target="_blank">Open</a></div>
+      <div class="link-row"><span id="label-background">— background</span><a id="link-background" href="#" target="_blank">Open</a></div>
+    </div>
+
+    <p class="hint">Opens Google Images. If your browser blocks the tabs, allow popups for this page or click each link individually.</p>
+  </div>
+
+<script>
+function searchUrl(query) {
+  return "https://www.google.com/search?tbm=isch&q=" + encodeURIComponent(query);
+}
+
+function updateLinks() {
+  const game = document.getElementById('game').value.trim() || "[game]";
+  const suffixes = ["operators", "logo", "background"];
+  suffixes.forEach(suffix => {
+    document.getElementById('label-' + suffix).textContent = `${game} ${suffix}`;
+    document.getElementById('link-' + suffix).href = searchUrl(`${game} ${suffix}`);
+  });
+}
+
+function openAll() {
+  const game = document.getElementById('game').value.trim();
+  if (!game) { document.getElementById('game').focus(); return; }
+  updateLinks();
+  ["operators", "logo", "background"].forEach(suffix => {
+    window.open(searchUrl(`${game} ${suffix}`), "_blank");
+  });
+}
+
+document.getElementById('game').addEventListener('input', updateLinks);
+document.getElementById('game').addEventListener('keydown', e => { if (e.key === 'Enter') openAll(); });
+updateLinks();
+</script>
+</body>
+</html>

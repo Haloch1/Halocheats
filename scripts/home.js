@@ -8,6 +8,14 @@ import spooferCategoryImage from "../assets/spoofer.webp";
 import apexCategoryImage from "../assets/apex.webp";
 import eftCategoryImage from "../assets/tarkov.webp";
 import accountsCategoryImage from "../assets/accounts.webp";
+import battlefieldCategoryImage from "../assets/battlefield.webp";
+import codCategoryImage from "../assets/cod.webp";
+import cs2CategoryImage from "../assets/cs2.webp";
+import deltaForceCategoryImage from "../assets/deltaforce.webp";
+import fragpunkCategoryImage from "../assets/fragpunk.webp";
+import marvelRivalsCategoryImage from "../assets/marvelrivals.webp";
+import overwatchCategoryImage from "../assets/overwatch.webp";
+import pubgCategoryImage from "../assets/pubg.webp";
 import haloLogoImage from "../assets/hc-logo.png";
 
 initReveal();
@@ -117,6 +125,14 @@ function homeCategoryImage(category) {
   if (/spoofer/i.test(category)) return spooferCategoryImage;
   if (/apex/i.test(category)) return apexCategoryImage;
   if (/tarkov|eft/i.test(category)) return eftCategoryImage;
+  if (/battlefield/i.test(category)) return battlefieldCategoryImage;
+  if (/call of duty/i.test(category)) return codCategoryImage;
+  if (/counter-strike|cs2/i.test(category)) return cs2CategoryImage;
+  if (/delta force/i.test(category)) return deltaForceCategoryImage;
+  if (/fragpunk/i.test(category)) return fragpunkCategoryImage;
+  if (/marvel rivals/i.test(category)) return marvelRivalsCategoryImage;
+  if (/overwatch/i.test(category)) return overwatchCategoryImage;
+  if (/pubg/i.test(category)) return pubgCategoryImage;
   return haloLogoImage;
 }
 

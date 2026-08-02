@@ -1,0 +1,28 @@
+XenCheats — Category Image Prompt (artlist.io)
+Different from the tablet product-card prompt (xencheats-tablet-product-image-prompt.txt).
+This one is a flat standalone image, no tablet/device, no XenCheats wordmark or
+pill badges — just character + background + game logo. Upload three reference
+images each time: character, background, and the game's logo. Azad pre-edits
+the character and background references to be red-toned before uploading, so
+this prompt doesn't need to instruct any recoloring itself.
+
+---
+
+A polished, photorealistic key-art style category image in portrait orientation with soft rounded corners — no tablet, phone, device frame, or UI elements of any kind, just the standalone artwork itself.
+
+Use the character shown in the provided character reference image as the main subject in the foreground, positioned centered or slightly off-center, full-body, filling most of the frame's height.
+
+Use the scene shown in the provided background reference image as the background behind the character, filling the entire frame edge to edge.
+
+Use the logo shown in the provided logo reference image for the game's wordmark, recreated faithfully in the same lettering and style, placed boldly near the bottom of the image.
+
+Do not add any other text, watermark, badge, tagline, or brand element beyond that logo. Do not add a tablet or any device — this is a flat standalone image only.
+
+Cinematic lighting, sharp focus, high detail, game key-art quality composition.
+
+---
+
+Notes:
+- Full-body character here (unlike the tablet product cards, which are waist-up only).
+- No "XENCHEATS" wordmark, no tagline, no "Global Compatibility" pill — this format only shows the game's own logo.
+- Swap in the game's actual name mentally when picking the logo reference; the prompt text itself doesn't need to spell out the game name since the logo reference image carries it.

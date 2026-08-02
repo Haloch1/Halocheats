@@ -32,6 +32,30 @@ import productStackedPcImage from "../assets/product-stacked-pc-account.webp";
 import apexCategoryImage from "../assets/apex.webp";
 import eftCategoryImage from "../assets/tarkov.webp";
 import accountsCategoryImage from "../assets/accounts.webp";
+import battlefieldCategoryImage from "../assets/battlefield.webp";
+import codCategoryImage from "../assets/cod.webp";
+import cs2CategoryImage from "../assets/cs2.webp";
+import deltaForceCategoryImage from "../assets/deltaforce.webp";
+import fragpunkCategoryImage from "../assets/fragpunk.webp";
+import marvelRivalsCategoryImage from "../assets/marvelrivals.webp";
+import overwatchCategoryImage from "../assets/overwatch.webp";
+import pubgCategoryImage from "../assets/pubg.webp";
+// New per-product tablet images (2026-08-02 batch)
+import productCs2ArcaneImage from "../assets/product-cs2-arcane.webp";
+import productCs2PredatorImage from "../assets/product-cs2-predator.webp";
+import productCs2SkinchangerImage from "../assets/product-cs2-skinchanger.webp";
+import productCs2StrikeforceImage from "../assets/product-cs2-strikeforce.webp";
+import productFortniteAncientImage from "../assets/product-fortnite-ancient.webp";
+import productFortniteArcaneImage from "../assets/product-fortnite-arcane.webp";
+import productFortniteDullwaveImage from "../assets/product-fortnite-dullwave.webp";
+import productR6sAncientImage from "../assets/product-r6s-ancient.webp";
+import productR6sChamsImage from "../assets/product-r6s-chams.webp";
+import productR6sCrusaderImage from "../assets/product-r6s-crusader.webp";
+import productR6sNoRecoilImage from "../assets/product-r6s-no-recoil.webp";
+import productR6sVegaImage from "../assets/product-r6s-vega.webp";
+import productRustDullwaveImage from "../assets/product-rust-dullwave.webp";
+import productRustMasonFullImage from "../assets/product-rust-mason-full.webp";
+import productRustMasonLiteImage from "../assets/product-rust-mason-lite.webp";
 
 initReveal();
 
@@ -98,6 +122,23 @@ const productArtwork = {
   // Accounts
   "linked-nfa": productLinkedNfaImage,
   "stacked-pc-account": productStackedPcImage,
+  // New per-product tablet images (2026-08-02 batch) — keyed by the real,
+  // current catalog slugs from data/products.js.
+  "cs2-arcane": productCs2ArcaneImage,
+  "cs2-predator": productCs2PredatorImage,
+  "cs2-skinchanger": productCs2SkinchangerImage,
+  "cs2-strikeforce": productCs2StrikeforceImage,
+  "fortnite-ancient": productFortniteAncientImage,
+  "fortnite-arcane": productFortniteArcaneImage,
+  "fortnite-dullwave": productFortniteDullwaveImage,
+  "r6s-ancient": productR6sAncientImage,
+  "r6s-chams": productR6sChamsImage,
+  "r6s-crusader": productR6sCrusaderImage,
+  "r6s-no-recoil": productR6sNoRecoilImage,
+  "r6s-vega": productR6sVegaImage,
+  "rust-dullwave": productRustDullwaveImage,
+  "rust-mason-full": productRustMasonFullImage,
+  "rust-mason-lite": productRustMasonLiteImage,
 };
 
 /* Account nav button is rendered icon-only by initWallet(); no text set here. */
@@ -454,6 +495,38 @@ function categoryImageSrc(category) {
 
   if (/tarkov|eft/i.test(category)) {
     return eftCategoryImage;
+  }
+
+  if (/battlefield/i.test(category)) {
+    return battlefieldCategoryImage;
+  }
+
+  if (/call of duty/i.test(category)) {
+    return codCategoryImage;
+  }
+
+  if (/counter-strike|cs2/i.test(category)) {
+    return cs2CategoryImage;
+  }
+
+  if (/delta force/i.test(category)) {
+    return deltaForceCategoryImage;
+  }
+
+  if (/fragpunk/i.test(category)) {
+    return fragpunkCategoryImage;
+  }
+
+  if (/marvel rivals/i.test(category)) {
+    return marvelRivalsCategoryImage;
+  }
+
+  if (/overwatch/i.test(category)) {
+    return overwatchCategoryImage;
+  }
+
+  if (/pubg/i.test(category)) {
+    return pubgCategoryImage;
   }
 
   return haloLogoImage;

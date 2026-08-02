@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>XenCheats — Tablet Prompt Generator</title>
+<style>
+  :root {
+    --red: #e0263c;
+    --red-dark: #a4172a;
+    --bg: #0c0c0e;
+    --panel: #161618;
+    --border: #2a2a2e;
+    --text: #f2f2f2;
+    --muted: #9a9a9e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 50% 0%, #1a0d0f 0%, var(--bg) 60%);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 48px 20px;
+  }
+  .wrap { width: 100%; max-width: 720px; }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 4px;
+    letter-spacing: 0.5px;
+  }
+  h1 span { color: var(--red); }
+  p.sub {
+    color: var(--muted);
+    margin: 0 0 28px;
+    font-size: 14px;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  input[type="text"] {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 15px;
+    margin-bottom: 22px;
+    outline: none;
+  }
+  input[type="text"]:focus { border-color: var(--red); }
+  textarea {
+    width: 100%;
+    min-height: 340px;
+    padding: 16px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13.5px;
+    line-height: 1.6;
+    resize: vertical;
+    outline: none;
+  }
+  .row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+  button {
+    background: linear-gradient(180deg, var(--red), var(--red-dark));
+    color: #fff;
+    border: none;
+    padding: 11px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { filter: brightness(1.08); }
+  button.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .status {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .status.ok { color: #4ade80; }
+  .toggle-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 22px;
+  }
+  .toggle-btn {
+    flex: 1;
+    padding: 10px 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: center;
+  }
+  .toggle-btn.active {
+    border-color: var(--red);
+    color: var(--text);
+    background: rgba(224,38,60,0.12);
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Xen<span>Cheats</span> — Tablet Prompt Generator</h1>
+    <p class="sub">Type the game and product name, get the full artlist.io prompt ready to paste. Upload your character reference image directly in artlist.io alongside this prompt.</p>
+
+    <label for="game">Game name</label>
+    <input type="text" id="game" placeholder="e.g. CS2, Fortnite, Apex" />
+
+    <label for="name">Product / cheat name (optional)</label>
+    <input type="text" id="name" placeholder="e.g. Predator, Full, Ancient — leave blank for just the game name" />
+
+    <label>Centered visual</label>
+    <div class="toggle-row">
+      <div class="toggle-btn active" id="btn-character" onclick="setMode('character')">Character</div>
+      <div class="toggle-btn" id="btn-motherboard" onclick="setMode('motherboard')">Motherboard / Hardware</div>
+    </div>
+
+    <div class="row">
+      <label style="margin:0" for="character">Extra notes (optional)</label>
+    </div>
+    <input type="text" id="character" placeholder="Leave blank to just use the uploaded reference image as-is" />
+
+    <div class="row">
+      <button onclick="generate()">Generate</button>
+      <button class="secondary" onclick="copyPrompt()">Copy</button>
+      <span class="status" id="status"></span>
+    </div>
+
+    <textarea id="output" readonly></textarea>
+  </div>
+
+<script>
+let mode = 'character';
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn-character').classList.toggle('active', m === 'character');
+  document.getElementById('btn-motherboard').classList.toggle('active', m === 'motherboard');
+  document.getElementById('character').placeholder = m === 'motherboard'
+    ? 'Leave blank to just use the uploaded motherboard reference image as-is'
+    : 'Leave blank to just use the uploaded reference image as-is';
+  generate();
+}
+
+function buildPrompt(game, name, extra, mode) {
+  const gameName = game.trim() || "[GAME NAME]";
+  const productName = name.trim();
+  const titleInstruction = productName
+    ? `a large two-line product title: "${gameName}" on the top line, and "${productName}" directly below it on its own line — no dash or slash between them, just two stacked lines`
+    : `a large product title reading "${gameName}"`;
+  const titleTextRule = productName ? `"${gameName}", "${productName}"` : `"${gameName}"`;
+
+  let centerpieceLine, centerpieceTextRule;
+  if (mode === 'motherboard') {
+    const subjectLine = extra.trim()
+      ? `the motherboard shown in the provided reference image (${extra.trim()})`
+      : "the motherboard shown in the provided reference image";
+    centerpieceLine = `Centered-left on the card, ${subjectLine}, framed so it fills most of the card's height as a large, detailed centerpiece: if it appears small or distant in the reference image, zoom in and scale it up; if it's already large or close-up in the reference image, keep that same scale rather than zooming in further. Shown at a slight angle for depth, with the circuit traces, chipset and connectors crisply visible and lit by the same red glow as the rest of the scene — do not carry over the reference image's original background or environment into the card.`;
+    centerpieceTextRule = `use the layout/background reference only for the device, framing, colors and lighting — ignore any character or object present in that reference image entirely. The hardware shown on the card must come only from the separate motherboard reference image.`;
+  } else {
+    const subjectLine = extra.trim()
+      ? `the character shown in the provided reference image (${extra.trim()})`
+      : "the character shown in the provided reference image";
+    centerpieceLine = `Centered-left on the card, ${subjectLine}, framed so the character fills most of the card's height as a large, prominent close-up: if the character appears small or distant in the reference image, zoom in and scale them up; if the character is already large or close-up in the reference image, keep that same scale rather than zooming in further. Shown from the waist up only as a half-body crop, standing normally with no overlays or effects on them — do not render the legs or lower body, and do not carry over the reference image's background, environment or map into the card.`;
+    centerpieceTextRule = `use the layout/background reference only for the device, framing, colors and lighting — ignore any character present in that reference image entirely. The character shown on the card must come only from the separate character reference image.`;
+  }
+
+  return `A photorealistic 3D product render of a tablet, shot as premium commercial product photography. Match the tablet device and framing exactly to the reference: the same dark charcoal/black slate tablet in landscape orientation, thin uniform black bezels, tilted in a three-quarter view leaning slightly toward the viewer, with a second identical tablet sitting behind and to the left of it, only its top-left edge visible, the same soft top-down studio lighting. Do not use a bright silver or Apple-style iPad, and do not use a flat plain background.
+
+Background: pure black, with a soft dark red glow bleeding in from the corners and edges of the frame — strongest at the top-left and top-right corners, like a faint red emergency light — fading to solid black around the tablets and toward the lower half. Beneath the tablets, a glossy dark floor reflects the tablet and its on-screen content as a soft, blurred, red-tinted mirror reflection that fades down into black. Keep the whole image red, black and white — absolutely no blue, no purple and no green anywhere.
+
+On the tablet screen, display the XenCheats card artwork, filling the screen edge to edge as a single full-screen image with no operating-system bars, no app menu, no buttons, no sliders and no extra interface — just the card design.
+
+The card design, in red and white on a near-black panel: top-left a bold "XENCHEATS" wordmark ("XEN" in white, "CHEATS" in red) with a small red tagline directly beneath reading "dominate every lobby". ${centerpieceLine} On the right side, ${titleInstruction}, in white and red. Bottom-right, a rounded pill badge outlined in red reading "Global Compatibility". Behind it, a faint dark tech-HUD backdrop spanning the full card: a low-opacity red world map silhouette stretched across the width, red radar rings centered behind it, and a subtle red grid pattern in the lower-left corner.
+
+Text rules: ${centerpieceTextRule} Do not copy any text, watermark, website or brand from the references. Render only this exact text and nothing else: "XENCHEATS", "dominate every lobby", ${titleTextRule}, and "Global Compatibility". Do not render "ximcheats", "nox cheats", "because winning is everything", "Twitch Edition", any website, any edition label, or any slash.
+
+Cinematic studio lighting, red and white palette, sharp crisp on-screen artwork, high detail, 3D product render.`;
+}
+
+function generate() {
+  const game = document.getElementById('game').value;
+  const name = document.getElementById('name').value;
+  const character = document.getElementById('character').value;
+  document.getElementById('output').value = buildPrompt(game, name, character, mode);
+  document.getElementById('status').textContent = '';
+}
+
+function copyPrompt() {
+  const out = document.getElementById('output');
+  if (!out.value) generate();
+  out.select();
+  navigator.clipboard.writeText(out.value).then(() => {
+    const s = document.getElementById('status');
+    s.textContent = 'Copied ✓';
+    s.className = 'status ok';
+    setTimeout(() => { s.textContent = ''; s.className = 'status'; }, 1800);
+  });
+}
+
+document.getElementById('game').addEventListener('input', generate);
+document.getElementById('name').addEventListener('input', generate);
+document.getElementById('character').addEventListener('input', generate);
+generate();
+</script>
+</body>
+</html>

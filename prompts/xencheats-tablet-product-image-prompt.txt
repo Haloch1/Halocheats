@@ -1,0 +1,41 @@
+XenCheats — Tablet Product Image Prompt (artlist.io)
+Template for generating per-product tablet mockup images. Swap the bracketed
+placeholders for each new product; everything else stays fixed so every
+product image matches. A local generator app for this is at
+tools/tablet-prompt-generator.html — type the game name and product name,
+get the full prompt, copy button included.
+
+Locked-in reference images (upload both alongside the text prompt in artlist.io):
+1. Layout/background/tablet reference — the PUBG Arcane render Azad approved
+   on 2026-08-01 (two tablets, red corner glow on black, red floor
+   reflection, radar+map HUD behind the character). Use this to pin framing
+   and coloring only. IMPORTANT: crop the PUBG character out of this
+   reference before uploading it (or use a version with the character
+   removed) — uploading it with the character still in frame causes artlist
+   to copy that character instead of the one from the character reference.
+2. Character reference — a clean, photorealistic (not stylized/illustrated)
+   image of that product's character, ideally with a simple/neutral
+   background so it doesn't bleed into the card.
+
+---
+
+A photorealistic 3D product render of a tablet, shot as premium commercial product photography. Match the tablet device and framing exactly to the reference: the same dark charcoal/black slate tablet in landscape orientation, thin uniform black bezels, tilted in a three-quarter view leaning slightly toward the viewer, with a second identical tablet sitting behind and to the left of it, only its top-left edge visible, the same soft top-down studio lighting. Do not use a bright silver or Apple-style iPad, and do not use a flat plain background.
+
+Background: pure black, with a soft dark red glow bleeding in from the corners and edges of the frame — strongest at the top-left and top-right corners, like a faint red emergency light — fading to solid black around the tablets and toward the lower half. Beneath the tablets, a glossy dark floor reflects the tablet and its on-screen content as a soft, blurred, red-tinted mirror reflection that fades down into black. Keep the whole image red, black and white — absolutely no blue, no purple and no green anywhere.
+
+On the tablet screen, display the XenCheats card artwork, filling the screen edge to edge as a single full-screen image with no operating-system bars, no app menu, no buttons, no sliders and no extra interface — just the card design.
+
+The card design, in red and white on a near-black panel: top-left a bold "XENCHEATS" wordmark ("XEN" in white, "CHEATS" in red) with a small red tagline directly beneath reading "dominate every lobby". Centered-left on the card, the character shown in the provided reference image, framed so the character fills most of the card's height as a large, prominent close-up: if the character appears small or distant in the reference image, zoom in and scale them up; if the character is already large or close-up in the reference image, keep that same scale rather than zooming in further. Shown from the waist up only as a half-body crop, standing normally with no overlays or effects on them — do not render the legs or lower body, and do not carry over the reference image's background, environment or map into the card. On the right side, a large two-line product title: "[GAME NAME]" on the top line, and "[PRODUCT NAME]" directly below it on its own line — no dash or slash between them, just two stacked lines, in white and red. Bottom-right, a rounded pill badge outlined in red reading "Global Compatibility". Behind the character, a faint dark tech-HUD backdrop spanning the full card: a low-opacity red world map silhouette stretched across the width, red radar rings centered directly behind the character's head and chest, and a subtle red grid pattern in the lower-left corner.
+
+Text rules: use the layout/background reference only for the device, framing, colors and lighting — ignore any character present in that reference image entirely. The character shown on the card must come only from the separate character reference image. Do not copy any text, watermark, website or brand from the references. Render only this exact text and nothing else: "XENCHEATS", "dominate every lobby", "[GAME NAME]", "[PRODUCT NAME]", and "Global Compatibility". Do not render "ximcheats", "nox cheats", "because winning is everything", "Twitch Edition", any website, any edition label, or any slash.
+
+Cinematic studio lighting, red and white palette, sharp crisp on-screen artwork, high detail, 3D product render.
+
+---
+
+Notes:
+- This version has NO ESP/wallhack overlay — the character is shown normally, no bounding box, no tracers, no health bar, no "ENEMY" tag.
+- Character comes from an uploaded reference image in artlist.io (not a text description) — upload the game's character art alongside this prompt each time.
+- Title is two stacked lines: [GAME NAME] on top (e.g. "CS2"), [PRODUCT NAME] below it (e.g. "Predator") — no dash between them. [PRODUCT NAME] is optional; if there's no separate cheat/edition name, just render [GAME NAME] alone.
+- Red placement is now explicit: corner glow (strongest top-left/top-right), floor reflection tint, radar rings + world map + grid HUD behind the character. This was added after Azad approved the PUBG Arcane render and asked for the exact red positioning to be locked in.
+- Category-image variant (blue/white, ESP overlay, "Nox Cheats" wordmark) was the old version — this red/white, no-ESP, "XenCheats" version is current as of 2026-08-01.
