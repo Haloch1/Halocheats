@@ -2402,6 +2402,10 @@ ${conversation || "No previous messages."}`;
         const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
         const json = text.match(/\{[\s\S]*\}/)?.[0];
         if (json) return applyTicketFirstMessageSafetyNet(normalizeTicketAiDecision(JSON.parse(json)), isFirstMessage);
+        console.warn("[Discord ticket AI] Gemini returned no parseable JSON; trying fallback. Raw text:", text.slice(0, 300));
+      } else {
+        const bodyText = await response.text().catch(() => "");
+        console.warn(`[Discord ticket AI] Gemini responded ${response.status}; trying fallback:`, bodyText.slice(0, 300));
       }
     } catch (error) {
       console.warn("[Discord ticket AI] Gemini unavailable; trying fallback:", error.message);
@@ -2434,6 +2438,10 @@ ${conversation || "No previous messages."}`;
         const text = String(data.choices?.[0]?.message?.content || "");
         const json = text.match(/\{[\s\S]*\}/)?.[0];
         if (json) return applyTicketFirstMessageSafetyNet(normalizeTicketAiDecision(JSON.parse(json)), isFirstMessage);
+        console.warn("[Discord ticket AI] Groq returned no parseable JSON. Raw text:", text.slice(0, 300));
+      } else {
+        const bodyText = await response.text().catch(() => "");
+        console.warn(`[Discord ticket AI] Groq responded ${response.status}:`, bodyText.slice(0, 300));
       }
     } catch (error) {
       console.warn("[Discord ticket AI] Fallback unavailable:", error.message);
@@ -2442,7 +2450,10 @@ ${conversation || "No previous messages."}`;
     }
   }
 
-  return { canHelp: false, reply: "", reason: "Automated support is unavailable." };
+  return applyTicketFirstMessageSafetyNet(
+    { canHelp: false, reply: "", reason: "Automated support is unavailable." },
+    isFirstMessage,
+  );
 }
 
 async function escalatePendingDiscordTicket(channel, reason) {
