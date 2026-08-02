@@ -827,6 +827,7 @@ const authRateLimitByIp = new Map();
 const adminAccessRateLimitByKey = new Map();
 const deleteKeyRateLimitByKey = new Map();
 const resellerApiRateLimitByKey = new Map();
+const orderIdRateLimitByUser = new Map();
 
 function parseCookies(req) {
   const cookieHeader = req.headers.cookie || "";
@@ -10450,6 +10451,184 @@ app.post("/api/promo/validate", async (req, res) => {
   return res.json({ valid: true, code: found.code, percent: found.percent });
 });
 
+/* ── Deterministic order-ID handling for "where's my key" live desk messages ──
+   Security requirement: the AI itself never verifies or fabricates order
+   status — only an order ID's real owner can trigger this (ownership is
+   enforced directly in the DB query below, not as a separate existence
+   check), and every branch here is plain backend logic with no LLM
+   involvement, so a customer can never talk the AI into inventing a status,
+   a key, or a retry promise. */
+const ORDER_ID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+function extractOrderIdFromText(text) {
+  const match = String(text || "").match(ORDER_ID_PATTERN);
+  return match ? match[0] : null;
+}
+
+function formatRetryEta(nextAttemptAt) {
+  const ms = new Date(nextAttemptAt).getTime() - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return "shortly";
+  const hours = Math.round(ms / (60 * 60 * 1000));
+  if (hours <= 0) return "less than an hour";
+  if (hours === 1) return "about 1 hour";
+  return `about ${hours} hours`;
+}
+
+/* Posts a system-authored (non-AI) message into a live desk thread and
+   mirrors it to the linked Discord thread, same as an AI reply would. */
+async function postDeterministicSupportReply(thread, discordThreadId, body) {
+  const insertResult = await supabaseAdmin.from("support_messages").insert({
+    thread_id: thread.id,
+    sender_type: "bot",
+    body,
+  });
+
+  if (insertResult.error) {
+    console.error("[Order ID desk] Bot message insert error:", insertResult.error.message);
+  }
+
+  await supabaseAdmin
+    .from("support_threads")
+    .update({ updated_at: new Date().toISOString(), last_message_at: new Date().toISOString() })
+    .eq("id", thread.id);
+
+  await mirrorToSupportThread(thread.id, discordThreadId, "AI", body);
+  return body;
+}
+
+/* Handles an Order ID pasted into live desk chat. Ownership + status are
+   verified in one query (`.eq("user_id", member.id)`) so a guessed or
+   overheard ID can never surface someone else's order or even confirm it
+   exists — wrong owner, malformed ID, and "doesn't exist" all look the same
+   (no row found) from the outside. */
+async function handleOrderIdSubmission(thread, discordThreadId, member, orderId) {
+  try {
+    checkRateLimit(orderIdRateLimitByUser, `orderid:${member.id}`, 15_000, "Too many order ID checks.");
+  } catch {
+    return postDeterministicSupportReply(
+      thread,
+      discordThreadId,
+      "Slow down a little — give it a few seconds between order ID checks and I'll take another look."
+    );
+  }
+
+  const { data: order, error } = await supabaseAdmin
+    .from("orders")
+    .select("id, status, product_slug, stripe_session_id, stripe_payment_intent, delivered_key_value, fulfilled_at")
+    .eq("id", orderId)
+    .eq("user_id", member.id)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[Order ID desk] Lookup error:", error.message);
+    return postDeterministicSupportReply(
+      thread,
+      discordThreadId,
+      "I couldn't look that order up right now — please try again in a moment or reach out on Discord if it keeps happening."
+    );
+  }
+
+  if (!order) {
+    return postDeterministicSupportReply(
+      thread,
+      discordThreadId,
+      "I couldn't find that Order ID on your account. Double check it from your Account page (Order History -> Copy Order ID) and send it again."
+    );
+  }
+
+  if (order.status === "fulfilled") {
+    return postDeterministicSupportReply(
+      thread,
+      discordThreadId,
+      `That order's already been delivered — check your Account page for the key.${order.delivered_key_value ? ` Your key: \`${order.delivered_key_value}\`` : ""}`
+    );
+  }
+
+  if (order.status !== "paid") {
+    return postDeterministicSupportReply(
+      thread,
+      discordThreadId,
+      `That order shows as "${order.status}" — not a completed payment. If you already paid, give it a minute and refresh your account page, or let me know if it's been a while.`
+    );
+  }
+
+  /* order.status === "paid": a genuine, verified unfulfilled order. */
+  const { data: existingJob } = await supabaseAdmin
+    .from("order_retry_jobs")
+    .select("id, next_attempt_at")
+    .eq("order_id", order.id)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (existingJob) {
+    return postDeterministicSupportReply(
+      thread,
+      discordThreadId,
+      `Already retrying this one — next attempt in ${formatRetryEta(existingJob.next_attempt_at)}, up to 4 times a day. I'll let you know here the moment it comes through.`
+    );
+  }
+
+  let syncResult;
+  try {
+    syncResult = await syncPaidOrder({
+      id: order.stripe_session_id,
+      payment_intent: order.stripe_payment_intent,
+      metadata: { orderId: order.id },
+    });
+  } catch (syncError) {
+    console.error("[Order ID desk] Immediate retry error:", syncError.message);
+    syncResult = undefined;
+  }
+
+  if (syncResult?.keyValue) {
+    return postDeterministicSupportReply(
+      thread,
+      discordThreadId,
+      `Good news — your key just came through: \`${syncResult.keyValue}\`. Enjoy!`
+    );
+  }
+
+  /* syncPaidOrder returns undefined both when the order is still unfulfilled
+     AND when it was fulfilled through some other path just now (e.g. the
+     account page's own auto-heal) — re-query to tell those apart. */
+  const { data: freshOrder } = await supabaseAdmin
+    .from("orders")
+    .select("status, delivered_key_value")
+    .eq("id", order.id)
+    .maybeSingle();
+
+  if (freshOrder?.status === "fulfilled") {
+    return postDeterministicSupportReply(
+      thread,
+      discordThreadId,
+      `Good news — your key just came through: \`${freshOrder.delivered_key_value || ""}\`. Enjoy!`
+    );
+  }
+
+  const nextAttemptAt = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+  const jobInsert = await supabaseAdmin.from("order_retry_jobs").insert({
+    order_id: order.id,
+    thread_id: thread.id,
+    status: "active",
+    attempts: 1,
+    max_attempts: 12,
+    next_attempt_at: nextAttemptAt,
+  });
+
+  /* Unique partial index only allows one active job per order — a 23505 here
+     just means another request already created it a moment ago, which is
+     fine, our reply below still holds true either way. */
+  if (jobInsert.error && jobInsert.error.code !== "23505") {
+    console.error("[Order ID desk] Retry job insert error:", jobInsert.error.message);
+  }
+
+  return postDeterministicSupportReply(
+    thread,
+    discordThreadId,
+    "Confirmed — that order's genuinely unfulfilled. I've started automatic retries with our supplier, up to 4 times a day. This attempt didn't land, but I'll try again in about 6 hours and message you here the moment it delivers."
+  );
+}
+
 app.post("/api/live-desk", async (req, res) => {
   if (!supabaseAdmin) {
     return res.status(500).json({
@@ -10541,50 +10720,65 @@ app.post("/api/live-desk", async (req, res) => {
       console.error("[Support thread bridge] Initial Discord thread failed:", bridgeError.message);
     }
 
-    /* AI auto-reply — fire-and-forget so the request returns instantly; the bot
-       message is inserted when the AI finishes and appears on the next poll. */
-    (async () => {
-      try {
-        console.log("[AI Live Desk] Generating auto-reply for thread:", threadInsert.data.id);
-        const aiReply = await generateAILiveDeskReply(
-          threadInsert.data,
-          details,
-          { userId: member.id, email: member.email }
-        );
+    /* Deterministic order-ID handling takes priority over the AI — if the
+       customer's message contains an Order ID, a backend-only check owns
+       this turn instead of the LLM (see handleOrderIdSubmission above). */
+    const extractedOrderId = extractOrderIdFromText(details);
 
-        console.log("[AI Live Desk] Reply result:", aiReply ? "got reply" : "null/empty");
-
-        if (aiReply) {
-          void auditAiReplyQuality({
-            source: "Website support chat",
-            question: details,
-            reply: aiReply,
-            knowledge: getSupportKnowledgeBase(details),
-          });
-          const insertResult = await supabaseAdmin.from("support_messages").insert({
-            thread_id: threadInsert.data.id,
-            sender_type: "bot",
-            body: aiReply,
-          });
-
-          if (insertResult.error) {
-            console.error("[AI Live Desk] Bot message insert error:", insertResult.error.message);
-          }
-
-          await supabaseAdmin
-            .from("support_threads")
-            .update({
-              updated_at: new Date().toISOString(),
-              last_message_at: new Date().toISOString(),
-            })
-            .eq("id", threadInsert.data.id);
-
-          mirrorToSupportThread(threadInsert.data.id, supportDiscordThreadId, "AI", aiReply);
+    if (extractedOrderId) {
+      (async () => {
+        try {
+          await handleOrderIdSubmission(threadInsert.data, supportDiscordThreadId, member, extractedOrderId);
+        } catch (orderIdErr) {
+          console.error("[Order ID desk] Handling error:", orderIdErr.message);
         }
-      } catch (aiErr) {
-        console.error("[AI Live Desk] Auto-reply error:", aiErr.message);
-      }
-    })();
+      })();
+    } else {
+      /* AI auto-reply — fire-and-forget so the request returns instantly; the bot
+         message is inserted when the AI finishes and appears on the next poll. */
+      (async () => {
+        try {
+          console.log("[AI Live Desk] Generating auto-reply for thread:", threadInsert.data.id);
+          const aiReply = await generateAILiveDeskReply(
+            threadInsert.data,
+            details,
+            { userId: member.id, email: member.email }
+          );
+
+          console.log("[AI Live Desk] Reply result:", aiReply ? "got reply" : "null/empty");
+
+          if (aiReply) {
+            void auditAiReplyQuality({
+              source: "Website support chat",
+              question: details,
+              reply: aiReply,
+              knowledge: getSupportKnowledgeBase(details),
+            });
+            const insertResult = await supabaseAdmin.from("support_messages").insert({
+              thread_id: threadInsert.data.id,
+              sender_type: "bot",
+              body: aiReply,
+            });
+
+            if (insertResult.error) {
+              console.error("[AI Live Desk] Bot message insert error:", insertResult.error.message);
+            }
+
+            await supabaseAdmin
+              .from("support_threads")
+              .update({
+                updated_at: new Date().toISOString(),
+                last_message_at: new Date().toISOString(),
+              })
+              .eq("id", threadInsert.data.id);
+
+            mirrorToSupportThread(threadInsert.data.id, supportDiscordThreadId, "AI", aiReply);
+          }
+        } catch (aiErr) {
+          console.error("[AI Live Desk] Auto-reply error:", aiErr.message);
+        }
+      })();
+    }
 
     return res.json({
       ok: true,
@@ -10716,56 +10910,71 @@ app.post("/api/live-desk/reply", async (req, res) => {
       ).catch((e) => console.error("[Discord webhook] Live desk reply alert error:", e.message));
     }
 
-    // AI auto-reply to follow-up messages (skip if a human admin has replied in this thread)
-    let adminHasReplied = false;
-    try {
-      const { data: adminMsgs } = await supabaseAdmin
-        .from("support_messages")
-        .select("id")
-        .eq("thread_id", threadId)
-        .eq("sender_type", "admin")
-        .limit(1);
-      adminHasReplied = adminMsgs && adminMsgs.length > 0;
-    } catch {}
+    /* Deterministic order-ID handling takes priority over the AI — if the
+       customer's message contains an Order ID, a backend-only check owns
+       this turn instead of the LLM (see handleOrderIdSubmission above). */
+    const extractedOrderId = extractOrderIdFromText(body);
 
-    /* Fire-and-forget so the user's message posts instantly; the bot reply is
-       inserted when the AI finishes and shows up on the desk's next poll. */
-    if (!adminHasReplied) {
+    if (extractedOrderId) {
       (async () => {
         try {
-          const aiReply = await generateAILiveDeskReply(
-            threadUpdate.data,
-            body,
-            { userId: member.id, email: member.email }
-          );
-
-          if (aiReply) {
-            void auditAiReplyQuality({
-              source: "Website support chat",
-              question: body,
-              reply: aiReply,
-              knowledge: getSupportKnowledgeBase(body),
-            });
-            await supabaseAdmin.from("support_messages").insert({
-              thread_id: threadId,
-              sender_type: "bot",
-              body: aiReply,
-            });
-
-            await supabaseAdmin
-              .from("support_threads")
-              .update({
-                updated_at: new Date().toISOString(),
-                last_message_at: new Date().toISOString(),
-              })
-              .eq("id", threadId);
-
-            await mirrorToSupportThread(threadId, supportDiscordThreadId, "AI", aiReply);
-          }
-        } catch (aiErr) {
-          console.error("[AI Live Desk] Follow-up auto-reply error:", aiErr.message);
+          await handleOrderIdSubmission(threadUpdate.data, supportDiscordThreadId, member, extractedOrderId);
+        } catch (orderIdErr) {
+          console.error("[Order ID desk] Handling error:", orderIdErr.message);
         }
       })();
+    } else {
+      // AI auto-reply to follow-up messages (skip if a human admin has replied in this thread)
+      let adminHasReplied = false;
+      try {
+        const { data: adminMsgs } = await supabaseAdmin
+          .from("support_messages")
+          .select("id")
+          .eq("thread_id", threadId)
+          .eq("sender_type", "admin")
+          .limit(1);
+        adminHasReplied = adminMsgs && adminMsgs.length > 0;
+      } catch {}
+
+      /* Fire-and-forget so the user's message posts instantly; the bot reply is
+         inserted when the AI finishes and shows up on the desk's next poll. */
+      if (!adminHasReplied) {
+        (async () => {
+          try {
+            const aiReply = await generateAILiveDeskReply(
+              threadUpdate.data,
+              body,
+              { userId: member.id, email: member.email }
+            );
+
+            if (aiReply) {
+              void auditAiReplyQuality({
+                source: "Website support chat",
+                question: body,
+                reply: aiReply,
+                knowledge: getSupportKnowledgeBase(body),
+              });
+              await supabaseAdmin.from("support_messages").insert({
+                thread_id: threadId,
+                sender_type: "bot",
+                body: aiReply,
+              });
+
+              await supabaseAdmin
+                .from("support_threads")
+                .update({
+                  updated_at: new Date().toISOString(),
+                  last_message_at: new Date().toISOString(),
+                })
+                .eq("id", threadId);
+
+              await mirrorToSupportThread(threadId, supportDiscordThreadId, "AI", aiReply);
+            }
+          } catch (aiErr) {
+            console.error("[AI Live Desk] Follow-up auto-reply error:", aiErr.message);
+          }
+        })();
+      }
     }
 
     return res.json({
@@ -14167,7 +14376,8 @@ STORE POLICIES AND WORKFLOWS
 - There is no referral or affiliate program.
 - Never claim a payment succeeded, a key was delivered, an outage exists, or staff took an action unless live data in the conversation explicitly proves it.
 - Never invent prices, stock, compatibility, promo code values, HWID reset limits, or launch dates.
-- Account changes, billing disputes, refunds, missing paid orders/keys, HWID resets, bans, and product outages require staff.
+- Account changes, billing disputes, refunds, HWID resets, bans, and product outages require staff.
+- Missing/undelivered key or "my order is unfulfilled" complaints: ask for their Order ID — it's on the Account page under Order History via the "Copy Order ID" button. Never state or guess an order's status, promise a delivery timeline, or claim a key value yourself. Pasting a valid Order ID into this chat automatically triggers a separate deterministic backend check (real ownership + real status against the database) that replies with the verified result and starts automatic retries if genuinely needed — that system, not you, owns the actual verification and any delivery. Do not fabricate order status, retry timing, or key values under any circumstances.
 - For setup, direct customers to the exact product guide. Product-specific requirements override general advice.
 
 COMMON ANSWERS
@@ -15713,7 +15923,7 @@ setInterval(() => {
   const now = Date.now();
 
   // Rate-limit maps: entries are { ts } or timestamps - clear entries older than 5 min
-  for (const map of [authRateLimitByIp, adminAccessRateLimitByKey, deleteKeyRateLimitByKey, resellerApiRateLimitByKey]) {
+  for (const map of [authRateLimitByIp, adminAccessRateLimitByKey, deleteKeyRateLimitByKey, resellerApiRateLimitByKey, orderIdRateLimitByUser]) {
     for (const [key, val] of map) {
       const ts = typeof val === "number" ? val : val?.ts;
       if (ts && now - ts > 5 * 60 * 1000) map.delete(key);
@@ -15847,6 +16057,183 @@ async function checkRestockAlerts() {
 // Run every 2 minutes
 setInterval(checkRestockAlerts, 2 * 60 * 1000);
 setTimeout(checkRestockAlerts, 10_000); // first check 10s after boot
+
+/* ── Automatic retry queue for orders that paid but couldn't be fulfilled ──
+   Populated by handleOrderIdSubmission (above) when a signed-in customer
+   pastes a genuinely unfulfilled Order ID into live desk chat. Runs on a
+   cheap 30-minute cadence and only touches rows that are actually due —
+   this project has been bitten before by over-eager background polling
+   (see the Cheats.Love ban), so this deliberately stays well above any
+   per-minute cadence. */
+async function processDueOrderRetryJobs() {
+  if (!supabaseAdmin) return;
+  try {
+    const { data: dueJobs, error } = await supabaseAdmin
+      .from("order_retry_jobs")
+      .select("id, order_id, thread_id, attempts, max_attempts")
+      .eq("status", "active")
+      .lte("next_attempt_at", new Date().toISOString());
+
+    if (error) {
+      console.error("[Order retry jobs] Query error:", error.message);
+      return;
+    }
+
+    if (!dueJobs || !dueJobs.length) return;
+
+    for (const job of dueJobs) {
+      try {
+        await processOneOrderRetryJob(job);
+      } catch (jobError) {
+        console.error(`[Order retry jobs] Job ${job.id} error:`, jobError.message);
+      }
+    }
+  } catch (err) {
+    console.error("[Order retry jobs] Processor error:", err.message);
+  }
+}
+
+async function processOneOrderRetryJob(job) {
+  const { data: order, error: orderError } = await supabaseAdmin
+    .from("orders")
+    .select("id, status, product_slug, stripe_session_id, stripe_payment_intent, delivered_key_value")
+    .eq("id", job.order_id)
+    .maybeSingle();
+
+  if (orderError || !order) {
+    console.error(`[Order retry jobs] Order lookup failed for job ${job.id}:`, orderError?.message || "not found");
+    return;
+  }
+
+  let thread = null;
+  if (job.thread_id) {
+    const { data } = await supabaseAdmin
+      .from("support_threads")
+      .select("id, discord_thread_id")
+      .eq("id", job.thread_id)
+      .maybeSingle();
+    thread = data || null;
+  }
+
+  const postToThread = async (body, prefix = "AI") => {
+    if (!thread) return;
+    const insertResult = await supabaseAdmin.from("support_messages").insert({
+      thread_id: thread.id,
+      sender_type: "bot",
+      body,
+    });
+    if (insertResult.error) {
+      console.error(`[Order retry jobs] Message insert error for job ${job.id}:`, insertResult.error.message);
+    }
+    await supabaseAdmin
+      .from("support_threads")
+      .update({ updated_at: new Date().toISOString(), last_message_at: new Date().toISOString() })
+      .eq("id", thread.id);
+    await mirrorToSupportThread(thread.id, thread.discord_thread_id, prefix, body);
+  };
+
+  /* Already fulfilled through some other path (e.g. /retryunfulfilled, the
+     account page's own auto-heal) — close the job out instead of retrying. */
+  if (order.status === "fulfilled") {
+    await supabaseAdmin
+      .from("order_retry_jobs")
+      .update({ status: "completed", updated_at: new Date().toISOString() })
+      .eq("id", job.id);
+    await postToThread(`Good news — your key just came through: \`${order.delivered_key_value || ""}\`. Enjoy!`);
+    return;
+  }
+
+  let syncResult;
+  let syncErrorMessage = null;
+  try {
+    syncResult = await syncPaidOrder({
+      id: order.stripe_session_id,
+      payment_intent: order.stripe_payment_intent,
+      metadata: { orderId: order.id },
+    });
+  } catch (syncError) {
+    syncErrorMessage = syncError.message;
+    syncResult = undefined;
+  }
+
+  if (syncResult?.keyValue) {
+    await supabaseAdmin
+      .from("order_retry_jobs")
+      .update({ status: "completed", updated_at: new Date().toISOString() })
+      .eq("id", job.id);
+    await postToThread(`Good news — your key just came through: \`${syncResult.keyValue}\`. Enjoy!`);
+    return;
+  }
+
+  /* syncPaidOrder returns undefined both when the order is still unfulfilled
+     AND when it was fulfilled through some other path during this call —
+     re-query to tell those apart before counting this as a failed attempt. */
+  const { data: freshOrder } = await supabaseAdmin
+    .from("orders")
+    .select("status, delivered_key_value")
+    .eq("id", order.id)
+    .maybeSingle();
+
+  if (freshOrder?.status === "fulfilled") {
+    await supabaseAdmin
+      .from("order_retry_jobs")
+      .update({ status: "completed", updated_at: new Date().toISOString() })
+      .eq("id", job.id);
+    await postToThread(`Good news — your key just came through: \`${freshOrder.delivered_key_value || ""}\`. Enjoy!`);
+    return;
+  }
+
+  const attempts = (job.attempts || 0) + 1;
+  const maxAttempts = job.max_attempts || 12;
+
+  if (attempts >= maxAttempts) {
+    await supabaseAdmin
+      .from("order_retry_jobs")
+      .update({
+        status: "failed",
+        attempts,
+        last_error: syncErrorMessage,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", job.id);
+
+    await postToThread("This is taking longer than expected — I've flagged it for our team to look at manually, sorry for the wait.");
+
+    /* Extra staff-alert line so this doesn't sit silently in the mirrored
+       Discord thread — same idea as the @-mention handleUnfulfilledOrder
+       sends to the low-stock channel, just aimed at this ticket's thread. */
+    if (thread) {
+      const staffMention = BOT_ADMINS.map((id) => `<@${id}>`).join(" ");
+      await mirrorToSupportThread(
+        thread.id,
+        thread.discord_thread_id,
+        "System",
+        `${staffMention} Order ${order.id} has failed automatic retry ${maxAttempts} times and needs manual attention.`
+      );
+    }
+    return;
+  }
+
+  const nextAttemptAt = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString();
+  await supabaseAdmin
+    .from("order_retry_jobs")
+    .update({
+      attempts,
+      next_attempt_at: nextAttemptAt,
+      last_error: syncErrorMessage,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", job.id);
+
+  await postToThread("Retried again — still not there, next attempt in about 6 hours.");
+}
+
+setInterval(() => {
+  processDueOrderRetryJobs().catch((err) => console.error("[Order retry jobs] Interval error:", err.message));
+}, 30 * 60 * 1000).unref();
+setTimeout(() => {
+  processDueOrderRetryJobs().catch((err) => console.error("[Order retry jobs] Boot warm-up error:", err.message));
+}, 20_000).unref(); // first sweep 20s after boot
 
 /* ── 404 catch-all ── */
 app.use((_req, res) => {
