@@ -2320,7 +2320,14 @@ function applyTicketFirstMessageSafetyNet(decision, isFirstMessage) {
   };
 }
 
-async function generatePendingTicketAIReply(topic, details, history = [], isFirstMessage = false) {
+// Tracks consecutive total-outage failures (both Gemini and Groq unreachable/erroring)
+// per Discord ticket channel. A provider outage is an infrastructure problem, not a
+// customer-intent signal, so it must never be treated the same as a real escalation —
+// otherwise every single hiccup instantly dumps the ticket on staff. Only escalate for
+// real once the SAME channel has failed several times in a row; reset on any success.
+const ticketAiOutageStreakByChannel = new Map();
+
+async function generatePendingTicketAIReply(topic, details, history = [], isFirstMessage = false, channelId = null) {
   const staffStyle = await getStaffReplyStyle();
   const combinedQuestion = `${topic || ""}\n${details || ""}`;
   const liveStatus = await getPublicStatusContext(combinedQuestion);
@@ -2401,7 +2408,10 @@ ${conversation || "No previous messages."}`;
         const data = await response.json();
         const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
         const json = text.match(/\{[\s\S]*\}/)?.[0];
-        if (json) return applyTicketFirstMessageSafetyNet(normalizeTicketAiDecision(JSON.parse(json)), isFirstMessage);
+        if (json) {
+          if (channelId) ticketAiOutageStreakByChannel.delete(channelId);
+          return applyTicketFirstMessageSafetyNet(normalizeTicketAiDecision(JSON.parse(json)), isFirstMessage);
+        }
         console.warn("[Discord ticket AI] Gemini returned no parseable JSON; trying fallback. Raw text:", text.slice(0, 300));
       } else {
         const bodyText = await response.text().catch(() => "");
@@ -2437,7 +2447,10 @@ ${conversation || "No previous messages."}`;
         const data = await response.json();
         const text = String(data.choices?.[0]?.message?.content || "");
         const json = text.match(/\{[\s\S]*\}/)?.[0];
-        if (json) return applyTicketFirstMessageSafetyNet(normalizeTicketAiDecision(JSON.parse(json)), isFirstMessage);
+        if (json) {
+          if (channelId) ticketAiOutageStreakByChannel.delete(channelId);
+          return applyTicketFirstMessageSafetyNet(normalizeTicketAiDecision(JSON.parse(json)), isFirstMessage);
+        }
         console.warn("[Discord ticket AI] Groq returned no parseable JSON. Raw text:", text.slice(0, 300));
       } else {
         const bodyText = await response.text().catch(() => "");
@@ -2450,10 +2463,27 @@ ${conversation || "No previous messages."}`;
     }
   }
 
-  return applyTicketFirstMessageSafetyNet(
-    { canHelp: false, reply: "", reason: "Automated support is unavailable." },
-    isFirstMessage,
-  );
+  // Both Gemini and Groq failed to respond at all — this is an infrastructure
+  // outage, not something the customer said, so it must never be conflated with a
+  // real escalation on its own. Give the same channel a couple of friendly retries
+  // before actually handing off to staff, so a transient blip (or even a sustained
+  // one affecting many tickets) doesn't instantly flood the staff queue.
+  const outageKey = channelId || "unknown";
+  const streak = (ticketAiOutageStreakByChannel.get(outageKey) || 0) + 1;
+  ticketAiOutageStreakByChannel.set(outageKey, streak);
+  if (streak < 3) {
+    return {
+      canHelp: true,
+      reply:
+        "One sec — having a brief connection hiccup on my end. Could you repeat that? If it's about a missing key, go ahead and send your Order ID and I'll check on it.",
+      reason: "",
+    };
+  }
+  return {
+    canHelp: false,
+    reply: "",
+    reason: "The automated support AI is experiencing a technical outage (multiple consecutive failures), not a customer-content escalation — check Gemini/Groq API keys and quotas.",
+  };
 }
 
 async function escalatePendingDiscordTicket(channel, reason) {
@@ -3796,6 +3826,7 @@ if (isConfiguredValue(discordBotToken)) {
         message.content,
         history,
         false,
+        message.channel.id,
       );
       if (!decision.canHelp) {
         await escalatePendingDiscordTicket(message.channel, decision.reason);
@@ -5180,7 +5211,7 @@ ${rows || '<div class="ct">No messages.</div>'}
         } else if (!ticketBotEnabled) {
           await channel.send("Our team will be with you shortly.");
         } else {
-          const decision = await generatePendingTicketAIReply(topic, details, [], true);
+          const decision = await generatePendingTicketAIReply(topic, details, [], true, channel.id);
           if (decision.canHelp) {
             pendingTicketAiTurns.set(channel.id, 1);
             await channel.send({
