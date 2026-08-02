@@ -82,8 +82,12 @@ const cheatsloveBaseUrl = (process.env.CHEATSLOVE_BASE_URL || "https://res.cheat
 const cheatsloveStoreApiUrl = (process.env.CHEATSLOVE_STORE_API_URL
   || "https://backend.cheats.love/wp-json/wc/store/v1").replace(/\/+$/, "");
 // Keep upstream availability fresh without approaching the reseller's
-// 30-request-per-minute limit.
-const cheatslovePollMs = 5 * 60_000;
+// 30-request-per-minute limit. This now drives ONLY the single-call catalog
+// sync (syncCheatsLoveStock: one /products + one /balance request per cycle,
+// regardless of catalog size) — the old per-variant storefront double-check
+// (syncCheatsLoveStoreStock, 140 requests per cycle) is retired, see the
+// project-xencheats-cheatslove-ban memory / comment near cheatsloveCoversInventory.
+const cheatslovePollMs = 15 * 60_000;
 /* Real, confirmed-by-sync stock per inventorySlug ("In Stock" | "Out of Stock").
    After the first valid sync, mapped variants without a usable upstream result
    fail closed instead of being advertised as available. */
@@ -112,8 +116,13 @@ function cheatsloveCoversInventory(inventorySlug) {
     const costCents = cheatsloveCostKnown.get(inventorySlug);
     const hasFunds = !Number.isFinite(costCents)
       || (Number.isFinite(cheatsloveBalanceCents) && cheatsloveBalanceCents >= costCents);
-    const storefrontInStock = cheatsloveStoreStockKnown.get(inventorySlug) === "In Stock";
-    return known === "In Stock" && storefrontInStock && hasFunds;
+    /* Storefront per-variant double-check removed 2026-08-02 — it made one
+       HTTP request PER mapped variant (140 of them) every sync cycle, which is
+       what actually got the API key rate-limited/banned, and it silently
+       failed often enough that stock never displayed reliably. The reseller
+       catalog sync below (a single /products call) is the sole source of
+       truth now. See project-xencheats-cheatslove-ban memory. */
+    return known === "In Stock" && hasFunds;
   }
   if (cheatsloveStockSyncReady || CHEATSLOVE_VID_MAP[inventorySlug] == null) return false;
   return true; // brief startup grace period before the first upstream response
@@ -15917,20 +15926,24 @@ async function loadProductStatusOverrides() {
 Promise.all([loadProductOverrides(), loadProductStatusOverrides()]).then(() => {
   setInterval(loadProductStatusOverrides, 5 * 60 * 1000).unref();
 
-  /* Stock-sync polling disabled 2026-08-02 — this plus the per-request sync in
-     GET /api/products was hitting the Cheats.Love reseller API too often and
-     got the key rate-limited/banned. Key-purchase automation (buying a key at
-     checkout via cheatsloveFetch("/orders")) does NOT go through this code
-     path and keeps working. If the reseller confirms a higher rate limit,
-     restore the block below. */
-  if (false && cheatsloveApiKey) {
+  /* Re-enabled 2026-08-02 with the expensive part removed. The old setup ran
+     TWO checks per cycle: syncCheatsLoveStock (1 request to /products + 1 to
+     /balance, cheap) and syncCheatsLoveStoreStock (a separate HTTP request
+     PER mapped variant — 140 of them — to the storefront). That second one is
+     what got the API key rate-limited/banned, and it silently failed often
+     enough that stock display never worked reliably even before that. It's
+     now retired for good (function kept below, dead code, not called).
+     Only the single-call catalog sync runs now, on a conservative 15-minute
+     interval — well under the reseller's documented 30-req/min limit even
+     counting normal site traffic. Key-purchase automation (buying a key at
+     checkout via cheatsloveFetch("/orders")) is a separate code path and was
+     never affected by any of this. */
+  if (cheatsloveApiKey) {
     setInterval(syncCheatsLoveStock, cheatslovePollMs).unref();
-    setInterval(syncCheatsLoveStoreStock, cheatslovePollMs).unref();
     setTimeout(syncCheatsLoveStock, 5_000); // first sync 5s after boot
-    setTimeout(syncCheatsLoveStoreStock, 5_000);
-    console.log(`[Cheats.Love] Stock sync enabled, polling every ${Math.round(cheatslovePollMs / 1000)}s.`);
+    console.log(`[Cheats.Love] Catalog stock sync enabled, polling every ${Math.round(cheatslovePollMs / 1000)}s (storefront per-variant check retired).`);
   } else {
-    console.log("[Cheats.Love] Stock-sync polling disabled (see comment above) — key-purchase automation is unaffected.");
+    console.log("[Cheats.Love] CHEATSLOVE_API_KEY not set — stock sync disabled.");
   }
 
   const httpServer = app.listen(port, () => {
