@@ -10022,12 +10022,13 @@ app.get("/api/auth/role", async (req, res) => {
 app.get("/api/products", async (_req, res) => {
   try {
     res.set("Cache-Control", "no-store, max-age=0");
-    if (cheatsloveApiKey && Date.now() - cheatsloveLastStockSyncAt > 55_000) {
-      await syncCheatsLoveStock();
-    }
-    if (cheatsloveApiKey && Date.now() - cheatsloveLastStoreStockSyncAt > cheatslovePollMs) {
-      void syncCheatsLoveStoreStock();
-    }
+    /* Cheats.Love stock-sync polling disabled 2026-08-02 — it was calling the
+       reseller API too often (every /api/products hit past 55s, on top of the
+       setInterval poll below) and got the API key rate-limited/banned. The
+       on-demand "buy a key at checkout" call (postFulfillment/cheatsloveFetch
+       "/orders") is untouched and keeps working normally — this only turns off
+       the proactive stock-level polling. Re-enable by restoring these two
+       blocks if the reseller ever confirms the rate limit is lifted/raised. */
     const keyCounts = await getUnusedLicenseKeyCounts();
     const catalog = products.map((product) => {
       const comingSoon = isCheatsloveProductComingSoon(product);
@@ -15916,14 +15917,20 @@ async function loadProductStatusOverrides() {
 Promise.all([loadProductOverrides(), loadProductStatusOverrides()]).then(() => {
   setInterval(loadProductStatusOverrides, 5 * 60 * 1000).unref();
 
-  if (cheatsloveApiKey) {
+  /* Stock-sync polling disabled 2026-08-02 — this plus the per-request sync in
+     GET /api/products was hitting the Cheats.Love reseller API too often and
+     got the key rate-limited/banned. Key-purchase automation (buying a key at
+     checkout via cheatsloveFetch("/orders")) does NOT go through this code
+     path and keeps working. If the reseller confirms a higher rate limit,
+     restore the block below. */
+  if (false && cheatsloveApiKey) {
     setInterval(syncCheatsLoveStock, cheatslovePollMs).unref();
     setInterval(syncCheatsLoveStoreStock, cheatslovePollMs).unref();
     setTimeout(syncCheatsLoveStock, 5_000); // first sync 5s after boot
     setTimeout(syncCheatsLoveStoreStock, 5_000);
     console.log(`[Cheats.Love] Stock sync enabled, polling every ${Math.round(cheatslovePollMs / 1000)}s.`);
   } else {
-    console.log("[Cheats.Love] CHEATSLOVE_API_KEY not set — stock sync disabled.");
+    console.log("[Cheats.Love] Stock-sync polling disabled (see comment above) — key-purchase automation is unaffected.");
   }
 
   const httpServer = app.listen(port, () => {

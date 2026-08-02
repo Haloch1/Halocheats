@@ -1802,6 +1802,17 @@ textarea:focus {
   background: var(--red-soft);
 }
 
+.review-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+}
+
 .review-username {
   overflow: hidden;
   font-family: var(--font-display);
