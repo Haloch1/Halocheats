@@ -9120,6 +9120,7 @@ function maskBuyerName(name) {
 // from real sales/reporting. Add more test account user_ids here as needed.
 const TEST_CUSTOMER_USER_IDS = new Set([
   "b401d841-a3b8-4a1e-86a9-91e252c1f678", // James Smith — QA test account
+  "1afab7cb-9c52-4742-bde8-c8ee80dda1d7", // sigma / halocheatapp@gmail.com — QA test account
 ]);
 
 async function logTestKeyPullIfNeeded(order, keyData, options = {}) {
