@@ -2104,7 +2104,7 @@ textarea:focus {
 .variant-art::before,
 .variant-art::after {
   position: absolute;
-  z-index: 3;
+  z-index: 2;
   right: 0;
   left: 0;
   height: 42%;
@@ -2176,11 +2176,11 @@ textarea:focus {
 
 .variant-product-image {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   width: 100%;
   height: 100%;
   min-height: 620px;
-  padding: clamp(82px, 9vw, 122px) 20px;
+  padding: clamp(44px, 5.5vw, 76px) 20px;
   object-fit: contain;
 }
 
