@@ -106,7 +106,7 @@ const cheatsloveStoreStockKnown = new Map();
 const cheatsloveCostKnown = new Map();
 const cheatsloveProductPresenceKnown = new Map();
 let cheatsloveBalanceCents = null;
-let cheatsloveStockSyncReady = false;
+let cheatsloveLastStockSyncFailed = false;
 let cheatsloveLastStockSyncAt = 0;
 let cheatsloveStoreStockSyncReady = false;
 let cheatsloveLastStoreStockSyncAt = 0;
@@ -121,6 +121,7 @@ function isCatalogProductAvailable(product) {
 }
 function cheatsloveCoversInventory(inventorySlug) {
   if (!cheatsloveApiKey) return false;
+  if (cheatsloveLastStockSyncFailed) return false;
   const known = cheatsloveStockKnown.get(inventorySlug);
   if (known) {
     const costCents = cheatsloveCostKnown.get(inventorySlug);
@@ -134,8 +135,10 @@ function cheatsloveCoversInventory(inventorySlug) {
        truth now. See project-xencheats-cheatslove-ban memory. */
     return known === "In Stock" && hasFunds;
   }
-  if (cheatsloveStockSyncReady || CHEATSLOVE_VID_MAP[inventorySlug] == null) return false;
-  return true; // brief startup grace period before the first upstream response
+  /* Never advertise unknown supplier inventory as available. Local unused
+     keys are counted separately by /api/products and remain sellable, but an
+     upstream-only variant must wait for a confirmed successful snapshot. */
+  return false;
 }
 const adminAccessKey = process.env.ADMIN_ACCESS_KEY || "";
 const ownerRequestsKey = process.env.OWNER_REQUESTS_KEY || "";
@@ -16986,8 +16989,11 @@ async function loadProductStatusOverrides() {
     try {
       const data = await cheatsloveFetch("/products");
       const clProducts = Array.isArray(data?.products) ? data.products : [];
-      if (!clProducts.length) return;
-      cheatsloveStockSyncReady = true;
+      if (!clProducts.length) {
+        cheatsloveLastStockSyncFailed = true;
+        return;
+      }
+      cheatsloveLastStockSyncFailed = false;
 
       if (refreshBalance) {
         try {
@@ -17104,6 +17110,7 @@ async function loadProductStatusOverrides() {
         console.log(`[Cheats.Love] Pinned/matched vid returned no stock data for: ${unmatched.join(", ")}`);
       }
     } catch (err) {
+      cheatsloveLastStockSyncFailed = true;
       console.error("[Cheats.Love] Stock sync error:", err.message);
     } finally {
       cheatsloveSyncRunning = false;
