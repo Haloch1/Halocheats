@@ -8878,7 +8878,31 @@ function maskBuyerName(name) {
   return s.slice(0, 4);
 }
 
+// QA/test customer accounts — any key delivered to one of these user_ids also gets
+// logged to test_key_pulls so real Cheats.Love spend from testing stays separate
+// from real sales/reporting. Add more test account user_ids here as needed.
+const TEST_CUSTOMER_USER_IDS = new Set([
+  "b401d841-a3b8-4a1e-86a9-91e252c1f678", // James Smith — QA test account
+]);
+
+async function logTestKeyPullIfNeeded(order, keyData, options = {}) {
+  if (!order?.user_id || !TEST_CUSTOMER_USER_IDS.has(order.user_id) || !supabaseAdmin) return;
+  try {
+    await supabaseAdmin.from("test_key_pulls").insert({
+      order_id: order.id || null,
+      user_id: order.user_id,
+      product_slug: order.product_slug || null,
+      key_value: keyData?.key_value || null,
+      source: options.source || "unknown",
+    });
+  } catch (err) {
+    console.error("[test_key_pulls] Failed to log test key pull:", err.message);
+  }
+}
+
 async function postFulfillment(order, session, keyData, assignedAt, options = {}) {
+  await logTestKeyPullIfNeeded(order, keyData, options);
+
   /* ── Fetch buyer info for webhook + DM ── */
   let buyerEmail = "Unknown";
   let buyerUsername = "Unknown";
