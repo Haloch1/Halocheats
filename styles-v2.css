@@ -1284,7 +1284,7 @@ button:disabled {
   display: block;
   flex-shrink: 0;
   overflow: hidden;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 3 / 2;
 }
 
 .product-status-badge {
@@ -2758,7 +2758,7 @@ textarea:focus {
   display: block;
   overflow: hidden;
   border-radius: 12px;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 3 / 2;
 }
 
 .variant-related-thumb img {
@@ -4406,7 +4406,7 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   }
 
   .catalog-category-card { min-height: 285px; }
-  .product-thumbnail-button { aspect-ratio: 5 / 4; }
+  .product-thumbnail-button { aspect-ratio: 3 / 2; }
 
   .support { padding: 30px 20px; }
   .desk-panel { padding: 20px; }
