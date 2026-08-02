@@ -3719,25 +3719,31 @@ if (isConfiguredValue(discordBotToken)) {
          each one in parallel, since every new channel gets a fresh bucket.
          Ticket creation has no dedicated rate limit of its own, so add the
          per-user key here as the actual backstop against that. */
-      try {
-        checkRateLimit(
-          ticketOrderIdRateLimitByChannel,
-          `ticketorderid:${message.channel.id}`,
-          15_000,
-          "Too many order ID checks."
-        );
-        checkRateLimit(
-          ticketOrderIdRateLimitByChannel,
-          `ticketorderiduser:${message.author.id}`,
-          15_000,
-          "Too many order ID checks."
-        );
-      } catch {
-        await message.reply({
-          content: "Slow down a little — give it a few seconds between order ID checks and I'll take another look.",
-          allowedMentions: { repliedUser: false },
-        }).catch(() => {});
-        return;
+      // Only rate-limit a genuinely NEW order-ID submission. Completing a
+      // pending request with the email the bot itself just asked for is the
+      // second half of the SAME check, not a new attempt — rate-limiting it
+      // too just breaks the normal two-message flow (order ID, then email).
+      if (!isCompletingPendingEmail) {
+        try {
+          checkRateLimit(
+            ticketOrderIdRateLimitByChannel,
+            `ticketorderid:${message.channel.id}`,
+            15_000,
+            "Too many order ID checks."
+          );
+          checkRateLimit(
+            ticketOrderIdRateLimitByChannel,
+            `ticketorderiduser:${message.author.id}`,
+            15_000,
+            "Too many order ID checks."
+          );
+        } catch {
+          await message.reply({
+            content: "Slow down a little — give it a few seconds between order ID checks and I'll take another look.",
+            allowedMentions: { repliedUser: false },
+          }).catch(() => {});
+          return;
+        }
       }
 
       const orderIdToResolve = ticketOrderId || freshPending.orderId;
