@@ -657,8 +657,6 @@ function renderProductCard(product, index) {
         alt=""
         loading="lazy"
       />
-      <img class="product-image-blur product-image-blur-top" src="${productImageSrc(product)}" alt="" loading="lazy" aria-hidden="true" />
-      <img class="product-image-blur product-image-blur-bottom" src="${productImageSrc(product)}" alt="" loading="lazy" aria-hidden="true" />
       ${product.badge ? `<span class="product-status-badge ${badgeTone(product.badge)}">${escapeHtml(product.badge)}</span>` : ""}
       <span class="product-thumbnail-overlay" aria-hidden="true">
         <span>View</span>

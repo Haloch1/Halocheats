@@ -2097,8 +2097,8 @@ textarea:focus {
   overflow: hidden;
   border-radius: 29px 0 0 29px;
   background:
-    radial-gradient(circle at 50% 48%, rgba(63, 104, 137, 0.2), transparent 42%),
-    linear-gradient(145deg, #0d1722, #17293a 54%, #0b141e);
+    radial-gradient(circle at 50% 48%, rgba(178, 38, 52, 0.16), transparent 46%),
+    linear-gradient(145deg, #150c0d, #1c1112 54%, #0c0808);
 }
 
 .variant-art::before,
@@ -2107,44 +2107,44 @@ textarea:focus {
   z-index: 3;
   right: 0;
   left: 0;
-  height: 34%;
+  height: 42%;
   content: "";
   pointer-events: none;
-  backdrop-filter: blur(20px) saturate(0.78);
-  -webkit-backdrop-filter: blur(20px) saturate(0.78);
+  backdrop-filter: blur(26px) saturate(0.6);
+  -webkit-backdrop-filter: blur(26px) saturate(0.6);
 }
 
 .variant-art::before {
   top: 0;
-  background: linear-gradient(180deg, rgba(12, 20, 30, 0.82), rgba(20, 34, 48, 0.62) 68%, transparent);
-  mask-image: linear-gradient(180deg, #000 0 72%, transparent 100%);
-  -webkit-mask-image: linear-gradient(180deg, #000 0 72%, transparent 100%);
+  background: linear-gradient(180deg, rgba(9, 6, 6, 0.95), rgba(20, 11, 12, 0.78) 60%, transparent);
+  mask-image: linear-gradient(180deg, #000 0 82%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0 82%, transparent 100%);
 }
 
 .variant-art::after {
   bottom: 0;
-  background: linear-gradient(0deg, rgba(12, 20, 30, 0.88), rgba(20, 34, 48, 0.66) 68%, transparent);
-  mask-image: linear-gradient(0deg, #000 0 72%, transparent 100%);
-  -webkit-mask-image: linear-gradient(0deg, #000 0 72%, transparent 100%);
+  background: linear-gradient(0deg, rgba(9, 6, 6, 0.97), rgba(20, 11, 12, 0.82) 60%, transparent);
+  mask-image: linear-gradient(0deg, #000 0 82%, transparent 100%);
+  -webkit-mask-image: linear-gradient(0deg, #000 0 82%, transparent 100%);
 }
 
 .variant-art .product-image-blur {
   z-index: 1;
-  filter: blur(28px) saturate(0.8) brightness(0.58);
-  opacity: 0.86;
-  transform: scale(1.12);
+  filter: blur(42px) saturate(0.5) brightness(0.4);
+  opacity: 0.62;
+  transform: scale(1.18);
 }
 
 .variant-art .product-image-blur-top {
   clip-path: inset(0 0 64% 0);
-  mask-image: linear-gradient(180deg, #000 0 70%, transparent 100%);
-  -webkit-mask-image: linear-gradient(180deg, #000 0 70%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0 55%, transparent 88%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0 55%, transparent 88%);
 }
 
 .variant-art .product-image-blur-bottom {
   clip-path: inset(64% 0 0 0);
-  mask-image: linear-gradient(0deg, #000 0 70%, transparent 100%);
-  -webkit-mask-image: linear-gradient(0deg, #000 0 70%, transparent 100%);
+  mask-image: linear-gradient(0deg, #000 0 55%, transparent 88%);
+  -webkit-mask-image: linear-gradient(0deg, #000 0 55%, transparent 88%);
 }
 
 .variant-art-brand {
