@@ -16915,6 +16915,8 @@ async function loadProductStatusOverrides() {
         method: options.method || "GET",
         headers: {
           Authorization: `Bearer ${cheatsloveApiKey}`,
+          Accept: "application/json",
+          "User-Agent": "Mozilla/5.0 (compatible; XenCheats-StockMonitor/1.0; +https://xencheats.wtf)",
           ...(options.body ? { "Content-Type": "application/json" } : {}),
         },
         body: options.body,
