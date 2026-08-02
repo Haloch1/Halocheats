@@ -2075,6 +2075,16 @@ productSaleOnly?.addEventListener("change", (event) => {
   renderCatalogView();
 });
 
+const filterToggle = document.querySelector("[data-filter-toggle]");
+const filterPanel = document.querySelector("[data-filter-panel]");
+
+filterToggle?.addEventListener("click", () => {
+  const isOpen = !filterPanel.classList.contains("is-open");
+  filterPanel.classList.toggle("is-open", isOpen);
+  filterToggle.classList.toggle("is-active", isOpen);
+  filterToggle.setAttribute("aria-expanded", String(isOpen));
+});
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     closeVariantModal();

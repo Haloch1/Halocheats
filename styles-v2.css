@@ -1956,6 +1956,97 @@ textarea:focus {
   box-shadow: var(--shadow-sm);
 }
 
+.product-search-row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.product-search-row .product-search {
+  flex: 1;
+}
+
+.product-filter-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 0 18px;
+  color: var(--ink-soft);
+  border: 1px solid var(--line-strong);
+  border-radius: 17px;
+  background: var(--paper-soft);
+  font: 700 0.78rem var(--font-display);
+  white-space: nowrap;
+  transition: color 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.product-filter-toggle:hover,
+.product-filter-toggle.is-active {
+  color: #fff;
+  border-color: var(--red);
+  background: var(--red);
+  box-shadow: 0 9px 20px rgba(216, 32, 40, 0.2);
+}
+
+.product-filter-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 320ms ease;
+}
+
+.product-filter-panel.is-open {
+  grid-template-rows: 1fr;
+}
+
+.product-filter-panel-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px 18px;
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 14px;
+}
+
+.product-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 168px;
+  color: var(--ink-faint);
+  font: 700 0.66rem var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.product-filter-field select {
+  min-height: 42px;
+  padding: 0 12px;
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--paper-soft);
+  font: 600 0.85rem var(--font-display);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.product-filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  color: var(--ink-soft);
+  font: 600 0.82rem var(--font-display);
+}
+
+.product-filter-checkbox input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--red);
+}
+
 .category-strip {
   display: flex;
   flex-wrap: wrap;
@@ -4336,6 +4427,11 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   }
 
   .ticker-track span { padding: 12px 32px; }
+
+  .product-filter-toggle span,
+  .product-filter-toggle { padding: 0 14px; font-size: 0.72rem; }
+  .product-filter-panel-inner { gap: 12px; }
+  .product-filter-field { min-width: 0; flex: 1 1 140px; }
 
   .reveal {
     transform: translate3d(0, 22px, 0);
