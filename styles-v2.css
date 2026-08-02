@@ -3339,6 +3339,23 @@ textarea:focus {
   margin-top: 12px;
 }
 
+.member-item-notice {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(233, 154, 24, 0.35);
+  border-radius: 10px;
+  background: rgba(233, 154, 24, 0.1);
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.member-item-notice a {
+  color: #e49a18;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
 .suggested-product-card {
   display: grid;
   gap: 10px;

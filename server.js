@@ -2877,6 +2877,10 @@ if (isConfiguredValue(discordBotToken)) {
           .addStringOption(o => o.setName("product").setDescription("Product slug (e.g. r6s-ancient)").setRequired(true))
           .addStringOption(o => o.setName("type").setDescription("Test type: fulfilled or unfulfilled").setRequired(false).addChoices({ name: "Fulfilled (key delivered)", value: "fulfilled" }, { name: "Unfulfilled (no key)", value: "unfulfilled" })),
         new SlashCommandBuilder()
+          .setName("retryunfulfilled")
+          .setDescription("Retry key delivery for paid-but-unfulfilled orders (admin only)")
+          .addStringOption(o => o.setName("product").setDescription("Product name, or \"All products\"").setRequired(true).setAutocomplete(true)),
+        new SlashCommandBuilder()
           .setName("customers")
           .setDescription("View recent purchases (admin only)")
           .addIntegerOption(o => o.setName("count").setDescription("Number of recent orders to show (default: 10)").setRequired(false)),
@@ -4564,6 +4568,22 @@ ${rows || '<div class="ct">No messages.</div>'}
   }
 
   discordBot.on("interactionCreate", async (interaction) => {
+    // ── Autocomplete for /retryunfulfilled — deliberately includes unavailable
+    // products too (an order placed while a product was still on sale still
+    // needs retrying even if it's since been marked out of stock). ──
+    if (interaction.isAutocomplete && interaction.isAutocomplete() && interaction.commandName === "retryunfulfilled") {
+      const focused = interaction.options.getFocused(true);
+      const query = focused.value.toLowerCase();
+      const productMatches = products
+        .filter(p => !query || p.name.toLowerCase().includes(query) || p.slug.toLowerCase().includes(query))
+        .slice(0, 24)
+        .map(p => ({ name: p.name, value: p.slug }));
+      const options = "all products".includes(query)
+        ? [{ name: "All products", value: "__all__" }, ...productMatches].slice(0, 25)
+        : productMatches;
+      return interaction.respond(options);
+    }
+
     // ── Autocomplete for /addkey ──
     if (interaction.isAutocomplete && interaction.isAutocomplete() && (interaction.commandName === "addkey" || interaction.commandName === "price")) {
       const focused = interaction.options.getFocused(true);
@@ -5505,6 +5525,7 @@ ${rows || '<div class="ct">No messages.</div>'}
           "`/announce` `/verify-panel` `/uptime`",
           "`/upload` `/schedule` `/pendingschedules` `/cancelschedule` `/stats`",
           "`/togglebot` `/payments` `/transcriptdemo`",
+          "`/retryunfulfilled <product>` — retry key delivery for paid-but-unfulfilled orders (run manually, not scheduled)",
         ];
         embed.fields.push({ name: "Admin", value: adminCmds.join("\n"), inline: false });
       }
@@ -5809,6 +5830,101 @@ ${rows || '<div class="ct">No messages.</div>'}
         });
       } catch (err) {
         console.error("[Slash /addkey]", err.message);
+        return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
+      }
+    }
+
+    /* Manual, staff-run retry for orders stuck in "paid" (charged but no key
+       delivered). Deliberately NOT scheduled/automatic — Azad asked for
+       nothing that runs on a timer, so this is a button staff pull instead
+       (docs suggest running it a few times a day). Reuses the exact same
+       syncPaidOrder() retry path that GET /api/account already calls when a
+       customer reloads their account page, so the delivery logic itself is
+       identical and already-proven — this just lets staff trigger it in bulk
+       for everyone stuck on one product (or all products) without waiting for
+       each customer to visit their account page. Capped at 25 orders per run
+       and run sequentially (not in parallel) to stay gentle on the Cheats.Love
+       API — each retry can make 1-2 requests to their /orders endpoint. */
+    if (interaction.commandName === "retryunfulfilled") {
+      if (!isDiscordAdminInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Admin only — this can spend the Cheats.Love balance in bulk.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const productInput = interaction.options.getString("product");
+        let inventorySlugs = null; // null = every product
+        let productLabel = "All products";
+
+        if (productInput !== "__all__") {
+          const matchedProduct = products.find(
+            (p) => p.slug === productInput || p.name.toLowerCase() === productInput.toLowerCase() || p.name.toLowerCase().includes(productInput.toLowerCase())
+          );
+          if (!matchedProduct) {
+            return interaction.editReply({
+              embeds: [{ description: 'Product not found. Start typing to search, or pick "All products".', color: 0xff4444 }],
+            });
+          }
+          inventorySlugs = (matchedProduct.variants || []).map((v) => v.inventorySlug || `${matchedProduct.slug}-${v.slug}`);
+          productLabel = matchedProduct.name;
+        }
+
+        const RETRY_CAP = 25;
+        let ordersQuery = supabaseAdmin
+          .from("orders")
+          .select("id, stripe_session_id, stripe_payment_intent, created_at")
+          .eq("status", "paid")
+          .order("created_at", { ascending: true })
+          .limit(RETRY_CAP + 1); // +1 so we can tell the caller there's more waiting
+        if (inventorySlugs) ordersQuery = ordersQuery.in("product_slug", inventorySlugs);
+
+        const { data: paidOrders, error } = await ordersQuery;
+        if (error) throw error;
+
+        if (!paidOrders || !paidOrders.length) {
+          return interaction.editReply({
+            embeds: [{ title: "Nothing to retry", description: `No unfulfilled orders found for **${productLabel}**.`, color: 0x00c851 }],
+          });
+        }
+
+        const hasMore = paidOrders.length > RETRY_CAP;
+        const batch = paidOrders.slice(0, RETRY_CAP);
+
+        let delivered = 0;
+        let stillUnfulfilled = 0;
+        for (const order of batch) {
+          try {
+            await syncPaidOrder({
+              id: order.stripe_session_id || null,
+              payment_intent: order.stripe_payment_intent || null,
+              metadata: { orderId: order.id },
+            });
+            const { data: refreshed } = await supabaseAdmin
+              .from("orders")
+              .select("status")
+              .eq("id", order.id)
+              .maybeSingle();
+            if (refreshed?.status === "fulfilled") delivered += 1;
+            else stillUnfulfilled += 1;
+          } catch (retryErr) {
+            console.error(`[retryunfulfilled] Order ${order.id} retry failed:`, retryErr.message);
+            stillUnfulfilled += 1;
+          }
+        }
+
+        return interaction.editReply({
+          embeds: [{
+            title: "Retry complete",
+            description: `**${productLabel}** — checked ${batch.length} unfulfilled order(s)${hasMore ? ` (more than ${RETRY_CAP} were waiting — run again to keep going)` : ""}.`,
+            color: delivered > 0 ? 0x00c851 : 0xf59e0b,
+            fields: [
+              { name: "Delivered just now", value: String(delivered), inline: true },
+              { name: "Still unfulfilled", value: String(stillUnfulfilled), inline: true },
+            ],
+            footer: { text: "This is manual — nothing runs this automatically." },
+          }],
+        });
+      } catch (err) {
+        console.error("[Slash /retryunfulfilled]", err.message);
         return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
       }
     }
@@ -10031,13 +10147,22 @@ app.get("/api/auth/role", async (req, res) => {
 app.get("/api/products", async (_req, res) => {
   try {
     res.set("Cache-Control", "no-store, max-age=0");
-    /* Cheats.Love stock-sync polling disabled 2026-08-02 — it was calling the
-       reseller API too often (every /api/products hit past 55s, on top of the
-       setInterval poll below) and got the API key rate-limited/banned. The
-       on-demand "buy a key at checkout" call (postFulfillment/cheatsloveFetch
-       "/orders") is untouched and keeps working normally — this only turns off
-       the proactive stock-level polling. Re-enable by restoring these two
-       blocks if the reseller ever confirms the rate limit is lifted/raised. */
+    /* Demand-driven Cheats.Love catalog refresh, redesigned 2026-08-02. No
+       background clock exists anymore (see the boot Promise.all block) — this
+       is the ONLY place syncCheatsLoveStock() gets triggered after the initial
+       boot warm-up. It fires at most once per cheatslovePollMs (15 min)
+       regardless of how much traffic hits this route, and zero times if there's
+       no traffic at all in a given window. It's fire-and-forget (not awaited)
+       so a slow/down upstream never delays this response — the badge just
+       serves whatever was last cached and updates on a later request.
+       This single call is cheap (1x /products + 1x /balance, ~2 requests) no
+       matter how large the catalog is — the expensive part (a request PER
+       mapped variant, 140 of them) was a separate function, syncCheatsLoveStoreStock,
+       permanently retired for causing the original API ban. See the
+       project-xencheats-cheatslove-ban memory for the full history. */
+    if (cheatsloveApiKey && Date.now() - cheatsloveLastStockSyncAt > cheatslovePollMs) {
+      void syncCheatsLoveStock();
+    }
     const keyCounts = await getUnusedLicenseKeyCounts();
     const catalog = products.map((product) => {
       const comingSoon = isCheatsloveProductComingSoon(product);
@@ -15926,22 +16051,25 @@ async function loadProductStatusOverrides() {
 Promise.all([loadProductOverrides(), loadProductStatusOverrides()]).then(() => {
   setInterval(loadProductStatusOverrides, 5 * 60 * 1000).unref();
 
-  /* Re-enabled 2026-08-02 with the expensive part removed. The old setup ran
-     TWO checks per cycle: syncCheatsLoveStock (1 request to /products + 1 to
-     /balance, cheap) and syncCheatsLoveStoreStock (a separate HTTP request
-     PER mapped variant — 140 of them — to the storefront). That second one is
-     what got the API key rate-limited/banned, and it silently failed often
-     enough that stock display never worked reliably even before that. It's
-     now retired for good (function kept below, dead code, not called).
-     Only the single-call catalog sync runs now, on a conservative 15-minute
-     interval — well under the reseller's documented 30-req/min limit even
-     counting normal site traffic. Key-purchase automation (buying a key at
-     checkout via cheatsloveFetch("/orders")) is a separate code path and was
-     never affected by any of this. */
+  /* Redesigned 2026-08-02 — no background clock at all anymore (Azad: "nothing
+     that happens every hour or something"). History: the old setup ran TWO
+     checks every cycle — syncCheatsLoveStock (1 request to /products + 1 to
+     /balance, cheap) and syncCheatsLoveStoreStock (a separate HTTP request PER
+     mapped variant — 140 of them — to the storefront). The second one is what
+     got the API key rate-limited/banned, and it silently failed often enough
+     that stock never displayed reliably even before that. syncCheatsLoveStoreStock
+     is retired for good (left in the file as dead code, never called).
+     syncCheatsLoveStock is now purely demand-driven: it fires once here at
+     boot to warm the cache, and after that ONLY from inside GET /api/products
+     (see that handler) when the cached snapshot is more than cheatslovePollMs
+     old — so it scales with real visitor traffic instead of a fixed clock,
+     and makes zero requests during quiet periods (e.g. overnight) with no
+     traffic at all. Key-purchase automation (buying a key at checkout via
+     cheatsloveFetch("/orders")) is a separate code path, gated on none of
+     this, and was never affected. */
   if (cheatsloveApiKey) {
-    setInterval(syncCheatsLoveStock, cheatslovePollMs).unref();
-    setTimeout(syncCheatsLoveStock, 5_000); // first sync 5s after boot
-    console.log(`[Cheats.Love] Catalog stock sync enabled, polling every ${Math.round(cheatslovePollMs / 1000)}s (storefront per-variant check retired).`);
+    setTimeout(syncCheatsLoveStock, 5_000); // one-time warm-up 5s after boot, not recurring
+    console.log("[Cheats.Love] Catalog stock sync is demand-driven (no timer) — refreshes lazily from GET /api/products, at most once per " + Math.round(cheatslovePollMs / 60_000) + " min.");
   } else {
     console.log("[Cheats.Love] CHEATSLOVE_API_KEY not set — stock sync disabled.");
   }

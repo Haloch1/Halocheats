@@ -360,6 +360,23 @@ function renderOrders(orders) {
     return;
   }
 
+  /* A "paid" order means Stripe was charged but no key could be delivered yet
+     (Cheats.Love buy-on-demand and local stock both came up empty at the
+     time). Server-side this already gets retried automatically every time
+     the account page loads (see GET /api/account -> syncPaidOrder), and staff
+     get a Discord alert — but the customer previously saw nothing beyond a
+     bare "paid" chip. This banner tells them what's going on and gives a
+     real, clickable path to priority help instead of leaving them guessing. */
+  const unfulfilledNoticeHtml = (order) =>
+    order.status === "paid"
+      ? `<p class="member-item-notice">
+           Payment received — your key is still being processed. This usually
+           resolves within minutes; if it's been longer, join our
+           <a href="https://discord.gg/xencheats" target="_blank" rel="noopener">Discord server</a>
+           and open a ticket for priority help.
+         </p>`
+      : "";
+
   ordersList.innerHTML = visibleOrders
     .map(
       (order) => `
@@ -370,6 +387,7 @@ function renderOrders(orders) {
           </div>
           <p>${escapeHtml(order.priceDisplay)}</p>
           <small>Opened ${formatTimestamp(order.createdAt)}${order.fulfilledAt ? ` | Delivered ${formatTimestamp(order.fulfilledAt)}` : ""}</small>
+          ${unfulfilledNoticeHtml(order)}
           <div class="member-item-actions">
             <a class="button button-secondary button-small" href="${escapeHtml(order.instructionHref || "/instructions/")}">Setup Guide</a>
             <a class="button button-secondary button-small" href="#" data-open-support>Open Help</a>
