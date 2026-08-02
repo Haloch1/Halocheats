@@ -5542,7 +5542,7 @@ ${rows || '<div class="ct">No messages.</div>'}
           "`/announce` `/verify-panel` `/uptime`",
           "`/upload` `/schedule` `/pendingschedules` `/cancelschedule` `/stats`",
           "`/togglebot` `/payments` `/transcriptdemo`",
-          "`/retryunfulfilled <product> [variant]` — retry key delivery for paid-but-unfulfilled orders and show the pulled key(s) (run manually, not scheduled)",
+          "`/retryunfulfilled <product> [variant]` — retry paid-but-unfulfilled orders and show the pulled key(s); with nothing stuck and a specific variant picked, it force-pulls a fresh key from Cheats.Love instead (run manually, not scheduled)",
         ];
         embed.fields.push({ name: "Admin", value: adminCmds.join("\n"), inline: false });
       }
@@ -5926,10 +5926,82 @@ ${rows || '<div class="ct">No messages.</div>'}
         if (error) throw error;
 
         if (!paidOrders || !paidOrders.length) {
-          activeRetryUnfulfilledRun = null;
-          return interaction.editReply({
-            embeds: [{ title: "Nothing to retry", description: `No unfulfilled orders found for **${productLabel}**.`, color: 0x00c851 }],
-          });
+          /* Nothing stuck — but if this is scoped to exactly one variant, pull a
+             fresh key from Cheats.Love anyway and stash it as unused local stock,
+             per Azad: "i want it to retry even if there arent any [unfulfilled
+             orders]". This is a genuine purchase from the reseller with no order
+             attached to it, so it's deliberately restricted to a single, exact
+             inventorySlug (never "All products" or a whole multi-variant product)
+             so staff always know precisely what they're buying. */
+          const singleSlug = inventorySlugs && inventorySlugs.length === 1 ? inventorySlugs[0] : null;
+
+          if (!singleSlug) {
+            activeRetryUnfulfilledRun = null;
+            return interaction.editReply({
+              embeds: [{
+                title: "Nothing to retry",
+                description: `No unfulfilled orders found for **${productLabel}**. Pick one specific variant (not "All products") to force-pull a fresh key even when nothing's stuck.`,
+                color: 0x00c851,
+              }],
+            });
+          }
+
+          if (!cheatsloveApiKey || CHEATSLOVE_VID_MAP[singleSlug] == null) {
+            activeRetryUnfulfilledRun = null;
+            return interaction.editReply({
+              embeds: [{
+                title: "Nothing to retry",
+                description: `No unfulfilled orders found for **${productLabel}**, and it isn't mapped to a Cheats.Love variant, so there's nothing to pull automatically. Use \`/addkey\` to add one by hand.`,
+                color: 0x00c851,
+              }],
+            });
+          }
+
+          try {
+            const vid = CHEATSLOVE_VID_MAP[singleSlug];
+            const cheatsloveOrder = await cheatsloveFetch("/orders", {
+              method: "POST",
+              body: JSON.stringify({ items: [{ vid, qty: 1 }] }),
+            });
+            let keyValue = cheatsloveOrder?.lines?.[0]?.keys?.[0];
+            if (!keyValue && cheatsloveOrder?.order_id) {
+              const retried = await cheatsloveFetch(`/orders/${cheatsloveOrder.order_id}/keys`);
+              keyValue = retried?.lines?.[0]?.keys?.[0];
+            }
+
+            activeRetryUnfulfilledRun = null;
+
+            if (!keyValue) {
+              return interaction.editReply({
+                embeds: [{
+                  title: "Pull failed",
+                  description: `No unfulfilled orders for **${productLabel}**, and Cheats.Love didn't return a key on demand either. Try again shortly, or check their panel.`,
+                  color: 0xff4444,
+                }],
+              });
+            }
+
+            const { error: insertErr } = await supabaseAdmin
+              .from("license_keys")
+              .insert({ product_slug: singleSlug, key_value: keyValue, status: "unused" });
+            if (insertErr) throw insertErr;
+
+            return interaction.editReply({
+              embeds: [{
+                title: "Pulled a fresh key",
+                description: `No unfulfilled orders for **${productLabel}**, so this was bought directly from Cheats.Love and added to local stock (ready for the next order, or hand it out manually).`,
+                color: 0x00c851,
+                fields: [{ name: "Key", value: `\`${keyValue}\``, inline: false }],
+                footer: { text: "This spent real balance with Cheats.Love." },
+              }],
+            });
+          } catch (pullErr) {
+            activeRetryUnfulfilledRun = null;
+            console.error("[retryunfulfilled] Direct pull failed:", pullErr.message);
+            return interaction.editReply({
+              embeds: [{ title: "Pull failed", description: `No unfulfilled orders for **${productLabel}**, and the direct pull errored: ${pullErr.message}`, color: 0xff4444 }],
+            });
+          }
         }
 
         const hasMore = paidOrders.length > RETRY_CAP;
