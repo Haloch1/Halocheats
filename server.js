@@ -4789,7 +4789,11 @@ if (isConfiguredValue(discordBotToken)) {
       const allStatusMessages = recent
         ? [...recent.values()]
             .filter((m) => isProductStatusEmbed(m.embeds?.[0]))
-            .sort((a, b) => b.createdTimestamp - a.createdTimestamp)
+            .sort(
+              (a, b) =>
+                (b.editedTimestamp || b.createdTimestamp) -
+                (a.editedTimestamp || a.createdTimestamp)
+            )
         : [];
       if (!allStatusMessages.length) {
         console.warn("[Status sync] No status embeds found in source channel");
@@ -4885,8 +4889,8 @@ if (isConfiguredValue(discordBotToken)) {
           })
           .join("\n");
         const noticePayload = {
-          content: `@everyone\n**Product status changed**\n**Changed:** <t:${changedAt}:F> (<t:${changedAt}:R>)\n${changeLines}`,
-          allowedMentions: { parse: ["everyone"] },
+          content: `**Product status changed**\n**Changed:** <t:${changedAt}:F> (<t:${changedAt}:R>)\n${changeLines}`,
+          allowedMentions: { parse: [] },
         };
         const existingNotice = statusChangeNoticeMessageId
           ? await targetChannel.messages.fetch(statusChangeNoticeMessageId).catch(() => null)
@@ -4931,6 +4935,14 @@ if (isConfiguredValue(discordBotToken)) {
         );
         // Keep one notice visible until the next real change replaces it.
         statusChangeNoticeMessageId = sortedNotices[0].id;
+        if (/^@everyone\s*/i.test(sortedNotices[0].content || "")) {
+          await sortedNotices[0]
+            .edit({
+              content: sortedNotices[0].content.replace(/^@everyone\s*/i, ""),
+              allowedMentions: { parse: [] },
+            })
+            .catch(() => {});
+        }
         for (const stale of sortedNotices.slice(1)) {
           await stale.delete().catch(() => {});
         }
