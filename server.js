@@ -114,6 +114,38 @@ let cheatsloveLastRequestStartedAt = 0;
 let cheatsloveBlockedUntil = 0;
 let cheatsloveLastCartRefreshAt = 0;
 let requestCheatsLoveStockRefresh = null;
+let cheatsloveOnDemandRefreshAt = 0;
+let cheatsloveOnDemandRefreshPromise = null;
+
+/* A cart add or checkout may request a newer catalog snapshot, but never more
+   often than once per cooldown window. This keeps customer traffic from
+   becoming a supplier polling loop while still preventing stale checkout
+   decisions. Concurrent callers share the same in-flight refresh. */
+async function refreshCheatsLoveStockOnDemand() {
+  if (!cheatsloveApiKey || typeof requestCheatsLoveStockRefresh !== "function") {
+    return false;
+  }
+  if (cheatsloveOnDemandRefreshPromise) return cheatsloveOnDemandRefreshPromise;
+
+  const now = Date.now();
+  if (now - cheatsloveOnDemandRefreshAt < cheatsloveCartRefreshCooldownMs) {
+    return false;
+  }
+
+  cheatsloveOnDemandRefreshAt = now;
+  cheatsloveOnDemandRefreshPromise = Promise.resolve()
+    .then(() => requestCheatsLoveStockRefresh())
+    .then(() => true)
+    .catch((error) => {
+      console.warn("[Cheats.Love] On-demand stock refresh failed:", error.message);
+      return false;
+    })
+    .finally(() => {
+      cheatsloveOnDemandRefreshPromise = null;
+    });
+
+  return cheatsloveOnDemandRefreshPromise;
+}
 /* Real, confirmed-by-sync stock per inventorySlug ("In Stock" | "Out of Stock").
    After the first valid sync, mapped variants without a usable upstream result
    fail closed instead of being advertised as available. */
@@ -9663,7 +9695,8 @@ async function syncPaidOrderCore(session) {
 
   /* ── 1) Retrieve the existing supplier order, or create it once for the
      initial pending fulfillment. Paid retries never purchase again. ── */
-   if (cheatsloveApiKey && CHEATSLOVE_VID_MAP[order.product_slug] != null) {
+   const supplierMapped = cheatsloveApiKey && CHEATSLOVE_VID_MAP[order.product_slug] != null;
+   if (supplierMapped) {
      try {
        const linkResult = await getSupplierOrderLink(order.id);
        let supplierLink = linkResult.link;
@@ -9715,11 +9748,26 @@ async function syncPaidOrderCore(session) {
          console.warn(`[Cheats.Love] Supplier order ${supplierLink.supplier_order_id} has no key yet.`);
       }
     } catch (clErr) {
+      const supplierOutOfStock = /(?:failed:\s*(?:409|422)|out\s*of\s*stock|insufficient\s*stock|no\s*stock)/i.test(clErr.message);
+      if (supplierOutOfStock) {
+        cheatsloveStockKnown.set(order.product_slug, "Out of Stock");
+        cheatsloveStockCountKnown.set(order.product_slug, 0);
+        const catalogItem = getCatalogItemByInventorySlug(order.product_slug);
+        if (catalogItem?.variant) catalogItem.variant.stockLabel = "Out of Stock";
+        await supabaseAdmin.from("supplier_stock_cache").upsert({
+          inventory_slug: order.product_slug,
+          product_slug: catalogItem?.product?.slug || order.product_slug,
+          stock_label: "Out of Stock",
+          stock_count: 0,
+          synced_at: new Date().toISOString(),
+        }, { onConflict: "inventory_slug" });
+      }
       console.error(`[Cheats.Love Buy] Error for ${order.product_slug}:`, clErr.message);
     }
   }
 
   /* ── 2) Fallback: check local stock ── */
+  if (!supplierMapped) {
   const { data: availableKeys, error: availableKeyError } = await supabaseAdmin
     .from("license_keys")
     .select("id")
@@ -9779,6 +9827,8 @@ async function syncPaidOrderCore(session) {
      This is atomic at the row level, so concurrent webhook retries or order-status
      re-checks can't each fire the unfulfilled alerts — only the one call that
      actually flips the row to "paid" sends the Discord notifications. */
+  }
+
   const { data: transitioned, error } = await supabaseAdmin
     .from("orders")
     .update({
@@ -10977,8 +11027,8 @@ app.post("/api/stock/refresh", async (_req, res) => {
   }
   cheatsloveLastCartRefreshAt = now;
   try {
-    await requestCheatsLoveStockRefresh();
-    return res.json({ ok: true, refreshed: true });
+    const refreshed = await refreshCheatsLoveStockOnDemand();
+    return res.json({ ok: true, refreshed });
   } catch (error) {
     console.warn("[Cheats.Love] Cart-triggered stock refresh failed:", error.message);
     return res.json({ ok: true, refreshed: false });
@@ -13286,6 +13336,15 @@ function isKeyAvailable(inventorySlug) {
 }
 
 async function isKeyAvailableAsync(inventorySlug) {
+  /* Supplier-mapped variants are fulfilled by the supplier. Do not let a
+     stale/local fallback advertise or sell one when the upstream snapshot is
+     out of stock. Local keys remain valid for products that are not supplier
+     mapped. */
+  if (cheatsloveApiKey && CHEATSLOVE_VID_MAP[inventorySlug] != null) {
+    await refreshCheatsLoveStockOnDemand();
+    return isKeyAvailable(inventorySlug);
+  }
+
   /* Check local stock */
   const { count: localStock } = await supabaseAdmin
     .from("license_keys")
@@ -13295,8 +13354,7 @@ async function isKeyAvailableAsync(inventorySlug) {
 
   if (localStock && localStock > 0) return true;
 
-  /* No local stock — reseller API configured for this product? */
-  return isKeyAvailable(inventorySlug);
+  return false;
 }
 
 /* Promo codes are loaded from the PROMO_CODES env var (set in Render) so no
@@ -13479,7 +13537,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
     /* ── Check key availability (no purchase yet — that happens after payment) ── */
     const keyAvailable = await isKeyAvailableAsync(selection.inventorySlug);
     if (!keyAvailable) {
-      return res.status(409).json({ error: "This product is temporarily out of stock. Please try again later or open a support ticket." });
+      return res.status(409).json({ error: "This product is not in stock right now. Your payment was not started." });
     }
 
     const { data: order, error: orderInsertError } = await supabaseAdmin
@@ -13620,7 +13678,7 @@ app.post("/api/create-crypto-checkout", async (req, res) => {
     /* ── Check key availability (no purchase yet — that happens after payment) ── */
     const keyAvailable = await isKeyAvailableAsync(selection.inventorySlug);
     if (!keyAvailable) {
-      return res.status(409).json({ error: "This product is temporarily out of stock. Please try again later or open a support ticket." });
+      return res.status(409).json({ error: "This product is not in stock right now. Your payment was not started." });
     }
 
     const { data: order, error: orderInsertError } = await supabaseAdmin
@@ -13847,7 +13905,7 @@ app.post("/api/purchase-with-balance", async (req, res) => {
 
   const keyAvailable = await isKeyAvailableAsync(selection.inventorySlug);
   if (!keyAvailable) {
-    return res.status(409).json({ error: "This product is temporarily out of stock. Your balance was not charged." });
+    return res.status(409).json({ error: "This product is not in stock right now. Your balance was not charged." });
   }
 
   try {
@@ -13927,7 +13985,7 @@ app.post("/api/cart/checkout", async (req, res) => {
   ).values()) {
     if (!(await isKeyAvailableAsync(selection.inventorySlug))) {
       return res.status(409).json({
-        error: `${selection.product.name} - ${selection.variant.name} is out of stock. Your balance was not charged.`,
+        error: `${selection.product.name} - ${selection.variant.name} is not in stock. Your balance was not charged.`,
       });
     }
   }
