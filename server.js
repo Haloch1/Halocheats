@@ -4655,61 +4655,49 @@ if (isConfiguredValue(discordBotToken)) {
   }
 
   function buildOwnedStatusEmbed(matched) {
-    const byStatus = new Map([
-      ["Updating", []],
-      ["Undetected", []],
-    ]);
+    const byGame = new Map();
     for (const row of matched) {
-      const status = String(row.badge || "Unknown").trim() || "Unknown";
-      if (!byStatus.has(status)) byStatus.set(status, []);
-      byStatus.get(status).push(row);
+      if (!byGame.has(row.displayGame)) byGame.set(row.displayGame, []);
+      byGame.get(row.displayGame).push(row);
     }
     const now = Math.floor(Date.now() / 1000);
-    const fields = [...byStatus.entries()]
-      .filter(([, rows]) => rows.length)
-      .map(([status, rows]) => {
-        const byGame = new Map();
-        for (const row of rows) {
-          const game = String(row.displayGame || "Other").trim() || "Other";
-          if (!byGame.has(game)) byGame.set(game, []);
-          byGame.get(game).push(String(row.variant || "Variant").trim() || "Variant");
-        }
-        const text = [...byGame.entries()]
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([game, variants]) => {
-            const list = variants.sort((a, b) => a.localeCompare(b)).map((variant) => `- ${variant}`).join("\n");
-            return `**${game}**\n${list}`;
-          })
-          .join("\n\n");
-        return {
-          name: `${status} | ${rows.length} variant${rows.length === 1 ? "" : "s"}`,
-          value: text.length > 1024 ? `${text.slice(0, 1000)}...` : text,
-          inline: false,
-        };
-      });
-
-    const statusSummary = [...byStatus.entries()]
-      .filter(([, rows]) => rows.length)
-      .map(([status, rows]) => `**${status}:** ${rows.length}`)
-      .join("  |  ");
+    const fields = [...byGame.entries()].map(([game, rows]) => ({
+      name: game,
+      value: (() => {
+        const text = rows
+          .sort((a, b) => `${a.displayGame} ${a.variant}`.localeCompare(`${b.displayGame} ${b.variant}`))
+          .map((r) => `${statusEmojiForBadge(r.badge)} ${r.variant}`)
+          .join("\n");
+        return text.length > 1024 ? `${text.slice(0, 1000)}...` : text;
+      })(),
+      inline: true,
+    }));
+    const legendField = {
+      name: "Status Code:",
+      value: "🟢 Undetected  •  🔵/⚫ Updating  •  🟠 Use at own risk!  •  🟡 Testing  •  📝 Discontinued",
+      inline: false,
+    };
 
     return {
-      title: "XenCheats | Product Status",
+      title: "📌 XenCheats Product Status",
       color: 0xd82028,
       fields: fields.length
-        ? [
-            ...fields,
-            {
-              name: "Status guide",
-              value: "🟢 Undetected  •  🟡 Updating  •  🟠 Use at own risk  •  🟡 Testing  •  📝 Discontinued",
-              inline: false,
-            },
-          ]
+        ? [...fields, legendField]
         : [{ name: "No data", value: "Couldn't match any tracked products this cycle.", inline: false }],
-      description: `${statusSummary || "No tracked variants"}\n\nLast updated: <t:${now}:f> (<t:${now}:R>)`,
-      footer: { text: "XenCheats | Status updates automatically" },
+      description: `**Last updated:** <t:${now}:f> (<t:${now}:R>)`,
+      footer: { text: "XenCheats | Live product status" },
       timestamp: new Date().toISOString(),
     };
+  }
+
+  function statusEmojiForBadge(badge) {
+    return {
+      Undetected: "🟢",
+      Updating: "🔵",
+      "Use at own risk!": "🟠",
+      Testing: "🟡",
+      Discontinued: "📝",
+    }[badge] || "❔";
   }
 
   let statusTargetMessageId = null;
