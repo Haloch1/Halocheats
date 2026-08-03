@@ -10874,10 +10874,16 @@ app.get("/api/products", async (_req, res) => {
           stockLabel = "Coming Soon";
         } else if (isDisabledVariant) {
           stockLabel = "Unavailable";
-        } else if (storeSoldOut || !productAvailable) {
-          stockLabel = "Out of Stock";
         } else if (exactStockCount != null) {
+          /* Availability can be disabled by a status override such as
+             "Updating" without changing the supplier's real quantity. Keep
+             those concerns separate: show the verified count, while
+             checkoutReady above remains false. */
           stockLabel = formatKeyStockLabel(exactStockCount);
+        } else if (cheatsloveStockKnown.get(inventorySlug)) {
+          stockLabel = cheatsloveStockKnown.get(inventorySlug);
+        } else if (storeSoldOut || !productAvailable) {
+          stockLabel = "Unavailable";
         } else {
           stockLabel = localStockCount > 0 || resellerCovers ? "In Stock" : "Out of Stock";
         }
