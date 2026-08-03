@@ -1174,6 +1174,9 @@ function initWallet() {
       haloWriteCart(items);
       renderBadge();
       renderDrawer();
+      /* Ask the server for a fresh full-catalog snapshot. The server applies
+         a global cooldown, so repeated cart clicks cannot spam the supplier. */
+      void fetch("/api/stock/refresh", { method: "POST" }).catch(() => {});
     },
     open: openDrawer,
     count: haloCartCount,

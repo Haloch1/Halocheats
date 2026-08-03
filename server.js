@@ -95,10 +95,10 @@ const cheatsloveStoreApiUrl = (process.env.CHEATSLOVE_STORE_API_URL
 // boot also reads /balance once) - the old per-variant storefront double-check
 // (syncCheatsLoveStoreStock, 140 requests per cycle) is retired, see the
 // project-xencheats-cheatslove-ban memory / comment near cheatsloveCoversInventory.
-/* Poll conservatively. A full catalog response contains every variant, so a
-   15-minute refresh is enough for storefront availability without creating a
-   customer-driven request storm if the provider is slow or unavailable. */
-const cheatslovePollMs = 15 * 60_000;
+/* A full catalog response contains every variant. Refresh twice daily, then
+   allow a tightly-cooldown refresh when a customer adds an item to cart. */
+const cheatslovePollMs = 12 * 60 * 60_000;
+const cheatsloveCartRefreshCooldownMs = 5 * 60_000;
 /* HARD PROVIDER SAFETY LIMIT: Cheats.Love documents 30 requests/minute.
    Every reseller request must pass through cheatsloveFetch(), which serializes
    starts at least four seconds apart (maximum 15/minute). Keep this fixed
@@ -112,6 +112,8 @@ const CHEATSLOVE_REQUEST_TIMEOUT_MS = 60_000;
 let cheatsloveRequestQueue = Promise.resolve();
 let cheatsloveLastRequestStartedAt = 0;
 let cheatsloveBlockedUntil = 0;
+let cheatsloveLastCartRefreshAt = 0;
+let requestCheatsLoveStockRefresh = null;
 /* Real, confirmed-by-sync stock per inventorySlug ("In Stock" | "Out of Stock").
    After the first valid sync, mapped variants without a usable upstream result
    fail closed instead of being advertised as available. */
@@ -10962,6 +10964,27 @@ app.get("/api/products", async (_req, res) => {
   }
 });
 
+/* A cart add can request a fresh full-catalog snapshot, but the cooldown is
+   global so opening many tabs or repeatedly clicking Add cannot create a
+   supplier request burst. Checkout still performs its own availability check. */
+app.post("/api/stock/refresh", async (_req, res) => {
+  if (!cheatsloveApiKey || typeof requestCheatsLoveStockRefresh !== "function") {
+    return res.json({ ok: true, refreshed: false });
+  }
+  const now = Date.now();
+  if (now - cheatsloveLastCartRefreshAt < cheatsloveCartRefreshCooldownMs) {
+    return res.json({ ok: true, refreshed: false, cooldown: true });
+  }
+  cheatsloveLastCartRefreshAt = now;
+  try {
+    await requestCheatsLoveStockRefresh();
+    return res.json({ ok: true, refreshed: true });
+  } catch (error) {
+    console.warn("[Cheats.Love] Cart-triggered stock refresh failed:", error.message);
+    return res.json({ ok: true, refreshed: false });
+  }
+});
+
 /* ── Validate a promo code without ever exposing the full list to the client ── */
 app.post("/api/promo/validate", async (req, res) => {
   try {
@@ -17402,8 +17425,11 @@ async function loadProductStatusOverrides() {
 Promise.all([loadProductOverrides(), loadProductStatusOverrides(), loadSupplierStockCache()]).then(async () => {
   setInterval(loadProductStatusOverrides, 5 * 60 * 1000).unref();
 
+  requestCheatsLoveStockRefresh = () => syncCheatsLoveStock({ refreshBalance: false });
+
   /* A single authenticated /products request returns every variant quantity.
-     Refresh that one snapshot every 15 minutes. All supplier calls still pass
+     Refresh that one snapshot twice daily, with a cooldown-limited refresh
+     when a customer adds an item to their cart. All supplier calls still pass
      through cheatsloveFetch(), whose hard four-second spacing caps the whole
      app at 15 requests/minute, below the documented 30/minute provider limit.
      The retired per-variant storefront checker remains unused. */
@@ -17421,7 +17447,7 @@ Promise.all([loadProductOverrides(), loadProductStatusOverrides(), loadSupplierS
       `mapped=${Object.keys(CHEATSLOVE_VID_MAP).length}; endpoint=${cheatsloveBaseUrl}`
     );
     setInterval(() => void syncCheatsLoveStock({ refreshBalance: false }), cheatslovePollMs).unref();
-    console.log("[Cheats.Love] Catalog stock monitor enabled: one full-catalog refresh every 15 minutes.");
+    console.log("[Cheats.Love] Catalog stock monitor enabled: twice-daily refresh plus cooldown-limited cart refreshes.");
   } else {
     console.log("[Cheats.Love] CHEATSLOVE_API_KEY not set — stock sync disabled.");
   }
