@@ -10765,9 +10765,12 @@ app.get("/api/auth/role", async (req, res) => {
 app.get("/api/products", async (_req, res) => {
   try {
     res.set("Cache-Control", "no-store, max-age=0");
-    /* Stale-while-refresh: do not make the storefront wait behind the supplier
-       queue. Checkout still uses the authoritative server-side stock guard. */
-    if (cheatsloveApiKey && Date.now() - cheatsloveLastStockSyncAt > cheatslovePollMs) {
+    /* The first request after boot waits for one authoritative snapshot so the
+       catalog cannot render false zero stock. After that, refreshes stay
+       backgrounded so normal page loads never wait behind the supplier queue. */
+    if (cheatsloveApiKey && !cheatsloveProductPresenceReady) {
+      await syncCheatsLoveStock({ refreshBalance: false });
+    } else if (cheatsloveApiKey && Date.now() - cheatsloveLastStockSyncAt > cheatslovePollMs) {
       void syncCheatsLoveStock({ refreshBalance: false });
     }
     const keyCounts = await getUnusedLicenseKeyCounts();
