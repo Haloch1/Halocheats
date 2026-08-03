@@ -109,6 +109,8 @@ const cheatsloveStockCountKnown = new Map();
 const cheatsloveStoreStockKnown = new Map();
 const cheatsloveCostKnown = new Map();
 const cheatsloveProductPresenceKnown = new Map();
+const supplierOrderLinkCache = new Map();
+let supplierOrderLinkTableAvailable = true;
 let cheatsloveBalanceCents = null;
 let cheatsloveLastStockSyncFailed = false;
 let cheatsloveLastStockSyncAt = 0;
@@ -162,6 +164,56 @@ function consumeCheatsloveStock(inventorySlug, quantity = 1) {
   const remaining = Math.max(0, current - Math.max(1, Math.trunc(quantity)));
   cheatsloveStockCountKnown.set(inventorySlug, remaining);
   cheatsloveStockKnown.set(inventorySlug, remaining > 0 ? "In Stock" : "Out of Stock");
+}
+
+async function getSupplierOrderLink(orderId) {
+  if (!supabaseAdmin || !orderId) return { link: null, available: false };
+  if (supplierOrderLinkCache.has(orderId)) {
+    return { link: supplierOrderLinkCache.get(orderId), available: supplierOrderLinkTableAvailable };
+  }
+  const { data, error } = await supabaseAdmin
+    .from("supplier_order_links")
+    .select("order_id, supplier_order_id, supplier_order_ref")
+    .eq("order_id", orderId)
+    .maybeSingle();
+  if (error) {
+    supplierOrderLinkTableAvailable = false;
+    console.error("[Cheats.Love] Run supabase-supplier-order-links.sql before supplier fulfillment:", error.message);
+    return { link: null, available: false };
+  }
+  supplierOrderLinkTableAvailable = true;
+  const link = data || null;
+  if (link) supplierOrderLinkCache.set(orderId, link);
+  return { link, available: true };
+}
+
+async function saveSupplierOrderLink(orderId, supplierOrder) {
+  if (!supabaseAdmin || !orderId || !supplierOrder?.order_id) {
+    throw new Error("Supplier order ID was not returned.");
+  }
+  const row = {
+    order_id: orderId,
+    supplier_order_id: String(supplierOrder.order_id),
+    supplier_order_ref: supplierOrder.order_ref ? String(supplierOrder.order_ref) : null,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await supabaseAdmin
+    .from("supplier_order_links")
+    .upsert(row, { onConflict: "order_id" })
+    .select("order_id, supplier_order_id, supplier_order_ref")
+    .single();
+  if (error) {
+    supplierOrderLinkTableAvailable = false;
+    throw new Error(`Could not save supplier order link: ${error.message}`);
+  }
+  supplierOrderLinkTableAvailable = true;
+  supplierOrderLinkCache.set(orderId, data || row);
+  return data || row;
+}
+
+async function retrieveCheatsLoveOrderKey(supplierOrderId) {
+  const result = await cheatsloveFetch(`/orders/${encodeURIComponent(supplierOrderId)}/keys`);
+  return result?.lines?.[0]?.keys?.[0] || null;
 }
 const adminAccessKey = process.env.ADMIN_ACCESS_KEY || "";
 const ownerRequestsKey = process.env.OWNER_REQUESTS_KEY || "";
@@ -5841,7 +5893,7 @@ ${rows || '<div class="ct">No messages.</div>'}
           "`/announce` `/verify-panel` `/uptime`",
           "`/upload` `/schedule` `/pendingschedules` `/cancelschedule` `/stats`",
           "`/togglebot` `/ticketbot <on|off>` `/payments` `/transcriptdemo`",
-          "`/retryunfulfilled <product> [variant]` — retry paid-but-unfulfilled orders and show the pulled key(s); with nothing stuck and a specific variant picked, it force-pulls a fresh key from Cheats.Love instead (run manually, not scheduled)",
+          "`/retryunfulfilled <product> [variant]` — retrieve keys for paid-but-unfulfilled orders; it never creates a second supplier purchase",
           "`/retryjobs` — read-only view of orders currently queued in the background auto-retry system",
         ];
         embed.fields.push({ name: "Admin", value: adminCmds.join("\n"), inline: false });
@@ -6240,7 +6292,7 @@ ${rows || '<div class="ct">No messages.</div>'}
             return interaction.editReply({
               embeds: [{
                 title: "Nothing to retry",
-                description: `No unfulfilled orders found for **${productLabel}**. Pick one specific variant (not "All products") to force-pull a fresh key even when nothing's stuck.`,
+                description: `No unfulfilled orders found for **${productLabel}**. Nothing was purchased or changed.`,
                 color: 0x00c851,
               }],
             });
@@ -6251,58 +6303,20 @@ ${rows || '<div class="ct">No messages.</div>'}
             return interaction.editReply({
               embeds: [{
                 title: "Nothing to retry",
-                description: `No unfulfilled orders found for **${productLabel}**, and it isn't mapped to a Cheats.Love variant, so there's nothing to pull automatically. Use \`/addkey\` to add one by hand.`,
+                description: `No unfulfilled orders found for **${productLabel}**, and it isn't mapped to a supplier variant. Nothing was purchased or changed.`,
                 color: 0x00c851,
               }],
             });
           }
 
-          try {
-            const vid = CHEATSLOVE_VID_MAP[singleSlug];
-            const cheatsloveOrder = await cheatsloveFetch("/orders", {
-              method: "POST",
-              body: JSON.stringify({ items: [{ vid, qty: 1 }] }),
-            });
-            let keyValue = cheatsloveOrder?.lines?.[0]?.keys?.[0];
-            if (!keyValue && cheatsloveOrder?.order_id) {
-              const retried = await cheatsloveFetch(`/orders/${cheatsloveOrder.order_id}/keys`);
-              keyValue = retried?.lines?.[0]?.keys?.[0];
-            }
-
-            activeRetryUnfulfilledRun = null;
-
-            if (!keyValue) {
-              return interaction.editReply({
-                embeds: [{
-                  title: "Pull failed",
-                  description: `No unfulfilled orders for **${productLabel}**, and Cheats.Love didn't return a key on demand either. Try again shortly, or check their panel.`,
-                  color: 0xff4444,
-                }],
-              });
-            }
-
-            consumeCheatsloveStock(singleSlug);
-            const { error: insertErr } = await supabaseAdmin
-              .from("license_keys")
-              .insert({ product_slug: singleSlug, key_value: keyValue, status: "unused" });
-            if (insertErr) throw insertErr;
-
-            return interaction.editReply({
-              embeds: [{
-                title: "Pulled a fresh key",
-                description: `No unfulfilled orders for **${productLabel}**, so this was bought directly from Cheats.Love and added to local stock (ready for the next order, or hand it out manually).`,
-                color: 0x00c851,
-                fields: [{ name: "Key", value: `\`${keyValue}\``, inline: false }],
-                footer: { text: "This spent real balance with Cheats.Love." },
-              }],
-            });
-          } catch (pullErr) {
-            activeRetryUnfulfilledRun = null;
-            console.error("[retryunfulfilled] Direct pull failed:", pullErr.message);
-            return interaction.editReply({
-              embeds: [{ title: "Pull failed", description: `No unfulfilled orders for **${productLabel}**, and the direct pull errored: ${pullErr.message}`, color: 0xff4444 }],
-            });
-          }
+          activeRetryUnfulfilledRun = null;
+          return interaction.editReply({
+            embeds: [{
+              title: "Nothing to retry",
+              description: `No unfulfilled orders found for **${productLabel}**. This command only retrieves keys for existing customer orders; it never creates a new supplier purchase.`,
+              color: 0x00c851,
+            }],
+          });
         }
 
         const hasMore = paidOrders.length > RETRY_CAP;
@@ -9544,24 +9558,28 @@ async function syncPaidOrderCore(session) {
     return { keyValue: alreadyAssignedKey.key_value };
   }
 
-  /* ── 1) Buy on demand from Cheats.Love for explicitly mapped variants. ── */
-  if (cheatsloveApiKey && CHEATSLOVE_VID_MAP[order.product_slug] != null) {
-    try {
-      const vid = CHEATSLOVE_VID_MAP[order.product_slug];
-      const cheatsloveOrder = await cheatsloveFetch("/orders", {
-        method: "POST",
-        body: JSON.stringify({ items: [{ vid, qty: 1 }] }),
-      });
-      let keyValue = cheatsloveOrder?.lines?.[0]?.keys?.[0];
+  /* ── 1) Retrieve the existing supplier order, or create it once for the
+     initial pending fulfillment. Paid retries never purchase again. ── */
+   if (cheatsloveApiKey && CHEATSLOVE_VID_MAP[order.product_slug] != null) {
+     try {
+       const linkResult = await getSupplierOrderLink(order.id);
+       let supplierLink = linkResult.link;
+       /* Only the initial pending fulfillment may create a supplier order. */
+       if (!supplierLink && order.status === "pending" && linkResult.available) {
+         const supplierOrder = await cheatsloveFetch("/orders", {
+           method: "POST",
+           body: JSON.stringify({ items: [{ vid: CHEATSLOVE_VID_MAP[order.product_slug], qty: 1 }] }),
+         });
+         supplierLink = await saveSupplierOrderLink(order.id, supplierOrder);
+       }
+       const keyValue = supplierLink
+         ? await retrieveCheatsLoveOrderKey(supplierLink.supplier_order_id)
+         : null;
       /* The supplier may accept payment with HTTP 202 while its license server
          is still assigning the key. Its documented retry endpoint is safe and
          idempotent, so try it once before treating the order as unfulfilled. */
-      if (!keyValue && cheatsloveOrder?.order_id) {
-        const retried = await cheatsloveFetch(`/orders/${cheatsloveOrder.order_id}/keys`);
-        keyValue = retried?.lines?.[0]?.keys?.[0];
-      }
-      if (keyValue) {
-        console.log(`[Cheats.Love Buy] Got key for ${order.product_slug}: order ${cheatsloveOrder.order_ref}`);
+       if (keyValue) {
+         console.log(`[Cheats.Love] Retrieved key for ${order.product_slug}: supplier order ${supplierLink.supplier_order_ref || supplierLink.supplier_order_id}`);
         consumeCheatsloveStock(order.product_slug);
         const clAssignedAt = new Date().toISOString();
         const { data: clKey, error: clErr } = await supabaseAdmin
@@ -9588,8 +9606,10 @@ async function syncPaidOrderCore(session) {
 
           return await postFulfillment(order, session, clKey, clAssignedAt, { source: "cheatslove" });
         }
-      } else {
-        console.warn(`[Cheats.Love Buy] Failed/unfulfilled for ${order.product_slug}:`, JSON.stringify(cheatsloveOrder).slice(0, 300));
+       } else if (!supplierLink) {
+         console.warn(`[Cheats.Love] No saved supplier order for paid order ${order.id}; refusing duplicate purchase.`);
+       } else {
+         console.warn(`[Cheats.Love] Supplier order ${supplierLink.supplier_order_id} has no key yet.`);
       }
     } catch (clErr) {
       console.error(`[Cheats.Love Buy] Error for ${order.product_slug}:`, clErr.message);
@@ -10745,14 +10765,10 @@ app.get("/api/auth/role", async (req, res) => {
 app.get("/api/products", async (_req, res) => {
   try {
     res.set("Cache-Control", "no-store, max-age=0");
-    /* Normally the minute monitor keeps this snapshot fresh. If a request
-       arrives after a missed/failed cycle, recover through the same serialized
-       and rate-limited full-catalog request before returning availability. */
+    /* Stale-while-refresh: do not make the storefront wait behind the supplier
+       queue. Checkout still uses the authoritative server-side stock guard. */
     if (cheatsloveApiKey && Date.now() - cheatsloveLastStockSyncAt > cheatslovePollMs) {
-      /* Wait for the current or recovery snapshot instead of returning stale
-         badges. Concurrent requests share one in-flight sync and cannot
-         multiply supplier calls. Balance refreshes remain boot-only here. */
-      await syncCheatsLoveStock({ refreshBalance: false });
+      void syncCheatsLoveStock({ refreshBalance: false });
     }
     const keyCounts = await getUnusedLicenseKeyCounts();
     const catalog = products.map((product) => {
