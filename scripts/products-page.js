@@ -237,6 +237,7 @@ function refreshOpenProductAvailability() {
 
   activeProduct = refreshedProduct;
   modal.querySelector("[data-variant-status]").textContent = refreshedProduct.badge || "";
+  setVariantStatusTone(modal, refreshedProduct.badge);
 
   modal.querySelectorAll("[data-variant-option]").forEach((option) => {
     const variant = refreshedProduct.variants?.find(
@@ -669,6 +670,12 @@ function badgeTone(badge) {
   if (value.includes("updating")) return "tone-amber";
   if (value.includes("coming soon")) return "tone-muted";
   return "tone-blue";
+}
+
+function setVariantStatusTone(modal, badge) {
+  const row = modal?.querySelector(".variant-status-row");
+  if (!row) return;
+  row.classList.toggle("is-updating", String(badge || "").toLowerCase().includes("updating"));
 }
 
 function renderProductCard(product, index) {
@@ -1312,6 +1319,7 @@ function openVariantModal(product, { updateUrl = true } = {}) {
   modal.querySelector("[data-variant-title]").textContent = product.name;
   modal.querySelector("[data-variant-category]").textContent = product.category || product.game || "Catalog";
   modal.querySelector("[data-variant-status]").textContent = product.badge;
+  setVariantStatusTone(modal, product.badge);
   modal.querySelector("[data-variant-summary]").textContent = product.summary;
   modal.querySelector("[data-detail-about]").textContent = product.summary;
   modal.querySelector("[data-detail-features]").innerHTML = renderFeatureGroups(product);

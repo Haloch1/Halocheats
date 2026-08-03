@@ -1107,7 +1107,7 @@ function getProductBySlug(productSlug) {
    normal availability. */
 function applyProductStatusBadge(product, badge) {
   product.badge = badge;
-  product.available = badge !== "Updating";
+  product.available = !["Discontinued", "Coming Soon"].includes(String(badge || ""));
 }
 
 function getProductSelection(productSlug, variantSlug) {

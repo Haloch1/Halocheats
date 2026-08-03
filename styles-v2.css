@@ -2425,6 +2425,15 @@ textarea:focus {
   font-family: var(--font-display);
 }
 
+.variant-status-row.is-updating .variant-dot {
+  background: #f0b429;
+  box-shadow: 0 0 13px rgba(240, 180, 41, 0.65);
+}
+
+.variant-status-row.is-updating strong {
+  color: #f0b429;
+}
+
 .variant-status-row > span[data-variant-price] {
   margin-left: auto;
   font: 800 1.25rem var(--font-display);
