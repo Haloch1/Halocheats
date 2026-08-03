@@ -1304,6 +1304,31 @@
       .admin-page .admin-nav-item:hover { color: var(--ink); }
       .admin-page .admin-main { color: var(--ink); }
 
+      /* The storefront palette intentionally uses light text on dark
+         surfaces. Admin uses a light shell, so keep its navigation and
+         headings readable regardless of the shared variable values. */
+      .admin-page .admin-sidebar-title,
+      .admin-page .admin-nav-group-label,
+      .admin-page .panel-section-title {
+        color: #bd3b42;
+      }
+
+      .admin-page .admin-nav-item {
+        color: #6f5d5b;
+      }
+
+      .admin-page .admin-nav-item:hover {
+        color: #241b1a;
+      }
+
+      .admin-page .admin-panel-header h2 {
+        color: #241b1a;
+      }
+
+      .admin-page .admin-panel-header p {
+        color: #756866;
+      }
+
       .admin-page .empty-state {
         color: var(--ink-soft);
         background: #fff;
