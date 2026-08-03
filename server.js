@@ -103,6 +103,9 @@ const cheatslovePollMs = 60_000;
    safety margin. A provider 429 also pauses the entire queue for >= 60s. */
 const CHEATSLOVE_MIN_REQUEST_INTERVAL_MS = 4_000;
 const CHEATSLOVE_MIN_429_COOLDOWN_MS = 60_000;
+/* The supplier catalog can take ~20-25 seconds from Render. Keep a bounded
+   timeout, but do not abort a valid full-catalog response at 15 seconds. */
+const CHEATSLOVE_REQUEST_TIMEOUT_MS = 60_000;
 let cheatsloveRequestQueue = Promise.resolve();
 let cheatsloveLastRequestStartedAt = 0;
 let cheatsloveBlockedUntil = 0;
@@ -17003,7 +17006,7 @@ async function loadProductStatusOverrides() {
           ...(options.body ? { "Content-Type": "application/json" } : {}),
         },
         body: options.body,
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(CHEATSLOVE_REQUEST_TIMEOUT_MS),
       });
       if (res.status === 429) {
         const cooldownMs = parseCheatsloveRetryAfter(res.headers.get("retry-after"));
