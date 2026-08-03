@@ -86,13 +86,13 @@ const universalSetupNotes = [];
 // Stable WooCommerce IDs from Cheats.Love. Display names are intentionally
 // independent from these IDs so branding changes cannot break stock matching.
 const cheatsLoveCatalog = {
-  "rust-dullwave": { productId: 13445, variants: { day: 13447, week: 13449, month: 13450 } },
+  "rust-dullwave": { productId: 13445, variants: { day: 13447, "three-day": 13448, week: 13449, month: 13450 } },
   "rust-mason-lite": { productId: 7805, variants: { day: 7814, week: 7815, month: 7816 } },
   "rust-mason-full": { productId: 7801, variants: { day: 7802, week: 7803, month: 7804 } },
   "rust-mrpro": { productId: 2351, variants: { day: 2352, week: 2353, month: 2354 } },
   "fortnite-dullwave": { productId: 13460, variants: { day: 13461, "three-day": 13462, week: 13463, month: 13464 } },
   "fortnite-ancient": { productId: 191, variants: { day: 242, week: 243, month: 244 } },
-  "fortnite-arcane": { productId: 62, variants: { day: 117, week: 119, month: 120 } },
+  "fortnite-arcane": { productId: 62, variants: { day: 117, "three-day": 118, week: 119, month: 120 } },
   "r6s-ancient": { productId: 9482, variants: { day: 9484, week: 9485, month: 9486 } },
   "r6s-crusader": { productId: 181, variants: { day: 194, week: 195, month: 196 } },
   "r6s-vega": { productId: 7146, variants: { day: 7147, "three-day": 7148, week: 7149, month: 7150 } },
@@ -109,7 +109,7 @@ const cheatsLoveCatalog = {
   "cs2-skinchanger": { productId: 427, variants: { day: 428, week: 429, month: 430 } },
   "pubg-arcane": { productId: 411, variants: { day: 412, week: 413, month: 414 } },
   "pubg-shadow": { productId: 59, variants: { day: 106, week: 107, month: 108 } },
-  "delta-force-dullwave": { productId: 13451, variants: { day: 13456, week: 13458, month: 13459 } },
+  "delta-force-dullwave": { productId: 13451, variants: { day: 13456, "three-day": 13457, week: 13458, month: 13459 } },
   "delta-force-ancient": { productId: 190, variants: { day: 238, week: 239, month: 241 } },
   "delta-force-luna-chams": { productId: 185, variants: { day: 203, week: 204, month: 205 } },
   "marvel-rivals-dullwave": { productId: 560, variants: { day: 561, week: 562, month: 563 } },
@@ -123,7 +123,7 @@ const cheatsLoveCatalog = {
   "fragpunk-dullwave": { productId: 56, variants: { day: 77, week: 78, month: 76 } },
   "eft-crusader": { productId: 53, variants: { day: 69, week: 67, month: 68 } },
   "eft-superior": { productId: 255, variants: { day: 270, week: 271, month: 272 } },
-  "eft-sugar": { productId: 256, variants: { week: 274, month: 275 } },
+  "eft-sugar": { productId: 256, variants: { day: 273, week: 274, month: 275 } },
   "eft-sky": { productId: 253, variants: { day: 266, week: 264, month: 265 } },
   "eft-chams": { productId: 254, variants: { day: 267, week: 268, month: 269 } },
   "eft-mason": { productId: 7808, variants: { day: 7811, week: 7812, month: 7813 } },
@@ -215,6 +215,7 @@ const productCatalog = [
     ],
     variants: [
       keyVariant("rust-dullwave", "day", "1 Day Key", 730),
+      keyVariant("rust-dullwave", "three-day", "3 Day Key", 1450),
       keyVariant("rust-dullwave", "week", "7 Day Key", 3310),
       keyVariant("rust-dullwave", "month", "30 Day Key", 4640),
     ],
@@ -402,6 +403,7 @@ const productCatalog = [
     ],
     variants: [
       keyVariant("fortnite-arcane", "day", "1 Day Key", 700),
+      unavailableVariant("fortnite-arcane", "three-day", "3 Day Key", 0),
       keyVariant("fortnite-arcane", "week", "7 Day Key", 3500),
       keyVariant("fortnite-arcane", "month", "30 Day Key", 6000),
     ],
@@ -1111,6 +1113,7 @@ const productCatalog = [
     ],
     variants: [
       keyVariant("delta-force-dullwave", "day", "1 Day Key", 650),
+      keyVariant("delta-force-dullwave", "three-day", "3 Day Key", 1300),
       keyVariant("delta-force-dullwave", "week", "7 Day Key", 2250),
       keyVariant("delta-force-dullwave", "month", "30 Day Key", 4240),
     ],
@@ -1552,6 +1555,7 @@ const productCatalog = [
       "Full-screen mode: not supported (windowed/borderless only)",
     ],
     variants: [
+      unavailableVariant("eft-sugar", "day", "1 Day Key", 0),
       keyVariant("eft-sugar", "week", "7 Day Key", 5120),
       keyVariant("eft-sugar", "month", "30 Day Key", 10230),
     ],
