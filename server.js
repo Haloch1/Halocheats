@@ -4697,7 +4697,14 @@ if (isConfiguredValue(discordBotToken)) {
       title: "XenCheats | Product Status",
       color: 0xd82028,
       fields: fields.length
-        ? fields
+        ? [
+            ...fields,
+            {
+              name: "Status guide",
+              value: "🟢 Undetected  •  🟡 Updating  •  🟠 Use at own risk  •  🟡 Testing  •  📝 Discontinued",
+              inline: false,
+            },
+          ]
         : [{ name: "No data", value: "Couldn't match any tracked products this cycle.", inline: false }],
       description: `${statusSummary || "No tracked variants"}\n\nLast updated: <t:${now}:f> (<t:${now}:R>)`,
       footer: { text: "XenCheats | Status updates automatically" },
@@ -4706,6 +4713,30 @@ if (isConfiguredValue(discordBotToken)) {
   }
 
   let statusTargetMessageId = null;
+  let statusSnapshotByGame = new Map();
+  let hasStatusSnapshot = false;
+
+  function buildStatusSnapshot(matched) {
+    const snapshot = new Map();
+    for (const row of matched) {
+      const game = String(row.displayGame || "Other").trim() || "Other";
+      if (!snapshot.has(game)) snapshot.set(game, new Set());
+      snapshot.get(game).add(String(row.badge || "Unknown").trim() || "Unknown");
+    }
+    return snapshot;
+  }
+
+  function getStatusTransitions(previous, next) {
+    const changes = [];
+    for (const [game, nextStatuses] of next) {
+      const previousStatuses = previous.get(game);
+      if (!previousStatuses) continue;
+      const before = [...previousStatuses].sort().join(" / ");
+      const after = [...nextStatuses].sort().join(" / ");
+      if (before !== after) changes.push({ game, before, after });
+    }
+    return changes;
+  }
 
   async function syncProductStatus() {
     if (!discordBot) return;
@@ -4758,6 +4789,13 @@ if (isConfiguredValue(discordBotToken)) {
       }
       await applyMatchedProductStatuses(matched);
 
+      const nextStatusSnapshot = buildStatusSnapshot(matched);
+      const statusChanges = hasStatusSnapshot
+        ? getStatusTransitions(statusSnapshotByGame, nextStatusSnapshot)
+        : [];
+      statusSnapshotByGame = nextStatusSnapshot;
+      hasStatusSnapshot = true;
+
       const targetChannel = await discordBot.channels.fetch(discordStatusTargetChannelId).catch(() => null);
       if (!targetChannel?.isTextBased?.()) {
         console.warn("[Status sync] Can't access target channel");
@@ -4796,6 +4834,16 @@ if (isConfiguredValue(discordBotToken)) {
       } else {
         const sent = await targetChannel.send({ embeds: [embed] });
         statusTargetMessageId = sent.id;
+      }
+
+      if (statusChanges.length) {
+        const changeLines = statusChanges
+          .map((change) => `- **${change.game}:** ${change.before} > ${change.after}`)
+          .join("\n");
+        await targetChannel.send({
+          content: `@everyone\n**Product status changed**\n${changeLines}`,
+          allowedMentions: { parse: ["everyone"] },
+        });
       }
       console.log(`[Status sync] Synced ${matched.length} tracked product status row(s)`);
     } catch (err) {
