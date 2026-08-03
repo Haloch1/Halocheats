@@ -4655,40 +4655,40 @@ if (isConfiguredValue(discordBotToken)) {
   }
 
   function buildOwnedStatusEmbed(matched) {
-    const byGame = new Map();
+    const byStatus = new Map([
+      ["Updating", []],
+      ["Undetected", []],
+    ]);
     for (const row of matched) {
-      if (!byGame.has(row.displayGame)) byGame.set(row.displayGame, []);
-      byGame.get(row.displayGame).push(row);
+      const status = String(row.badge || "Unknown").trim() || "Unknown";
+      if (!byStatus.has(status)) byStatus.set(status, []);
+      byStatus.get(status).push(row);
     }
     const now = Math.floor(Date.now() / 1000);
-    const fields = [...byGame.entries()].map(([game, rows]) => ({
-      name: game,
-      value: (() => {
-        const text = rows.map((r) => `${STATUS_EMOJI_LABELS_REVERSE(r.badge)} ${r.variant}`).join("\n");
-        return text.length > 1024 ? `${text.slice(0, 1000)}…` : text;
-      })(),
-      inline: true,
-    }));
-    const legendField = {
-      name: "Status Code:",
-      value: "💚 Undetected  •  💙/🖤 Updating  •  🧡 Use at own risk!  •  💛 Testing  •  📝 Discontinued",
-      inline: false,
-    };
+    const fields = [...byStatus.entries()]
+      .filter(([, rows]) => rows.length)
+      .map(([status, rows]) => ({
+        name: status,
+        value: (() => {
+          const text = rows
+            .sort((a, b) => `${a.displayGame} ${a.variant}`.localeCompare(`${b.displayGame} ${b.variant}`))
+            .map((r) => `- ${r.displayGame} — ${r.variant}`)
+            .join("\n");
+          return text.length > 1024 ? `${text.slice(0, 1000)}...` : text;
+        })(),
+        inline: false,
+      }));
 
     return {
-      title: "📌 XenCheats Product Status",
+      title: "XenCheats Product Status",
       color: 0xd82028,
       fields: fields.length
-        ? [...fields, legendField]
+        ? fields
         : [{ name: "No data", value: "Couldn't match any tracked products this cycle.", inline: false }],
       description: `**Last updated:** <t:${now}:f> (<t:${now}:R>)`,
       footer: { text: "XenCheats | Live product status" },
       timestamp: new Date().toISOString(),
     };
-  }
-
-  function STATUS_EMOJI_LABELS_REVERSE(badge) {
-    return Object.entries(STATUS_EMOJI_LABELS).find(([, label]) => label === badge)?.[0] || "❔";
   }
 
   let statusTargetMessageId = null;

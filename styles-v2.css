@@ -4590,6 +4590,45 @@ body:not(.home-page) .social-proof-toast { display: none !important; }
   .variant-reviews-list,
   .variant-related-list { grid-template-columns: 1fr; }
 
+  /* Keep the dedicated product view comfortable on narrow phones. The
+     desktop art sizing is intentionally large, but it should not leave the
+     mobile detail page feeling like a clipped desktop panel. */
+  .variant-modal.product-detail-shell {
+    width: 100%;
+    padding: 54px 10px 72px;
+  }
+
+  .product-detail-shell .variant-dialog {
+    width: 100%;
+    border-radius: 20px;
+  }
+
+  .product-detail-shell .variant-art {
+    min-height: 230px;
+    border-radius: 19px 19px 0 0;
+  }
+
+  .product-detail-shell .variant-product-image {
+    min-height: 230px;
+    max-height: 300px;
+  }
+
+  .product-detail-shell .variant-art-brand,
+  .product-detail-shell .variant-art-status {
+    top: 12px;
+  }
+
+  .product-detail-shell .variant-art-brand { left: 12px; padding: 0; }
+  .product-detail-shell .variant-art-status { right: 12px; }
+  .product-detail-shell .variant-details { padding: 24px 18px 28px; }
+  .product-detail-shell .variant-details h3 { font-size: clamp(2.15rem, 11vw, 3.2rem); }
+  .product-detail-shell .variant-details > p:not(.eyebrow):not(.variant-promo-message):not(.variant-notify-message) {
+    font-size: 0.96rem;
+    line-height: 1.6;
+  }
+  .product-detail-shell .variant-status-row { gap: 7px; }
+  .product-detail-shell .variant-status-row > span[data-variant-price] { margin-left: 0; }
+
   .auth-card { padding: 24px 18px; }
   .auth-entry-side { padding: 20px; }
   .auth-panel-switch { flex-direction: column; }
