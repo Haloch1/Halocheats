@@ -87,7 +87,7 @@ const cheatsloveStoreApiUrl = (process.env.CHEATSLOVE_STORE_API_URL
 // boot also reads /balance once) - the old per-variant storefront double-check
 // (syncCheatsLoveStoreStock, 140 requests per cycle) is retired, see the
 // project-xencheats-cheatslove-ban memory / comment near cheatsloveCoversInventory.
-const cheatslovePollMs = 5 * 60_000;
+const cheatslovePollMs = 60_000;
 /* HARD PROVIDER SAFETY LIMIT: Cheats.Love documents 30 requests/minute.
    Every reseller request must pass through cheatsloveFetch(), which serializes
    starts at least four seconds apart (maximum 15/minute). Keep this fixed
@@ -102,6 +102,10 @@ let cheatsloveBlockedUntil = 0;
    After the first valid sync, mapped variants without a usable upstream result
    fail closed instead of being advertised as available. */
 const cheatsloveStockKnown = new Map();
+/* Exact supplier quantity when the reseller API exposes a numeric `stock`.
+   Some variants intentionally return only a display bucket such as "< 10";
+   those remain available but do not get an invented quantity. */
+const cheatsloveStockCountKnown = new Map();
 const cheatsloveStoreStockKnown = new Map();
 const cheatsloveCostKnown = new Map();
 const cheatsloveProductPresenceKnown = new Map();
@@ -126,7 +130,8 @@ function cheatsloveCoversInventory(inventorySlug) {
   if (known) {
     const costCents = cheatsloveCostKnown.get(inventorySlug);
     const hasFunds = !Number.isFinite(costCents)
-      || (Number.isFinite(cheatsloveBalanceCents) && cheatsloveBalanceCents >= costCents);
+      || !Number.isFinite(cheatsloveBalanceCents)
+      || cheatsloveBalanceCents >= costCents;
     /* Storefront per-variant double-check removed 2026-08-02 — it made one
        HTTP request PER mapped variant (140 of them) every sync cycle, which is
        what actually got the API key rate-limited/banned, and it silently
@@ -139,6 +144,24 @@ function cheatsloveCoversInventory(inventorySlug) {
      keys are counted separately by /api/products and remain sellable, but an
      upstream-only variant must wait for a confirmed successful snapshot. */
   return false;
+}
+function getCheatsloveStockCount(inventorySlug) {
+  if (!cheatsloveApiKey || cheatsloveLastStockSyncFailed) return 0;
+  if (cheatsloveStockKnown.get(inventorySlug) !== "In Stock") return 0;
+  const count = cheatsloveStockCountKnown.get(inventorySlug);
+  return Number.isInteger(count) && count >= 0 ? count : null;
+}
+function consumeCheatsloveStock(inventorySlug, quantity = 1) {
+  const current = cheatsloveStockCountKnown.get(inventorySlug);
+  if (!Number.isInteger(current)) {
+    /* The supplier hid the exact count. Force the next catalog request to
+       reconcile promptly instead of guessing a remaining quantity. */
+    cheatsloveLastStockSyncAt = 0;
+    return;
+  }
+  const remaining = Math.max(0, current - Math.max(1, Math.trunc(quantity)));
+  cheatsloveStockCountKnown.set(inventorySlug, remaining);
+  cheatsloveStockKnown.set(inventorySlug, remaining > 0 ? "In Stock" : "Out of Stock");
 }
 const adminAccessKey = process.env.ADMIN_ACCESS_KEY || "";
 const ownerRequestsKey = process.env.OWNER_REQUESTS_KEY || "";
@@ -6258,6 +6281,7 @@ ${rows || '<div class="ct">No messages.</div>'}
               });
             }
 
+            consumeCheatsloveStock(singleSlug);
             const { error: insertErr } = await supabaseAdmin
               .from("license_keys")
               .insert({ product_slug: singleSlug, key_value: keyValue, status: "unused" });
@@ -9538,6 +9562,7 @@ async function syncPaidOrderCore(session) {
       }
       if (keyValue) {
         console.log(`[Cheats.Love Buy] Got key for ${order.product_slug}: order ${cheatsloveOrder.order_ref}`);
+        consumeCheatsloveStock(order.product_slug);
         const clAssignedAt = new Date().toISOString();
         const { data: clKey, error: clErr } = await supabaseAdmin
           .from("license_keys")
@@ -10720,24 +10745,13 @@ app.get("/api/auth/role", async (req, res) => {
 app.get("/api/products", async (_req, res) => {
   try {
     res.set("Cache-Control", "no-store, max-age=0");
-    /* Demand-driven Cheats.Love catalog refresh, redesigned 2026-08-02. No
-       background clock exists anymore (see the boot Promise.all block) — this
-       is the ONLY place syncCheatsLoveStock() gets triggered after the initial
-       boot warm-up. It fires at most once per cheatslovePollMs (5 min)
-       regardless of how much traffic hits this route, and zero times if there's
-       no traffic at all in a given window. It's fire-and-forget (not awaited)
-       so a slow/down upstream never delays this response — the badge just
-       serves whatever was last cached and updates on a later request.
-       This single call is cheap (1x /products + 1x /balance, ~2 requests) no
-       matter how large the catalog is — the expensive part (a request PER
-       mapped variant, 140 of them) was a separate function, syncCheatsLoveStoreStock,
-       permanently retired for causing the original API ban. See the
-       project-xencheats-cheatslove-ban memory for the full history. */
+    /* Normally the minute monitor keeps this snapshot fresh. If a request
+       arrives after a missed/failed cycle, recover through the same serialized
+       and rate-limited full-catalog request before returning availability. */
     if (cheatsloveApiKey && Date.now() - cheatsloveLastStockSyncAt > cheatslovePollMs) {
-      /* Wait for the fresh catalog snapshot instead of returning stale badges
-         and hoping a later page load sees the completed refresh. This is still
-         demand-driven and cached for five minutes, so normal traffic cannot
-         multiply provider calls. Balance refreshes remain boot-only here. */
+      /* Wait for the current or recovery snapshot instead of returning stale
+         badges. Concurrent requests share one in-flight sync and cannot
+         multiply supplier calls. Balance refreshes remain boot-only here. */
       await syncCheatsLoveStock({ refreshBalance: false });
     }
     const keyCounts = await getUnusedLicenseKeyCounts();
@@ -10766,15 +10780,21 @@ app.get("/api/products", async (_req, res) => {
         sale: product.sale || null,
         variants: (product.variants || []).map((variant) => {
         const inventorySlug = getVariantInventorySlug(product, variant);
-        const stockCount = keyCounts.get(inventorySlug) || 0;
+        const localStockCount = keyCounts.get(inventorySlug) || 0;
         /* Mapped variants use confirmed Cheats.Love stock after the first sync. */
         const hasCheatsLoveMapping = CHEATSLOVE_VID_MAP[inventorySlug] != null;
         const resellerCovers = hasCheatsLoveMapping && cheatsloveApiKey
           ? cheatsloveCoversInventory(inventorySlug)
           : false;
+        const supplierStockCount = hasCheatsLoveMapping
+          ? getCheatsloveStockCount(inventorySlug)
+          : 0;
+        const exactStockCount = supplierStockCount == null
+          ? (localStockCount > 0 ? localStockCount : null)
+          : localStockCount + supplierStockCount;
         /* Variants with DISABLED_ stripe keys are explicitly unavailable */
         const isDisabledVariant = variant.stripeEnvKey?.startsWith("DISABLED_");
-        const hasKeys = !isDisabledVariant && (stockCount > 0 || resellerCovers);
+        const hasKeys = !isDisabledVariant && (localStockCount > 0 || resellerCovers);
         const isExplicitlyBlocked = Boolean(product.checkoutBlocked || variant.checkoutBlocked);
         const hasValidPrice = variant.amount > 0;
         /* Store kill switch forces everything out of stock / not purchasable.
@@ -10784,10 +10804,6 @@ app.get("/api/products", async (_req, res) => {
         const checkoutReady = !storeSoldOut && hasKeys && hasValidPrice && !isExplicitlyBlocked && productAvailable;
         const checkoutBlocked = isExplicitlyBlocked && hasKeys;
 
-        /* Apex & EFT show the exact key count; every other product just shows
-           "In Stock" / "Out of Stock" without revealing counts. */
-        const showsExactCount =
-          product.category === "Apex Legends" || product.category === "Escape from Tarkov";
         let stockLabel;
         if (comingSoon) {
           stockLabel = "Coming Soon";
@@ -10795,16 +10811,17 @@ app.get("/api/products", async (_req, res) => {
           stockLabel = "Unavailable";
         } else if (storeSoldOut || !productAvailable) {
           stockLabel = "Out of Stock";
-        } else if (showsExactCount) {
-          stockLabel = resellerCovers && stockCount === 0 ? "In Stock" : formatKeyStockLabel(stockCount);
+        } else if (exactStockCount != null) {
+          stockLabel = formatKeyStockLabel(exactStockCount);
         } else {
-          stockLabel = stockCount > 0 || resellerCovers ? "In Stock" : "Out of Stock";
+          stockLabel = localStockCount > 0 || resellerCovers ? "In Stock" : "Out of Stock";
         }
 
         return {
           slug: variant.slug,
           name: variant.name,
           stockLabel,
+          stockCount: exactStockCount,
           priceDisplay: variant.priceDisplay,
           originalPrice: variant.originalPrice || null,
           checkoutBlocked,
@@ -16888,6 +16905,7 @@ async function loadProductStatusOverrides() {
   let cheatsloveUnmatchedLogged = false;
   let cheatsloveAutoMatchLogged = false;
   let cheatsloveSyncRunning = false;
+  let cheatsloveSyncWaiters = [];
   let cheatsloveStoreSyncRunning = false;
 
   function parseCheatsloveRetryAfter(value) {
@@ -16984,7 +17002,10 @@ async function loadProductStatusOverrides() {
   }
 
   async function syncCheatsLoveStock({ refreshBalance = true } = {}) {
-    if (!cheatsloveApiKey || cheatsloveSyncRunning) return;
+    if (!cheatsloveApiKey) return;
+    if (cheatsloveSyncRunning) {
+      return new Promise((resolve) => cheatsloveSyncWaiters.push(resolve));
+    }
     cheatsloveSyncRunning = true;
     try {
       const data = await cheatsloveFetch("/products");
@@ -17017,6 +17038,9 @@ async function loadProductStatusOverrides() {
             productName: clProduct.name,
             label: variation.label,
             stock: resolveCheatsloveStock(variation),
+            stockCount: variation.stock !== null && variation.stock !== "" && Number.isFinite(Number(variation.stock))
+              ? Math.max(0, Math.trunc(Number(variation.stock)))
+              : null,
             costCents: Number.isFinite(Number(variation.reseller))
               ? Math.round(Number(variation.reseller) * 100)
               : null,
@@ -17086,10 +17110,16 @@ async function loadProductStatusOverrides() {
           if (!stockInfo || stockInfo.stock == null) {
             unmatched.push(inventorySlug);
             cheatsloveStockKnown.set(inventorySlug, "Out of Stock");
+            cheatsloveStockCountKnown.set(inventorySlug, 0);
             continue;
           }
 
           cheatsloveStockKnown.set(inventorySlug, stockInfo.stock);
+          if (Number.isInteger(stockInfo.stockCount)) {
+            cheatsloveStockCountKnown.set(inventorySlug, stockInfo.stockCount);
+          } else {
+            cheatsloveStockCountKnown.delete(inventorySlug);
+          }
           if (Number.isFinite(stockInfo.costCents)) {
             cheatsloveCostKnown.set(inventorySlug, stockInfo.costCents);
           }
@@ -17114,6 +17144,9 @@ async function loadProductStatusOverrides() {
       console.error("[Cheats.Love] Stock sync error:", err.message);
     } finally {
       cheatsloveSyncRunning = false;
+      const waiters = cheatsloveSyncWaiters;
+      cheatsloveSyncWaiters = [];
+      for (const resolve of waiters) resolve();
     }
   }
 
@@ -17219,25 +17252,15 @@ async function loadProductStatusOverrides() {
 Promise.all([loadProductOverrides(), loadProductStatusOverrides()]).then(() => {
   setInterval(loadProductStatusOverrides, 5 * 60 * 1000).unref();
 
-  /* Redesigned 2026-08-02 — no background clock at all anymore (Azad: "nothing
-     that happens every hour or something"). History: the old setup ran TWO
-     checks every cycle — syncCheatsLoveStock (1 request to /products + 1 to
-     /balance, cheap) and syncCheatsLoveStoreStock (a separate HTTP request PER
-     mapped variant — 140 of them — to the storefront). The second one is what
-     got the API key rate-limited/banned, and it silently failed often enough
-     that stock never displayed reliably even before that. syncCheatsLoveStoreStock
-     is retired for good (left in the file as dead code, never called).
-     syncCheatsLoveStock is now purely demand-driven: it fires once here at
-     boot to warm the cache, and after that ONLY from inside GET /api/products
-     (see that handler) when the cached snapshot is more than cheatslovePollMs
-     old — so it scales with real visitor traffic instead of a fixed clock,
-     and makes zero requests during quiet periods (e.g. overnight) with no
-     traffic at all. Key-purchase automation (buying a key at checkout via
-     cheatsloveFetch("/orders")) is a separate code path, gated on none of
-     this, and was never affected. */
+  /* A single authenticated /products request returns every variant quantity.
+     Refresh that one snapshot once per minute. All supplier calls still pass
+     through cheatsloveFetch(), whose hard four-second spacing caps the whole
+     app at 15 requests/minute, below the documented 30/minute provider limit.
+     The retired per-variant storefront checker remains unused. */
   if (cheatsloveApiKey) {
-    setTimeout(syncCheatsLoveStock, 5_000); // one-time warm-up 5s after boot, not recurring
-    console.log("[Cheats.Love] Catalog stock sync is demand-driven (no timer) - refreshes lazily from GET /api/products, at most once per " + Math.round(cheatslovePollMs / 60_000) + " min.");
+    setTimeout(() => void syncCheatsLoveStock(), 5_000);
+    setInterval(() => void syncCheatsLoveStock({ refreshBalance: false }), cheatslovePollMs).unref();
+    console.log("[Cheats.Love] Catalog stock monitor enabled: one full-catalog refresh per minute.");
   } else {
     console.log("[Cheats.Love] CHEATSLOVE_API_KEY not set — stock sync disabled.");
   }
