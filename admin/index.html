@@ -1279,6 +1279,40 @@
       .keys-table-heading span { margin: 0; }
       .keys-table-card .admin-table-wrap { border-radius: 0 0 18px 18px; }
 
+      /* Final admin theme overrides: the shared storefront stylesheet also
+         defines dark dashboard surfaces. Keep this page readable and
+         consistent with the white/red admin treatment above. */
+      .admin-page .admin-panel {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+      }
+
+      .admin-page .admin-sidebar {
+        background: #fff;
+        opacity: 1;
+      }
+
+      .admin-page .admin-nav-item,
+      .admin-page .admin-nav-group-label,
+      .admin-page .admin-sidebar-title {
+        opacity: 1;
+      }
+
+      .admin-page .admin-nav-item { color: var(--ink-soft); }
+      .admin-page .admin-nav-item:hover { color: var(--ink); }
+      .admin-page .admin-main { color: var(--ink); }
+
+      .admin-page .empty-state {
+        color: var(--ink-soft);
+        background: #fff;
+      }
+
+      .admin-page .admin-table-wrap:has(.admin-table) {
+        background: #fff;
+      }
+
       @media (max-width: 900px) {
         .admin-shell { width: min(100% - 24px, 700px); flex-direction: column; }
         .admin-sidebar { position: static; width: 100%; }
@@ -1298,7 +1332,7 @@
       }
     </style>
   </head>
-  <body>
+  <body class="admin-page">
     <h1 class="sr-only">Admin panel</h1>
     <div class="page-shell page-shell-inner">
       <div class="ambient ambient-left"></div>
