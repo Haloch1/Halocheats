@@ -91,11 +91,14 @@ const cheatsloveStoreApiUrl = (process.env.CHEATSLOVE_STORE_API_URL
   || "https://backend.cheats.love/wp-json/wc/store/v1").replace(/\/+$/, "");
 // Keep upstream availability fresh without approaching the reseller's
 // 30-request-per-minute limit. This now drives ONLY the single-call catalog
-// sync (syncCheatsLoveStock: one /products request per customer-driven refresh;
+// sync (syncCheatsLoveStock: one /products request per scheduled refresh;
 // boot also reads /balance once) - the old per-variant storefront double-check
 // (syncCheatsLoveStoreStock, 140 requests per cycle) is retired, see the
 // project-xencheats-cheatslove-ban memory / comment near cheatsloveCoversInventory.
-const cheatslovePollMs = 60_000;
+/* Poll conservatively. A full catalog response contains every variant, so a
+   15-minute refresh is enough for storefront availability without creating a
+   customer-driven request storm if the provider is slow or unavailable. */
+const cheatslovePollMs = 15 * 60_000;
 /* HARD PROVIDER SAFETY LIMIT: Cheats.Love documents 30 requests/minute.
    Every reseller request must pass through cheatsloveFetch(), which serializes
    starts at least four seconds apart (maximum 15/minute). Keep this fixed
@@ -10863,12 +10866,6 @@ app.get("/api/auth/role", async (req, res) => {
 app.get("/api/products", async (_req, res) => {
   try {
     res.set("Cache-Control", "no-store, max-age=0");
-    /* The first request after boot waits for one authoritative snapshot so the
-       catalog cannot render false zero stock. After that, refreshes stay
-       backgrounded so normal page loads never wait behind the supplier queue. */
-    if (cheatsloveApiKey && Date.now() - cheatsloveLastStockSyncAt > cheatslovePollMs) {
-      void syncCheatsLoveStock({ refreshBalance: false });
-    }
     const keyCounts = await getUnusedLicenseKeyCounts();
     const catalog = products.map((product) => {
       const comingSoon = isCheatsloveProductComingSoon(product);
@@ -17406,7 +17403,7 @@ Promise.all([loadProductOverrides(), loadProductStatusOverrides(), loadSupplierS
   setInterval(loadProductStatusOverrides, 5 * 60 * 1000).unref();
 
   /* A single authenticated /products request returns every variant quantity.
-     Refresh that one snapshot once per minute. All supplier calls still pass
+     Refresh that one snapshot every 15 minutes. All supplier calls still pass
      through cheatsloveFetch(), whose hard four-second spacing caps the whole
      app at 15 requests/minute, below the documented 30/minute provider limit.
      The retired per-variant storefront checker remains unused. */
@@ -17424,7 +17421,7 @@ Promise.all([loadProductOverrides(), loadProductStatusOverrides(), loadSupplierS
       `mapped=${Object.keys(CHEATSLOVE_VID_MAP).length}; endpoint=${cheatsloveBaseUrl}`
     );
     setInterval(() => void syncCheatsLoveStock({ refreshBalance: false }), cheatslovePollMs).unref();
-    console.log("[Cheats.Love] Catalog stock monitor enabled: one full-catalog refresh per minute.");
+    console.log("[Cheats.Love] Catalog stock monitor enabled: one full-catalog refresh every 15 minutes.");
   } else {
     console.log("[Cheats.Love] CHEATSLOVE_API_KEY not set — stock sync disabled.");
   }
