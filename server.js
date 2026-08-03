@@ -4662,6 +4662,7 @@ if (isConfiguredValue(discordBotToken)) {
         badge: STATUS_EMOJI_LABELS[row.emoji] || "Unknown",
         variant: row.variant,
         displayGame: gameConfig.label,
+        productName: products.find((product) => product.slug === variantConfig.slug)?.name || row.variant,
       });
     }
     return matched;
@@ -4744,21 +4745,25 @@ if (isConfiguredValue(discordBotToken)) {
   function buildStatusSnapshot(matched) {
     const snapshot = new Map();
     for (const row of matched) {
-      const game = String(row.displayGame || "Other").trim() || "Other";
-      if (!snapshot.has(game)) snapshot.set(game, new Set());
-      snapshot.get(game).add(String(row.badge || "Unknown").trim() || "Unknown");
+      const slug = String(row.slug || row.productName || row.variant || "unknown").trim();
+      snapshot.set(slug, {
+        name: String(row.productName || row.variant || row.displayGame || slug).trim(),
+        badge: String(row.badge || "Unknown").trim() || "Unknown",
+      });
     }
     return snapshot;
   }
 
   function getStatusTransitions(previous, next) {
     const changes = [];
-    for (const [game, nextStatuses] of next) {
-      const previousStatuses = previous.get(game);
-      if (!previousStatuses) continue;
-      const before = [...previousStatuses].sort().join(" / ");
-      const after = [...nextStatuses].sort().join(" / ");
-      if (before !== after) changes.push({ game, before, after });
+    for (const [slug, nextStatus] of next) {
+      const previousStatus = previous.get(slug);
+      if (!previousStatus || previousStatus.badge === nextStatus.badge) continue;
+      changes.push({
+        name: nextStatus.name,
+        before: previousStatus.badge,
+        after: nextStatus.badge,
+      });
     }
     return changes;
   }
@@ -4863,7 +4868,7 @@ if (isConfiguredValue(discordBotToken)) {
 
       if (statusChanges.length) {
         const changeLines = statusChanges
-          .map((change) => `- **${change.game}:** ${change.before} > ${change.after}`)
+          .map((change) => `- **${change.name}:** ${change.before} → ${change.after}`)
           .join("\n");
         await targetChannel.send({
           content: `@everyone\n**Product status changed**\n${changeLines}`,
