@@ -215,6 +215,43 @@ async function retrieveCheatsLoveOrderKey(supplierOrderId) {
   const result = await cheatsloveFetch(`/orders/${encodeURIComponent(supplierOrderId)}/keys`);
   return result?.lines?.[0]?.keys?.[0] || null;
 }
+
+async function loadSupplierStockCache() {
+  if (!supabaseAdmin) return;
+  try {
+    const [cacheResult, stateResult] = await Promise.all([
+      supabaseAdmin
+        .from("supplier_stock_cache")
+        .select("inventory_slug, stock_label, stock_count, cost_cents"),
+      supabaseAdmin
+        .from("supplier_stock_sync_state")
+        .select("upstream_product_ids, synced_at")
+        .eq("id", "catalog")
+        .maybeSingle(),
+    ]);
+    if (cacheResult.error || stateResult.error) {
+      console.warn("[Cheats.Love] Persistent stock cache is unavailable; run supabase-supplier-stock-cache.sql.");
+      return;
+    }
+    for (const row of cacheResult.data || []) {
+      cheatsloveStockKnown.set(row.inventory_slug, row.stock_label);
+      if (Number.isInteger(row.stock_count)) cheatsloveStockCountKnown.set(row.inventory_slug, row.stock_count);
+      if (Number.isInteger(row.cost_cents)) cheatsloveCostKnown.set(row.inventory_slug, row.cost_cents);
+    }
+    const upstreamIds = new Set((stateResult.data?.upstream_product_ids || []).map(Number));
+    if (stateResult.data?.synced_at) {
+      for (const product of products) {
+        cheatsloveProductPresenceKnown.set(product.slug, upstreamIds.has(Number(product.cheatsLoveProductId)));
+      }
+      cheatsloveProductPresenceReady = true;
+      cheatsloveLastStockSyncAt = new Date(stateResult.data.synced_at).getTime() || Date.now();
+      cheatsloveLastStockSyncFailed = false;
+    }
+    console.log(`[Cheats.Love] Loaded ${cacheResult.data?.length || 0} cached variant stock records.`);
+  } catch (error) {
+    console.warn("[Cheats.Love] Stock cache load failed:", error.message);
+  }
+}
 const adminAccessKey = process.env.ADMIN_ACCESS_KEY || "";
 const ownerRequestsKey = process.env.OWNER_REQUESTS_KEY || "";
 const geminiApiKey = process.env.GEMINI_API_KEY || "";
@@ -10768,9 +10805,7 @@ app.get("/api/products", async (_req, res) => {
     /* The first request after boot waits for one authoritative snapshot so the
        catalog cannot render false zero stock. After that, refreshes stay
        backgrounded so normal page loads never wait behind the supplier queue. */
-    if (cheatsloveApiKey && !cheatsloveProductPresenceReady) {
-      await syncCheatsLoveStock({ refreshBalance: false });
-    } else if (cheatsloveApiKey && Date.now() - cheatsloveLastStockSyncAt > cheatslovePollMs) {
+    if (cheatsloveApiKey && Date.now() - cheatsloveLastStockSyncAt > cheatslovePollMs) {
       void syncCheatsLoveStock({ refreshBalance: false });
     }
     const keyCounts = await getUnusedLicenseKeyCounts();
@@ -17119,8 +17154,10 @@ async function loadProductStatusOverrides() {
 
       let updatedCount = 0;
       const unmatched = [];
+      const cacheRows = [];
 
       for (const product of products) {
+        const productId = Number(product.cheatsLoveProductId);
         for (const variant of product.variants || []) {
           const inventorySlug = variant.inventorySlug || `${product.slug}-${variant.slug}`;
           if (!resolvedVidBySlug.has(inventorySlug)) continue; // not pinned/matched — leave as-is
@@ -17130,6 +17167,14 @@ async function loadProductStatusOverrides() {
             unmatched.push(inventorySlug);
             cheatsloveStockKnown.set(inventorySlug, "Out of Stock");
             cheatsloveStockCountKnown.set(inventorySlug, 0);
+            cacheRows.push({
+              inventory_slug: inventorySlug,
+              product_slug: product.slug,
+              upstream_product_id: Number.isInteger(productId) ? productId : null,
+              stock_label: "Out of Stock",
+              stock_count: 0,
+              cost_cents: null,
+            });
             continue;
           }
 
@@ -17142,6 +17187,15 @@ async function loadProductStatusOverrides() {
           if (Number.isFinite(stockInfo.costCents)) {
             cheatsloveCostKnown.set(inventorySlug, stockInfo.costCents);
           }
+          cacheRows.push({
+            inventory_slug: inventorySlug,
+            product_slug: product.slug,
+            upstream_product_id: Number.isInteger(productId) ? productId : null,
+            stock_label: stockInfo.stock,
+            stock_count: Number.isInteger(stockInfo.stockCount) ? stockInfo.stockCount : null,
+            cost_cents: Number.isFinite(stockInfo.costCents) ? stockInfo.costCents : null,
+            synced_at: new Date().toISOString(),
+          });
           if (variant.stockLabel !== stockInfo.stock) {
             variant.stockLabel = stockInfo.stock;
             updatedCount += 1;
@@ -17150,6 +17204,19 @@ async function loadProductStatusOverrides() {
       }
 
       cheatsloveLastStockSyncAt = Date.now();
+
+      if (supabaseAdmin && cacheRows.length) {
+        const syncedAt = new Date().toISOString();
+        await supabaseAdmin.from("supplier_stock_cache").upsert(
+          cacheRows.map((row) => ({ ...row, synced_at: syncedAt })),
+          { onConflict: "inventory_slug" },
+        );
+        await supabaseAdmin.from("supplier_stock_sync_state").upsert({
+          id: "catalog",
+          upstream_product_ids: [...clProductIds],
+          synced_at: syncedAt,
+        }, { onConflict: "id" });
+      }
 
       if (updatedCount) {
         console.log(`[Cheats.Love] Updated stock for ${updatedCount} variant(s).`);
@@ -17268,7 +17335,7 @@ async function loadProductStatusOverrides() {
     }
   }
 
-Promise.all([loadProductOverrides(), loadProductStatusOverrides()]).then(() => {
+Promise.all([loadProductOverrides(), loadProductStatusOverrides(), loadSupplierStockCache()]).then(async () => {
   setInterval(loadProductStatusOverrides, 5 * 60 * 1000).unref();
 
   /* A single authenticated /products request returns every variant quantity.
@@ -17277,7 +17344,14 @@ Promise.all([loadProductOverrides(), loadProductStatusOverrides()]).then(() => {
      app at 15 requests/minute, below the documented 30/minute provider limit.
      The retired per-variant storefront checker remains unused. */
   if (cheatsloveApiKey) {
-    setTimeout(() => void syncCheatsLoveStock(), 5_000);
+    /* Warm the in-memory snapshot before accepting traffic. This keeps the
+       first catalog request fast and prevents a stale/empty cache from being
+       presented as the current supplier stock. */
+    try {
+      await syncCheatsLoveStock();
+    } catch (error) {
+      console.error("[Cheats.Love] Initial stock sync failed:", error.message);
+    }
     setInterval(() => void syncCheatsLoveStock({ refreshBalance: false }), cheatslovePollMs).unref();
     console.log("[Cheats.Love] Catalog stock monitor enabled: one full-catalog refresh per minute.");
   } else {
