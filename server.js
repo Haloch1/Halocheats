@@ -77,8 +77,16 @@ const discordOrderWebhookUrl = process.env.DISCORD_ORDER_WEBHOOK_URL || "";
 const discordAlertsWebhookUrl = process.env.DISCORD_ALERTS_WEBHOOK_URL || "";
 /* Cheats.Love reseller API — never hardcode the key, set CHEATSLOVE_API_KEY
    on Render. See syncCheatsLoveStock() below for the polling job. */
-const cheatsloveApiKey = process.env.CHEATSLOVE_API_KEY || "";
-const cheatsloveBaseUrl = (process.env.CHEATSLOVE_BASE_URL || "https://res.cheatslove.com/api/v1").replace(/\/+$/, "");
+const cheatsloveApiKey = String(process.env.CHEATSLOVE_API_KEY || "")
+  .trim()
+  .replace(/^Bearer\s+/i, "");
+const cheatsloveBaseUrl = (() => {
+  const configured = String(process.env.CHEATSLOVE_BASE_URL || "https://res.cheatslove.com/api/v1")
+    .trim()
+    .replace(/\/+$/, "");
+  /* Accept both the documented full endpoint and a host-only Render value. */
+  return /\/api\/v1$/i.test(configured) ? configured : `${configured}/api/v1`;
+})();
 const cheatsloveStoreApiUrl = (process.env.CHEATSLOVE_STORE_API_URL
   || "https://backend.cheats.love/wp-json/wc/store/v1").replace(/\/+$/, "");
 // Keep upstream availability fresh without approaching the reseller's
@@ -17352,6 +17360,10 @@ Promise.all([loadProductOverrides(), loadProductStatusOverrides(), loadSupplierS
     } catch (error) {
       console.error("[Cheats.Love] Initial stock sync failed:", error.message);
     }
+    console.log(
+      `[Cheats.Love] Stock snapshot ready: ${cheatsloveLastStockSyncFailed ? "FAILED (fail-closed)" : "OK"}; ` +
+      `mapped=${Object.keys(CHEATSLOVE_VID_MAP).length}; endpoint=${cheatsloveBaseUrl}`
+    );
     setInterval(() => void syncCheatsLoveStock({ refreshBalance: false }), cheatslovePollMs).unref();
     console.log("[Cheats.Love] Catalog stock monitor enabled: one full-catalog refresh per minute.");
   } else {
