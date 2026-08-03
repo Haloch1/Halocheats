@@ -4906,6 +4906,20 @@ if (isConfiguredValue(discordBotToken)) {
             .filter((m) => m.author?.id === discordBot.user.id && /product status/i.test(m.embeds?.[0]?.title || ""))
             .sort((a, b) => b.createdTimestamp - a.createdTimestamp)
         : [];
+      const staleChangeNotices = recentTarget
+        ? [...recentTarget.values()].filter(
+            (m) =>
+              m.author?.id === discordBot.user.id &&
+              /product status changed/i.test(m.content || "") &&
+              !m.embeds?.length
+          )
+        : [];
+      // Remove legacy game-aggregated notices. They can claim a transition
+      // such as "Undetected > Undetected / Updating" even though no single
+      // product changed. New notices are emitted only by product snapshots.
+      for (const stale of staleChangeNotices) {
+        await stale.delete().catch(() => {});
+      }
       if (ownMessages.length) {
         statusTargetMessageId = ownMessages[0].id;
         for (const stale of ownMessages.slice(1)) {
