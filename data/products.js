@@ -82,6 +82,8 @@ const r6Multiplier = 1;
 const newProductMultiplier = 1;
 const defaultGeneralInfo = "Open the setup instructions before using this product.";
 const universalSetupNotes = [];
+const ancientSetupNote =
+  "Might require Discord or Medal overlay; make sure hardware acceleration is enabled in the Discord overlay. SteelSeries may also be needed for Nvidia and AMD users; follow the setup shown in the guide.";
 
 // Stable WooCommerce IDs from Cheats.Love. Display names are intentionally
 // independent from these IDs so branding changes cannot break stock matching.
@@ -360,6 +362,7 @@ const productCatalog = [
     ],
     generalInfo: [
       "Follow the full preparation and injection walkthrough on the instructions page before first launch.",
+      ancientSetupNote,
       ...universalSetupNotes,
     ],
     requirements: [
@@ -471,6 +474,7 @@ const productCatalog = [
     generalInfo: [
       "Covers both attacker and defender gadgets alongside the aim and ESP tools.",
       "Includes a built-in spoofer, though results can vary by system.",
+      ancientSetupNote,
       ...universalSetupNotes,
     ],
     requirements: [
@@ -811,6 +815,7 @@ const productCatalog = [
     ],
     generalInfo: [
       "Follow the full preparation and injection walkthrough on the instructions page before first launch.",
+      ancientSetupNote,
       ...universalSetupNotes,
     ],
     requirements: [
@@ -1134,6 +1139,7 @@ const productCatalog = [
     ],
     generalInfo: [
       "Follow the full preparation and injection walkthrough on the instructions page before first launch.",
+      ancientSetupNote,
       ...universalSetupNotes,
     ],
     requirements: [
@@ -1194,6 +1200,7 @@ const productCatalog = [
     ],
     generalInfo: [
       "Loader password is shared setup-wide; check the instructions page before first launch.",
+      ancientSetupNote,
       ...universalSetupNotes,
     ],
     requirements: [
