@@ -4667,26 +4667,40 @@ if (isConfiguredValue(discordBotToken)) {
     const now = Math.floor(Date.now() / 1000);
     const fields = [...byStatus.entries()]
       .filter(([, rows]) => rows.length)
-      .map(([status, rows]) => ({
-        name: status,
-        value: (() => {
-          const text = rows
-            .sort((a, b) => `${a.displayGame} ${a.variant}`.localeCompare(`${b.displayGame} ${b.variant}`))
-            .map((r) => `- ${r.displayGame} — ${r.variant}`)
-            .join("\n");
-          return text.length > 1024 ? `${text.slice(0, 1000)}...` : text;
-        })(),
-        inline: false,
-      }));
+      .map(([status, rows]) => {
+        const byGame = new Map();
+        for (const row of rows) {
+          const game = String(row.displayGame || "Other").trim() || "Other";
+          if (!byGame.has(game)) byGame.set(game, []);
+          byGame.get(game).push(String(row.variant || "Variant").trim() || "Variant");
+        }
+        const text = [...byGame.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([game, variants]) => {
+            const list = variants.sort((a, b) => a.localeCompare(b)).map((variant) => `- ${variant}`).join("\n");
+            return `**${game}**\n${list}`;
+          })
+          .join("\n\n");
+        return {
+          name: `${status} | ${rows.length} variant${rows.length === 1 ? "" : "s"}`,
+          value: text.length > 1024 ? `${text.slice(0, 1000)}...` : text,
+          inline: false,
+        };
+      });
+
+    const statusSummary = [...byStatus.entries()]
+      .filter(([, rows]) => rows.length)
+      .map(([status, rows]) => `**${status}:** ${rows.length}`)
+      .join("  |  ");
 
     return {
-      title: "XenCheats Product Status",
+      title: "XenCheats | Product Status",
       color: 0xd82028,
       fields: fields.length
         ? fields
         : [{ name: "No data", value: "Couldn't match any tracked products this cycle.", inline: false }],
-      description: `**Last updated:** <t:${now}:f> (<t:${now}:R>)`,
-      footer: { text: "XenCheats | Live product status" },
+      description: `${statusSummary || "No tracked variants"}\n\nLast updated: <t:${now}:f> (<t:${now}:R>)`,
+      footer: { text: "XenCheats | Status updates automatically" },
       timestamp: new Date().toISOString(),
     };
   }
