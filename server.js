@@ -4739,7 +4739,7 @@ if (isConfiguredValue(discordBotToken)) {
   }
 
   let statusTargetMessageId = null;
-  let statusSnapshotByGame = new Map();
+  let statusSnapshotByProduct = new Map();
   let hasStatusSnapshot = false;
 
   function buildStatusSnapshot(matched) {
@@ -4748,6 +4748,7 @@ if (isConfiguredValue(discordBotToken)) {
       const slug = String(row.slug || row.productName || row.variant || "unknown").trim();
       snapshot.set(slug, {
         name: String(row.productName || row.variant || row.displayGame || slug).trim(),
+        variant: String(row.variant || "").trim(),
         badge: String(row.badge || "Unknown").trim() || "Unknown",
       });
     }
@@ -4758,9 +4759,15 @@ if (isConfiguredValue(discordBotToken)) {
     const changes = [];
     for (const [slug, nextStatus] of next) {
       const previousStatus = previous.get(slug);
-      if (!previousStatus || previousStatus.badge === nextStatus.badge) continue;
+      if (
+        !previousStatus ||
+        !previousStatus.badge ||
+        !nextStatus.badge ||
+        previousStatus.badge === nextStatus.badge
+      ) continue;
       changes.push({
         name: nextStatus.name,
+        variant: nextStatus.variant,
         before: previousStatus.badge,
         after: nextStatus.badge,
       });
@@ -4821,9 +4828,9 @@ if (isConfiguredValue(discordBotToken)) {
 
       const nextStatusSnapshot = buildStatusSnapshot(matched);
       const statusChanges = hasStatusSnapshot
-        ? getStatusTransitions(statusSnapshotByGame, nextStatusSnapshot)
+        ? getStatusTransitions(statusSnapshotByProduct, nextStatusSnapshot)
         : [];
-      statusSnapshotByGame = nextStatusSnapshot;
+      statusSnapshotByProduct = nextStatusSnapshot;
       hasStatusSnapshot = true;
 
       const targetChannel = await discordBot.channels.fetch(discordStatusTargetChannelId).catch(() => null);
@@ -4868,7 +4875,12 @@ if (isConfiguredValue(discordBotToken)) {
 
       if (statusChanges.length) {
         const changeLines = statusChanges
-          .map((change) => `- **${change.name}:** ${change.before} → ${change.after}`)
+          .map((change) => {
+            const variant = change.variant && !change.name.toLowerCase().includes(change.variant.toLowerCase())
+              ? ` (${change.variant})`
+              : "";
+            return `- **${change.name}${variant}:** ${change.before} → ${change.after}`;
+          })
           .join("\n");
         await targetChannel.send({
           content: `@everyone\n**Product status changed**\n${changeLines}`,
