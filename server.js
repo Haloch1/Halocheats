@@ -4739,6 +4739,7 @@ if (isConfiguredValue(discordBotToken)) {
   }
 
   let statusTargetMessageId = null;
+  let statusChangeNoticeMessageId = null;
   let statusSnapshotByProduct = new Map();
   let hasStatusSnapshot = false;
 
@@ -4874,6 +4875,7 @@ if (isConfiguredValue(discordBotToken)) {
       }
 
       if (statusChanges.length) {
+        const changedAt = Math.floor(Date.now() / 1000);
         const changeLines = statusChanges
           .map((change) => {
             const variant = change.variant && !change.name.toLowerCase().includes(change.variant.toLowerCase())
@@ -4882,10 +4884,19 @@ if (isConfiguredValue(discordBotToken)) {
             return `- **${change.name}${variant}:** ${change.before} → ${change.after}`;
           })
           .join("\n");
-        await targetChannel.send({
-          content: `@everyone\n**Product status changed**\n${changeLines}`,
+        const noticePayload = {
+          content: `@everyone\n**Product status changed**\n**Changed:** <t:${changedAt}:F> (<t:${changedAt}:R>)\n${changeLines}`,
           allowedMentions: { parse: ["everyone"] },
-        });
+        };
+        const existingNotice = statusChangeNoticeMessageId
+          ? await targetChannel.messages.fetch(statusChangeNoticeMessageId).catch(() => null)
+          : null;
+        if (existingNotice) {
+          await existingNotice.edit(noticePayload);
+        } else {
+          const sentNotice = await targetChannel.send(noticePayload);
+          statusChangeNoticeMessageId = sentNotice.id;
+        }
       }
       console.log(`[Status sync] Synced ${matched.length} tracked product status row(s)`);
     } catch (err) {
@@ -4914,11 +4925,15 @@ if (isConfiguredValue(discordBotToken)) {
               !m.embeds?.length
           )
         : [];
-      // Remove legacy game-aggregated notices. They can claim a transition
-      // such as "Undetected > Undetected / Updating" even though no single
-      // product changed. New notices are emitted only by product snapshots.
-      for (const stale of staleChangeNotices) {
-        await stale.delete().catch(() => {});
+      if (staleChangeNotices.length) {
+        const sortedNotices = staleChangeNotices.sort(
+          (a, b) => b.createdTimestamp - a.createdTimestamp
+        );
+        // Keep one notice visible until the next real change replaces it.
+        statusChangeNoticeMessageId = sortedNotices[0].id;
+        for (const stale of sortedNotices.slice(1)) {
+          await stale.delete().catch(() => {});
+        }
       }
       if (ownMessages.length) {
         statusTargetMessageId = ownMessages[0].id;
