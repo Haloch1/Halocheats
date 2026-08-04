@@ -4452,20 +4452,6 @@ if (isConfiguredValue(discordBotToken)) {
     "📝": "Discontinued",
   };
 
-  // Cheats.Love's own /products "status" field -> our badge label. "unknown"
-  // is mapped to "Undetected" per Azad (2026-08-04) — the supplier only
-  // reports "unknown" when detection hasn't flagged anything yet, which we
-  // treat the same as a clean bill of health. Any status string not listed
-  // here is intentionally left unmapped (see syncCheatsLoveStock) so we
-  // never guess at a badge for a status format we don't recognize.
-  const CHEATSLOVE_STATUS_BADGE_MAP = {
-    undetected: "Undetected",
-    unknown: "Undetected",
-    updating: "Updating",
-    risky: "Use at own risk!",
-    discontinued: "Discontinued",
-  };
-
   // Only games/variants XenCheats actually sells. `game` matches the
   // embed field name; each variant's `match` is tried in order, so more
   // specific names (e.g. "Mason Lite") must come before generic ones
@@ -17326,40 +17312,6 @@ async function loadProductStatusOverrides() {
         );
       }
       cheatsloveProductPresenceReady = true;
-
-      /* Detection-status sync: Cheats.Love's /products response now includes
-         a per-product "status" field (undetected/updating/risky/discontinued/
-         unknown/null) alongside stock. This is now the source of truth for
-         our badges — piggybacks on the existing stock-sync request, so it
-         costs zero extra API calls. "unknown" is treated the same as
-         "undetected" per Azad (2026-08-04). Any status string we don't
-         recognize, or a null/missing status, leaves the existing badge
-         untouched rather than guessing. Reuses applyMatchedProductStatuses,
-         the same apply+persist path the third-party Discord status-bot sync
-         uses — whichever runs most recently wins in product_status_overrides,
-         and this supplier-driven sync now runs twice daily plus on-demand. */
-      const statusMatched = [];
-      for (const product of products) {
-        const productId = Number(product.cheatsLoveProductId);
-        const clProduct =
-          (Number.isInteger(productId) && clProducts.find((p) => Number(p.id) === productId)) ||
-          clByName.get(cheatsloveNormalizeName(product.name)) ||
-          null;
-        if (!clProduct) continue;
-        const rawStatus = clProduct.status ? String(clProduct.status).toLowerCase().trim() : null;
-        if (!rawStatus) continue;
-        const badge = CHEATSLOVE_STATUS_BADGE_MAP[rawStatus];
-        if (!badge) continue;
-        statusMatched.push({
-          slug: product.slug,
-          badge,
-          variant: clProduct.name,
-          displayGame: product.name,
-        });
-      }
-      if (statusMatched.length) {
-        await applyMatchedProductStatuses(statusMatched);
-      }
 
       if (!cheatsloveCatalogLogged) {
         cheatsloveCatalogLogged = true;
