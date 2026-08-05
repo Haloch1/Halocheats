@@ -2949,6 +2949,15 @@ async function postTicketQueueAlert(guild, channel, messages, waitingSince, aler
   if (!queueChannel?.isTextBased()) return;
 
   const triage = await summarizeTicketForQueue(messages);
+  // Belt-and-suspenders on top of the isTicketClosingMessage() pre-filter in
+  // maintainDiscordTickets: a longer/rephrased thank-you ("thanks so much for
+  // fixing this!") won't match that strict short-phrase regex, but the AI
+  // triage itself already correctly flags these as needing no reply — so
+  // trust that instead of alerting anyway.
+  if (/no (?:further )?action needed|close(?: the| this)? ticket|already resolved|no reply (?:is )?needed/i.test(triage.action)) {
+    ticketQueueAlertByChannel.set(channel.id, { key: alertKey, at: Date.now() });
+    return;
+  }
   const tone = triage.urgency === "high" ? 0xe11d48 : triage.urgency === "low" ? 0x3b82f6 : 0xf59e0b;
   const waitMinutes = Math.max(1, Math.floor((Date.now() - waitingSince) / 60_000));
   await queueChannel.send({
@@ -3000,8 +3009,13 @@ async function maintainDiscordTickets() {
       const latestCustomer = customerMessages.at(-1);
       const latestStaff = staffMessages.at(-1);
       const waitingSince = latestCustomer?.createdTimestamp || channel.createdTimestamp;
+      // A customer's last message being a plain "thanks"/"got it"/"all good"
+      // doesn't need a staff reply — it was flagging these as waiting even
+      // though the AI's own summary correctly said "no further action
+      // needed." Skip the alert for those instead of just timing it out.
       const needsReply = latestCustomer
-        ? !latestStaff || latestStaff.createdTimestamp < latestCustomer.createdTimestamp
+        ? (!latestStaff || latestStaff.createdTimestamp < latestCustomer.createdTimestamp)
+          && !isTicketClosingMessage(ticketMessageText(latestCustomer))
         : staffMessages.length === 0;
       if (needsReply && Date.now() - waitingSince >= replyWaitMs) {
         const alertKey = latestCustomer?.id || `opened:${channel.createdTimestamp}`;
