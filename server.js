@@ -3274,6 +3274,10 @@ if (isConfiguredValue(discordBotToken)) {
           .addStringOption(o => o.setName("state").setDescription("on or off").setRequired(true)
             .addChoices({ name: "On", value: "on" }, { name: "Off", value: "off" })),
         new SlashCommandBuilder()
+          .setName("escalate")
+          .setDescription("Manually move this pending ticket to the staff queue (staff only)")
+          .addStringOption(o => o.setName("reason").setDescription("Why this needs a person").setRequired(false)),
+        new SlashCommandBuilder()
           .setName("payments")
           .setDescription("Post the accepted payment methods embed (admin only)")
           .addChannelOption(o => o.setName("channel").setDescription("Channel to post in (default: payments channel)").setRequired(false)),
@@ -3918,11 +3922,12 @@ if (isConfiguredValue(discordBotToken)) {
     ) return;
     if (isDiscordStaff(message.author.id, message.member)) return;
 
-    /* Global kill switch (/ticketbot) — staff are taking this ticket (or all
-       tickets) over manually, so don't post anything at all: no AI reply,
-       no order-ID handling, no escalation. Posting even a short notice here
-       would be spammy on every single follow-up while disabled. */
-    if (!ticketBotEnabled) return;
+    /* Global kill switch (/ticketbot) or a per-channel /togglebot mute on this
+       specific ticket — either way staff are taking over manually, so don't
+       post anything at all: no AI reply, no order-ID handling, no escalation.
+       Posting even a short notice here would be spammy on every single
+       follow-up while disabled. */
+    if (!ticketBotEnabled || aiMutedChannels.has(message.channel.id)) return;
 
     if (isTicketClosingMessage(message.content)) {
       pendingTicketAiTurns.delete(message.channel.id);
@@ -8003,7 +8008,7 @@ ${rows || '<div class="ct">No messages.</div>'}
         embeds: [{
           title: willMute ? "AI answers disabled" : "AI answers enabled",
           description: willMute
-            ? `The bot will no longer auto-answer in <#${channelId}>. Run \`/togglebot\` again to re-enable.`
+            ? `The bot will no longer auto-answer in <#${channelId}> — this also silences AI replies and order-ID lookups if it's a pending ticket. Run \`/togglebot\` again to re-enable.`
             : `The bot will auto-answer again in <#${channelId}>.`,
           color: willMute ? 0xff4444 : 0x22c55e,
           footer: { text: "XenCheats" },
@@ -8030,6 +8035,34 @@ ${rows || '<div class="ct">No messages.</div>'}
         }],
         ephemeral: true,
       });
+    }
+
+    /* ── /escalate — manually move THIS pending ticket to the staff queue,
+       for when staff want a human on it right now instead of waiting for the
+       AI to decide on its own (or overriding a case where it wrongly kept
+       trying to help). Reuses the exact same handoff embed/triage the AI's
+       own escalation path uses, so the staff queue looks consistent either
+       way. Staff-gated (not admin-only) since this is routine ticket work. */
+    if (interaction.commandName === "escalate") {
+      if (!isDiscordStaff(interaction.user.id, interaction.member)) {
+        return interaction.reply({ embeds: [{ description: "Only staff can use `/escalate`.", color: 0xff4444 }], ephemeral: true });
+      }
+      const channel = interaction.channel;
+      if (channel?.parentId !== discordPendingTicketCategoryId || !channel?.name?.startsWith("ticket-")) {
+        return interaction.reply({
+          embeds: [{ description: "Run `/escalate` inside a pending ticket (a `ticket-` channel that hasn't moved to the staff queue yet).", color: 0xf59e0b }],
+          ephemeral: true,
+        });
+      }
+      const reason = interaction.options.getString("reason") || `Manually escalated by ${interaction.user.tag}.`;
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        await escalatePendingDiscordTicket(channel, reason);
+        return interaction.editReply({ embeds: [{ description: "Moved to the staff queue.", color: 0x22c55e }] });
+      } catch (error) {
+        console.error("[Discord /escalate]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Could not escalate this ticket — try again in a moment.", color: 0xff4444 }] });
+      }
     }
 
     /* ── /account — Show the member's orders, keys, and expiry ── */
@@ -15666,7 +15699,7 @@ async function ensureDiscordStaffGuide(guild) {
     fields: [
       { name: "Ticket flow", value: "Read the full issue, verify the order or key before changing anything, then reply with one clear next step. Website chat resumes for signed-in members after refresh and mirrors to the staff thread. Use **/summary** before taking over a long thread.", inline: false },
       { name: "Priority", value: "**Urgent:** paid order or account-lock issue.\n**High:** activation, key, or loader issue.\n**Normal:** setup and general questions.", inline: false },
-      { name: "Useful commands", value: "`/summary` ticket context\n`/known <issue>` verified resolved fixes\n`/orderlookup <id or email>` order status (admins)\n`/staffactivity [staff]` audit history (admins)", inline: false },
+      { name: "Useful commands", value: "`/summary` ticket context\n`/known <issue>` verified resolved fixes\n`/escalate [reason]` move a pending ticket to the staff queue right now\n`/togglebot [channel]` silence AI replies (incl. order-ID lookups) in one channel\n`/orderlookup <id or email>` order status (admins)\n`/staffactivity [staff]` audit history (admins)", inline: false },
       { name: "Before closing", value: "Only close after the member clearly confirms the issue is fixed. If they confirm it, the ticket is automatically marked resolved. Never expose license keys, payment details, or staff-only notes in public channels. Direct website users to the support chat bubble, not the retired /desk page.", inline: false },
     ],
     footer: { text: "XenCheats Staff Guide" },
