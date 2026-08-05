@@ -2571,91 +2571,112 @@ Recent conversation:
 ${conversation || "No previous messages."}`;
 
   if (geminiApiKey) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": geminiApiKey },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-            generationConfig: {
-              temperature: 0.25,
-              maxOutputTokens: 300,
-              responseMimeType: "application/json",
-              responseSchema: {
-                type: "OBJECT",
-                properties: {
-                  canHelp: { type: "BOOLEAN" },
-                  reply: { type: "STRING" },
-                  reason: { type: "STRING" },
+    /* Retry once on a transient overload/5xx before giving up on Gemini — a
+       single 503 "high demand" blip (confirmed happens in practice) used to
+       fall straight through to Groq, and if Groq also hiccuped on the exact
+       same request, the customer saw the "one sec, hiccup" outage message on
+       their very first ticket message. A quick retry clears most of these. */
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15_000);
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": geminiApiKey },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+              generationConfig: {
+                temperature: 0.25,
+                maxOutputTokens: 300,
+                responseMimeType: "application/json",
+                responseSchema: {
+                  type: "OBJECT",
+                  properties: {
+                    canHelp: { type: "BOOLEAN" },
+                    reply: { type: "STRING" },
+                    reason: { type: "STRING" },
+                  },
+                  required: ["canHelp", "reply", "reason"],
                 },
-                required: ["canHelp", "reply", "reason"],
               },
-            },
-          }),
-          signal: controller.signal,
-        },
-      );
-      if (response.ok) {
-        const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
-        const json = text.match(/\{[\s\S]*\}/)?.[0];
-        if (json) {
-          if (channelId) ticketAiOutageStreakByChannel.delete(channelId);
-          return applyTicketFirstMessageSafetyNet(normalizeTicketAiDecision(JSON.parse(json)), isFirstMessage);
+            }),
+            signal: controller.signal,
+          },
+        );
+        clearTimeout(timeout);
+        if (response.ok) {
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
+          const json = text.match(/\{[\s\S]*\}/)?.[0];
+          if (json) {
+            if (channelId) ticketAiOutageStreakByChannel.delete(channelId);
+            return applyTicketFirstMessageSafetyNet(normalizeTicketAiDecision(JSON.parse(json)), isFirstMessage);
+          }
+          console.warn("[Discord ticket AI] Gemini returned no parseable JSON; trying fallback. Raw text:", text.slice(0, 300));
+          break;
         }
-        console.warn("[Discord ticket AI] Gemini returned no parseable JSON; trying fallback. Raw text:", text.slice(0, 300));
-      } else {
         const bodyText = await response.text().catch(() => "");
-        console.warn(`[Discord ticket AI] Gemini responded ${response.status}; trying fallback:`, bodyText.slice(0, 300));
+        console.warn(`[Discord ticket AI] Gemini responded ${response.status} (attempt ${attempt + 1}):`, bodyText.slice(0, 300));
+        if (response.status === 429 || response.status >= 500) {
+          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+          continue;
+        }
+        break; // non-retryable client error — go straight to Groq
+      } catch (error) {
+        clearTimeout(timeout);
+        console.warn(`[Discord ticket AI] Gemini unavailable (attempt ${attempt + 1}):`, error.message);
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
       }
-    } catch (error) {
-      console.warn("[Discord ticket AI] Gemini unavailable; trying fallback:", error.message);
-    } finally {
-      clearTimeout(timeout);
     }
   }
 
   if (groqApiKey) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
-    try {
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqApiKey}` },
-        body: JSON.stringify({
-          model: groqModel,
-          temperature: 0.25,
-          max_tokens: 300,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-        }),
-        signal: controller.signal,
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const text = String(data.choices?.[0]?.message?.content || "");
-        const json = text.match(/\{[\s\S]*\}/)?.[0];
-        if (json) {
-          if (channelId) ticketAiOutageStreakByChannel.delete(channelId);
-          return applyTicketFirstMessageSafetyNet(normalizeTicketAiDecision(JSON.parse(json)), isFirstMessage);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15_000);
+      try {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${groqApiKey}` },
+          body: JSON.stringify({
+            model: groqModel,
+            temperature: 0.25,
+            max_tokens: 300,
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (response.ok) {
+          const data = await response.json();
+          const text = String(data.choices?.[0]?.message?.content || "");
+          const json = text.match(/\{[\s\S]*\}/)?.[0];
+          if (json) {
+            if (channelId) ticketAiOutageStreakByChannel.delete(channelId);
+            return applyTicketFirstMessageSafetyNet(normalizeTicketAiDecision(JSON.parse(json)), isFirstMessage);
+          }
+          console.warn("[Discord ticket AI] Groq returned no parseable JSON. Raw text:", text.slice(0, 300));
+          break;
         }
-        console.warn("[Discord ticket AI] Groq returned no parseable JSON. Raw text:", text.slice(0, 300));
-      } else {
         const bodyText = await response.text().catch(() => "");
-        console.warn(`[Discord ticket AI] Groq responded ${response.status}:`, bodyText.slice(0, 300));
+        console.warn(`[Discord ticket AI] Groq responded ${response.status} (attempt ${attempt + 1}):`, bodyText.slice(0, 300));
+        if (response.status === 429 || response.status >= 500) {
+          await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+          continue;
+        }
+        break;
+      } catch (error) {
+        clearTimeout(timeout);
+        console.warn(`[Discord ticket AI] Fallback unavailable (attempt ${attempt + 1}):`, error.message);
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
       }
-    } catch (error) {
-      console.warn("[Discord ticket AI] Fallback unavailable:", error.message);
-    } finally {
-      clearTimeout(timeout);
     }
   }
 
