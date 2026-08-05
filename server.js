@@ -68,6 +68,10 @@ const discordSignupChannelId = process.env.DISCORD_SIGNUP_CHANNEL_ID || "";
 const discordSecurityWebhookUrl =
   process.env.DISCORD_SECURITY_WEBHOOK_URL || discordSignupWebhookUrl;
 const discordModerationChannelId = process.env.DISCORD_MODERATION_CHANNEL_ID || "";
+/* Where /staffapp submissions get posted for review. Falls back to the
+   moderation channel if a dedicated one isn't set on Render. */
+const discordStaffApplicationsChannelId =
+  process.env.DISCORD_STAFF_APPLICATIONS_CHANNEL_ID || discordModerationChannelId;
 const discordErrorChannelId = process.env.DISCORD_ERROR_CHANNEL_ID || "1530317219337076837";
 const aiQualityAlertChannelId = process.env.AI_QUALITY_ALERT_CHANNEL_ID || discordErrorChannelId;
 const aiQualityModel = process.env.AI_QUALITY_MODEL || "gemini-2.5-flash";
@@ -3277,6 +3281,9 @@ if (isConfiguredValue(discordBotToken)) {
           .setName("escalate")
           .setDescription("Manually move this pending ticket to the staff queue (staff only)")
           .addStringOption(o => o.setName("reason").setDescription("Why this needs a person").setRequired(false)),
+        new SlashCommandBuilder()
+          .setName("staffapp")
+          .setDescription("Apply to join the XenCheats staff team"),
         new SlashCommandBuilder()
           .setName("payments")
           .setDescription("Post the accepted payment methods embed (admin only)")
@@ -8062,6 +8069,121 @@ ${rows || '<div class="ct">No messages.</div>'}
       } catch (error) {
         console.error("[Discord /escalate]", error.message);
         return interaction.editReply({ embeds: [{ description: "Could not escalate this ticket — try again in a moment.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /staffapp — open the staff application modal ── */
+    if (interaction.commandName === "staffapp") {
+      if (isDiscordStaff(interaction.user.id, interaction.member)) {
+        return interaction.reply({
+          embeds: [{ description: "You're already staff — no need to apply.", color: 0xf59e0b }],
+          ephemeral: true,
+        });
+      }
+      if (isOnSlashCooldown("staffapp", interaction.user.id, 24 * 60 * 60_000)) {
+        return interaction.reply({
+          embeds: [{ description: "You've already submitted an application recently. Give the team time to review it before applying again.", color: 0xf59e0b }],
+          ephemeral: true,
+        });
+      }
+
+      const modal = new ModalBuilder()
+        .setCustomId("staff_application_modal")
+        .setTitle("XenCheats Staff Application");
+
+      const whyInput = new TextInputBuilder()
+        .setCustomId("staffapp_why")
+        .setLabel("Why do you want to join the team?")
+        .setPlaceholder("What draws you to this specifically, not just \"I want to help\"...")
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(700);
+
+      const experienceInput = new TextInputBuilder()
+        .setCustomId("staffapp_experience")
+        .setLabel("Relevant experience")
+        .setPlaceholder("Past support/mod roles, other servers, anything relevant")
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(700);
+
+      const availabilityInput = new TextInputBuilder()
+        .setCustomId("staffapp_availability")
+        .setLabel("Timezone & weekly availability")
+        .setPlaceholder("e.g. EST, roughly 15-20 hrs/week, mostly evenings")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(150);
+
+      const scenarioInput = new TextInputBuilder()
+        .setCustomId("staffapp_scenario")
+        .setLabel("A customer says they paid but got no key")
+        .setPlaceholder("They're frustrated and it's been a few minutes. What do you actually do, step by step?")
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(700);
+
+      const aboutInput = new TextInputBuilder()
+        .setCustomId("staffapp_about")
+        .setLabel("Age & how long in this server?")
+        .setPlaceholder("e.g. 19, been here since March")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(100);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(whyInput),
+        new ActionRowBuilder().addComponents(experienceInput),
+        new ActionRowBuilder().addComponents(availabilityInput),
+        new ActionRowBuilder().addComponents(scenarioInput),
+        new ActionRowBuilder().addComponents(aboutInput),
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    /* ── Handle staff application submissions ── */
+    if (interaction.isModalSubmit && interaction.isModalSubmit() && interaction.customId === "staff_application_modal") {
+      await interaction.deferReply({ ephemeral: true });
+      const applicant = interaction.user;
+      const why = interaction.fields.getTextInputValue("staffapp_why");
+      const experience = interaction.fields.getTextInputValue("staffapp_experience");
+      const availability = interaction.fields.getTextInputValue("staffapp_availability");
+      const scenario = interaction.fields.getTextInputValue("staffapp_scenario");
+      const about = interaction.fields.getTextInputValue("staffapp_about");
+
+      if (!discordStaffApplicationsChannelId) {
+        return interaction.editReply({
+          embeds: [{ description: "Applications aren't configured yet — please let an admin know.", color: 0xff4444 }],
+        });
+      }
+
+      try {
+        const channel = await discordBot.channels.fetch(discordStaffApplicationsChannelId);
+        await channel.send({
+          embeds: [{
+            title: "New staff application",
+            color: 0x7c3aed,
+            fields: [
+              { name: "Applicant", value: `<@${applicant.id}> (${applicant.tag})`, inline: false },
+              { name: "Age & tenure", value: about.slice(0, 1000), inline: false },
+              { name: "Timezone & availability", value: availability.slice(0, 1000), inline: false },
+              { name: "Why they want to join", value: why.slice(0, 1000), inline: false },
+              { name: "Relevant experience", value: experience.slice(0, 1000), inline: false },
+              { name: "Scenario: unpaid/missing key", value: scenario.slice(0, 1000), inline: false },
+            ],
+            footer: { text: `Discord ID: ${applicant.id}` },
+            timestamp: new Date().toISOString(),
+          }],
+        });
+        return interaction.editReply({
+          embeds: [{ description: "Application submitted. The team will review it and reach out if it's a fit.", color: 0x22c55e }],
+        });
+      } catch (error) {
+        console.error("[Discord /staffapp]", error.message);
+        return interaction.editReply({
+          embeds: [{ description: "Something went wrong submitting your application. Try again in a moment.", color: 0xff4444 }],
+        });
       }
     }
 
