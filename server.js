@@ -5318,6 +5318,17 @@ ${rows || '<div class="ct">No messages.</div>'}
       );
     }
 
+    // ── DIAGNOSTIC: log every single interaction that reaches this handler,
+    // before any if-chain logic runs. If a reseller_approve/deny click never
+    // prints this line, the click isn't reaching the bot process at all
+    // (Discord-side / gateway issue, not a code bug). If it DOES print but
+    // nothing after it prints, the bug is in that specific block. ──
+    console.log(
+      `[Discord interaction] type=${interaction.type} isButton=${interaction.isButton?.() || false} ` +
+      `command=${interaction.commandName || "-"} customId=${interaction.customId || "-"} ` +
+      `user=${interaction.user?.tag || interaction.user?.id || "?"} guild=${interaction.guildId || "-"}`
+    );
+
     // ── DIAGNOSTIC: /pingtest posts a button; clicking it should reply
     // "pong" instantly. Positioned first in dispatch on purpose — if this
     // doesn't work, no button anywhere in the bot can, ruling out anything
@@ -8692,12 +8703,21 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── Reseller application Approve/Deny buttons ── */
     if (interaction.isButton && interaction.isButton() && (interaction.customId.startsWith("reseller_approve:") || interaction.customId.startsWith("reseller_deny:"))) {
-      if (!isDiscordStaff(interaction.user.id, interaction.member)) {
-        return interaction.reply({ embeds: [{ description: "Only staff can review reseller applications.", color: 0xff4444 }], ephemeral: true });
+      console.log(`[Discord reseller review] Block reached for ${interaction.customId} from ${interaction.user?.tag}`);
+      const isStaff = isDiscordStaff(interaction.user.id, interaction.member);
+      console.log(`[Discord reseller review] isDiscordStaff=${isStaff} member=${interaction.member ? "present" : "MISSING"}`);
+      if (!isStaff) {
+        try {
+          return await interaction.reply({ embeds: [{ description: "Only staff can review reseller applications.", color: 0xff4444 }], ephemeral: true });
+        } catch (staffReplyError) {
+          console.error("[Discord reseller review] Failed to send staff-only reply:", staffReplyError.message);
+          return;
+        }
       }
       const [action, resellerId] = interaction.customId.split(":");
       try {
         await interaction.deferUpdate();
+        console.log(`[Discord reseller review] deferUpdate succeeded for ${interaction.customId}`);
       } catch (ackError) {
         console.error(
           `[Discord reseller review] Failed to acknowledge button click from ${interaction.user?.tag} ` +
