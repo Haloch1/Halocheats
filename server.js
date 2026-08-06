@@ -5335,19 +5335,230 @@ ${rows || '<div class="ct">No messages.</div>'}
       `resellerMatch=${__isResellerReviewMatch}`
     );
 
-    // TEMP DIAGNOSTIC: if this matches, reply immediately, before ANY other
-    // code in this handler runs (even before /pingtest). This is the most
-    // upstream possible position — if this doesn't fire, nothing downstream
-    // in this function can be the cause. Remove once the real bug is found.
+    // Reseller application Approve/Deny buttons — deliberately positioned at
+    // the very top of this handler, ahead of everything else. Positioned
+    // after the ~60-block if-chain further down, this reliably missed
+    // Discord's 3s ack window (confirmed by diagnostic testing); something
+    // earlier in that chain eats the window before execution got here. Kept
+    // at the top rather than fixing the slow block itself, since the
+    // customer-facing fix mattered more than root-causing every block. ──
     if (__isResellerReviewMatch) {
-      console.log(`[Discord reseller review] TOP-OF-HANDLER match for ${interaction.customId}`);
-      try {
-        await interaction.reply({ content: "DEBUG: matched at top of handler", ephemeral: true });
-        console.log("[Discord reseller review] TOP-OF-HANDLER debug reply sent");
-      } catch (topDebugError) {
-        console.error("[Discord reseller review] TOP-OF-HANDLER debug reply FAILED:", topDebugError?.message || topDebugError);
+      if (!isDiscordStaff(interaction.user.id, interaction.member)) {
+        try {
+          return await interaction.reply({ embeds: [{ description: "Only staff can review reseller applications.", color: 0xff4444 }], ephemeral: true });
+        } catch (staffReplyError) {
+          console.error("[Discord reseller review] Failed to send staff-only reply:", staffReplyError.message);
+          return;
+        }
       }
-      return;
+      const [action, resellerId] = interaction.customId.split(":");
+      try {
+        await interaction.deferUpdate();
+      } catch (ackError) {
+        console.error(
+          `[Discord reseller review] Failed to acknowledge button click from ${interaction.user?.tag} ` +
+          `(dispatch lag ${Date.now() - interaction.createdTimestamp}ms):`,
+          ackError.message
+        );
+        return;
+      }
+      try {
+        const { data: reseller, error: fetchError } = await supabaseAdmin
+          .from("resellers")
+          .select("id, discord_id, status")
+          .eq("id", resellerId)
+          .maybeSingle();
+        if (fetchError || !reseller) {
+          return interaction.followUp({ embeds: [{ description: "Could not find this reseller application.", color: 0xff4444 }], ephemeral: true });
+        }
+        if (reseller.status !== "pending") {
+          return interaction.followUp({ embeds: [{ description: `This application was already ${reseller.status}.`, color: 0xf59e0b }], ephemeral: true });
+        }
+
+        if (action === "reseller_approve") {
+          const rawApiKey = `xr_${createSecretToken(24)}`;
+          const { error: updateError } = await supabaseAdmin
+            .from("resellers")
+            .update({
+              status: "approved",
+              tier: "new",
+              discount_percent: 0,
+              api_key_hash: hashToken(rawApiKey),
+              api_key_last4: rawApiKey.slice(-4),
+              approved_at: new Date().toISOString(),
+              approved_by: interaction.user.id,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", resellerId);
+          if (updateError) throw updateError;
+
+          if (discordGuildId && discordResellerRoleId) {
+            try {
+              const guild = await discordBot.guilds.fetch(discordGuildId);
+              const member = await guild.members.fetch(reseller.discord_id);
+              await member.roles.add(discordResellerRoleId);
+            } catch (roleError) {
+              console.warn("[Discord reseller review] Could not assign reseller role:", roleError.message);
+            }
+          }
+
+          await sendDiscordDM(
+            reseller.discord_id,
+            `🎉 Your XenCheats reseller application was approved!\n\n` +
+            `**Your API key (save this now — it will not be shown again):**\n\`${rawApiKey}\`\n\n` +
+            `Your discount is set by how much you top up in total: $50+ gets you 15% off, $100+ gets 20% off, $200+ gets 25% off — it locks in and stays until you cross the next tier.\n\n` +
+            `Manage your account, see your balance, and read the API docs at ${(process.env.PUBLIC_SITE_URL || "https://xencheats.wtf").replace(/\/+$/, "")}/reseller`,
+          ).catch(() => {});
+
+          await interaction.editReply({
+            embeds: [{
+              ...interaction.message.embeds[0].data,
+              color: 0x22c55e,
+              footer: { text: `Approved by ${interaction.user.tag}` },
+            }],
+            components: [],
+          });
+          return interaction.followUp({ embeds: [{ description: "Approved — API key DMed to the applicant.", color: 0x22c55e }], ephemeral: true });
+        }
+
+        // Deny
+        await supabaseAdmin
+          .from("resellers")
+          .update({ status: "denied", denied_at: new Date().toISOString(), denied_by: interaction.user.id, updated_at: new Date().toISOString() })
+          .eq("id", resellerId);
+        await sendDiscordDM(
+          reseller.discord_id,
+          "Thanks for applying to the XenCheats reseller program — we're not able to approve your application right now. You're welcome to reapply later.",
+        ).catch(() => {});
+        await interaction.editReply({
+          embeds: [{
+            ...interaction.message.embeds[0].data,
+            color: 0xff4444,
+            footer: { text: `Denied by ${interaction.user.tag}` },
+          }],
+          components: [],
+        });
+        return interaction.followUp({ embeds: [{ description: "Denied.", color: 0xff4444 }], ephemeral: true });
+      } catch (error) {
+        console.error("[Discord reseller review]", error.message);
+        return interaction.followUp({ embeds: [{ description: "Something went wrong processing this application.", color: 0xff4444 }], ephemeral: true });
+      }
+    }
+
+    /* ── /staffapp — open the staff application modal (moved here for the
+       same dispatch-window reason as the reseller review buttons above) ── */
+    if (interaction.commandName === "staffapp") {
+      if (isDiscordStaff(interaction.user.id, interaction.member)) {
+        return interaction.reply({
+          embeds: [{ description: "You're already staff — no need to apply.", color: 0xf59e0b }],
+          ephemeral: true,
+        });
+      }
+      if (isOnSlashCooldown("staffapp", interaction.user.id, 24 * 60 * 60_000)) {
+        return interaction.reply({
+          embeds: [{ description: "You've already submitted an application recently. Give the team time to review it before applying again.", color: 0xf59e0b }],
+          ephemeral: true,
+        });
+      }
+
+      const staffAppModal = new ModalBuilder()
+        .setCustomId("staff_application_modal")
+        .setTitle("XenCheats Staff Application");
+
+      const staffAppWhyInput = new TextInputBuilder()
+        .setCustomId("staffapp_why")
+        .setLabel("Why do you want to join the team?")
+        .setPlaceholder("What draws you to this specifically, not just \"I want to help\"...")
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(700);
+
+      const staffAppExperienceInput = new TextInputBuilder()
+        .setCustomId("staffapp_experience")
+        .setLabel("Relevant experience")
+        .setPlaceholder("Past support/mod roles, other servers, anything relevant")
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(700);
+
+      const staffAppAvailabilityInput = new TextInputBuilder()
+        .setCustomId("staffapp_availability")
+        .setLabel("Timezone & weekly availability")
+        .setPlaceholder("e.g. EST, roughly 15-20 hrs/week, mostly evenings")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(150);
+
+      const staffAppScenarioInput = new TextInputBuilder()
+        .setCustomId("staffapp_scenario")
+        .setLabel("A customer says they paid but got no key")
+        .setPlaceholder("They're frustrated and it's been a few minutes. What do you actually do, step by step?")
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(700);
+
+      const staffAppAboutInput = new TextInputBuilder()
+        .setCustomId("staffapp_about")
+        .setLabel("Age & how long in this server?")
+        .setPlaceholder("e.g. 19, been here since March")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(100);
+
+      staffAppModal.addComponents(
+        new ActionRowBuilder().addComponents(staffAppWhyInput),
+        new ActionRowBuilder().addComponents(staffAppExperienceInput),
+        new ActionRowBuilder().addComponents(staffAppAvailabilityInput),
+        new ActionRowBuilder().addComponents(staffAppScenarioInput),
+        new ActionRowBuilder().addComponents(staffAppAboutInput),
+      );
+
+      return interaction.showModal(staffAppModal);
+    }
+
+    /* ── Handle staff application submissions ── */
+    if (interaction.isModalSubmit && interaction.isModalSubmit() && interaction.customId === "staff_application_modal") {
+      await interaction.deferReply({ ephemeral: true });
+      const staffApplicant = interaction.user;
+      const staffAppWhy = interaction.fields.getTextInputValue("staffapp_why");
+      const staffAppExperience = interaction.fields.getTextInputValue("staffapp_experience");
+      const staffAppAvailability = interaction.fields.getTextInputValue("staffapp_availability");
+      const staffAppScenario = interaction.fields.getTextInputValue("staffapp_scenario");
+      const staffAppAbout = interaction.fields.getTextInputValue("staffapp_about");
+
+      if (!discordStaffApplicationsChannelId) {
+        return interaction.editReply({
+          embeds: [{ description: "Applications aren't configured yet — please let an admin know.", color: 0xff4444 }],
+        });
+      }
+
+      try {
+        const channel = await discordBot.channels.fetch(discordStaffApplicationsChannelId);
+        await channel.send({
+          embeds: [{
+            title: "New staff application",
+            color: 0x7c3aed,
+            fields: [
+              { name: "Applicant", value: `<@${staffApplicant.id}> (${staffApplicant.tag})`, inline: false },
+              { name: "Age & tenure", value: staffAppAbout.slice(0, 1000), inline: false },
+              { name: "Timezone & availability", value: staffAppAvailability.slice(0, 1000), inline: false },
+              { name: "Why they want to join", value: staffAppWhy.slice(0, 1000), inline: false },
+              { name: "Relevant experience", value: staffAppExperience.slice(0, 1000), inline: false },
+              { name: "Scenario: unpaid/missing key", value: staffAppScenario.slice(0, 1000), inline: false },
+            ],
+            footer: { text: `Discord ID: ${staffApplicant.id}` },
+            timestamp: new Date().toISOString(),
+          }],
+        });
+        return interaction.editReply({
+          embeds: [{ description: "Application submitted. The team will review it and reach out if it's a fit.", color: 0x22c55e }],
+        });
+      } catch (error) {
+        console.error("[Discord /staffapp]", error.message);
+        return interaction.editReply({
+          embeds: [{ description: "Something went wrong submitting your application. Try again in a moment.", color: 0xff4444 }],
+        });
+      }
     }
 
     // ── DIAGNOSTIC: /pingtest posts a button; clicking it should reply
@@ -8303,121 +8514,6 @@ ${rows || '<div class="ct">No messages.</div>'}
       }
     }
 
-    /* ── /staffapp — open the staff application modal ── */
-    if (interaction.commandName === "staffapp") {
-      if (isDiscordStaff(interaction.user.id, interaction.member)) {
-        return interaction.reply({
-          embeds: [{ description: "You're already staff — no need to apply.", color: 0xf59e0b }],
-          ephemeral: true,
-        });
-      }
-      if (isOnSlashCooldown("staffapp", interaction.user.id, 24 * 60 * 60_000)) {
-        return interaction.reply({
-          embeds: [{ description: "You've already submitted an application recently. Give the team time to review it before applying again.", color: 0xf59e0b }],
-          ephemeral: true,
-        });
-      }
-
-      const modal = new ModalBuilder()
-        .setCustomId("staff_application_modal")
-        .setTitle("XenCheats Staff Application");
-
-      const whyInput = new TextInputBuilder()
-        .setCustomId("staffapp_why")
-        .setLabel("Why do you want to join the team?")
-        .setPlaceholder("What draws you to this specifically, not just \"I want to help\"...")
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true)
-        .setMaxLength(700);
-
-      const experienceInput = new TextInputBuilder()
-        .setCustomId("staffapp_experience")
-        .setLabel("Relevant experience")
-        .setPlaceholder("Past support/mod roles, other servers, anything relevant")
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true)
-        .setMaxLength(700);
-
-      const availabilityInput = new TextInputBuilder()
-        .setCustomId("staffapp_availability")
-        .setLabel("Timezone & weekly availability")
-        .setPlaceholder("e.g. EST, roughly 15-20 hrs/week, mostly evenings")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setMaxLength(150);
-
-      const scenarioInput = new TextInputBuilder()
-        .setCustomId("staffapp_scenario")
-        .setLabel("A customer says they paid but got no key")
-        .setPlaceholder("They're frustrated and it's been a few minutes. What do you actually do, step by step?")
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true)
-        .setMaxLength(700);
-
-      const aboutInput = new TextInputBuilder()
-        .setCustomId("staffapp_about")
-        .setLabel("Age & how long in this server?")
-        .setPlaceholder("e.g. 19, been here since March")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setMaxLength(100);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(whyInput),
-        new ActionRowBuilder().addComponents(experienceInput),
-        new ActionRowBuilder().addComponents(availabilityInput),
-        new ActionRowBuilder().addComponents(scenarioInput),
-        new ActionRowBuilder().addComponents(aboutInput),
-      );
-
-      return interaction.showModal(modal);
-    }
-
-    /* ── Handle staff application submissions ── */
-    if (interaction.isModalSubmit && interaction.isModalSubmit() && interaction.customId === "staff_application_modal") {
-      await interaction.deferReply({ ephemeral: true });
-      const applicant = interaction.user;
-      const why = interaction.fields.getTextInputValue("staffapp_why");
-      const experience = interaction.fields.getTextInputValue("staffapp_experience");
-      const availability = interaction.fields.getTextInputValue("staffapp_availability");
-      const scenario = interaction.fields.getTextInputValue("staffapp_scenario");
-      const about = interaction.fields.getTextInputValue("staffapp_about");
-
-      if (!discordStaffApplicationsChannelId) {
-        return interaction.editReply({
-          embeds: [{ description: "Applications aren't configured yet — please let an admin know.", color: 0xff4444 }],
-        });
-      }
-
-      try {
-        const channel = await discordBot.channels.fetch(discordStaffApplicationsChannelId);
-        await channel.send({
-          embeds: [{
-            title: "New staff application",
-            color: 0x7c3aed,
-            fields: [
-              { name: "Applicant", value: `<@${applicant.id}> (${applicant.tag})`, inline: false },
-              { name: "Age & tenure", value: about.slice(0, 1000), inline: false },
-              { name: "Timezone & availability", value: availability.slice(0, 1000), inline: false },
-              { name: "Why they want to join", value: why.slice(0, 1000), inline: false },
-              { name: "Relevant experience", value: experience.slice(0, 1000), inline: false },
-              { name: "Scenario: unpaid/missing key", value: scenario.slice(0, 1000), inline: false },
-            ],
-            footer: { text: `Discord ID: ${applicant.id}` },
-            timestamp: new Date().toISOString(),
-          }],
-        });
-        return interaction.editReply({
-          embeds: [{ description: "Application submitted. The team will review it and reach out if it's a fit.", color: 0x22c55e }],
-        });
-      } catch (error) {
-        console.error("[Discord /staffapp]", error.message);
-        return interaction.editReply({
-          embeds: [{ description: "Something went wrong submitting your application. Try again in a moment.", color: 0xff4444 }],
-        });
-      }
-    }
-
     /* ── /resellerapp — open the reseller application modal ── */
     if (interaction.commandName === "resellerapp") {
       if (isOnSlashCooldown("resellerapp", interaction.user.id, 24 * 60 * 60_000)) {
@@ -8719,122 +8815,6 @@ ${rows || '<div class="ct">No messages.</div>'}
       } catch (error) {
         console.error("[Discord /resellermake]", error.message);
         return interaction.editReply({ embeds: [{ description: "Something went wrong approving this reseller.", color: 0xff4444 }] });
-      }
-    }
-
-    /* ── Reseller application Approve/Deny buttons ── */
-    if (interaction.isButton && interaction.isButton() && (interaction.customId.startsWith("reseller_approve:") || interaction.customId.startsWith("reseller_deny:"))) {
-      console.log(`[Discord reseller review] Block reached for ${interaction.customId} from ${interaction.user?.tag}`);
-      // TEMP DIAGNOSTIC: prove in Discord itself (not just logs) that this
-      // block is actually entered. Remove once the real bug is confirmed.
-      try {
-        await interaction.reply({ content: "DEBUG: reseller review block entered", ephemeral: true });
-      } catch (debugReplyError) {
-        console.error("[Discord reseller review] DEBUG reply failed:", debugReplyError?.message || debugReplyError);
-      }
-      return;
-      const isStaff = isDiscordStaff(interaction.user.id, interaction.member);
-      console.log(`[Discord reseller review] isDiscordStaff=${isStaff} member=${interaction.member ? "present" : "MISSING"}`);
-      if (!isStaff) {
-        try {
-          return await interaction.reply({ embeds: [{ description: "Only staff can review reseller applications.", color: 0xff4444 }], ephemeral: true });
-        } catch (staffReplyError) {
-          console.error("[Discord reseller review] Failed to send staff-only reply:", staffReplyError.message);
-          return;
-        }
-      }
-      const [action, resellerId] = interaction.customId.split(":");
-      try {
-        await interaction.deferUpdate();
-        console.log(`[Discord reseller review] deferUpdate succeeded for ${interaction.customId}`);
-      } catch (ackError) {
-        console.error(
-          `[Discord reseller review] Failed to acknowledge button click from ${interaction.user?.tag} ` +
-          `(dispatch lag ${Date.now() - interaction.createdTimestamp}ms):`,
-          ackError.message
-        );
-        return;
-      }
-      try {
-        const { data: reseller, error: fetchError } = await supabaseAdmin
-          .from("resellers")
-          .select("id, discord_id, status")
-          .eq("id", resellerId)
-          .maybeSingle();
-        if (fetchError || !reseller) {
-          return interaction.followUp({ embeds: [{ description: "Could not find this reseller application.", color: 0xff4444 }], ephemeral: true });
-        }
-        if (reseller.status !== "pending") {
-          return interaction.followUp({ embeds: [{ description: `This application was already ${reseller.status}.`, color: 0xf59e0b }], ephemeral: true });
-        }
-
-        if (action === "reseller_approve") {
-          const rawApiKey = `xr_${createSecretToken(24)}`;
-          const { error: updateError } = await supabaseAdmin
-            .from("resellers")
-            .update({
-              status: "approved",
-              tier: "new",
-              discount_percent: 0,
-              api_key_hash: hashToken(rawApiKey),
-              api_key_last4: rawApiKey.slice(-4),
-              approved_at: new Date().toISOString(),
-              approved_by: interaction.user.id,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", resellerId);
-          if (updateError) throw updateError;
-
-          if (discordGuildId && discordResellerRoleId) {
-            try {
-              const guild = await discordBot.guilds.fetch(discordGuildId);
-              const member = await guild.members.fetch(reseller.discord_id);
-              await member.roles.add(discordResellerRoleId);
-            } catch (roleError) {
-              console.warn("[Discord reseller review] Could not assign reseller role:", roleError.message);
-            }
-          }
-
-          await sendDiscordDM(
-            reseller.discord_id,
-            `🎉 Your XenCheats reseller application was approved!\n\n` +
-            `**Your API key (save this now — it will not be shown again):**\n\`${rawApiKey}\`\n\n` +
-            `Your discount is set by how much you top up in total: $50+ gets you 15% off, $100+ gets 20% off, $200+ gets 25% off — it locks in and stays until you cross the next tier.\n\n` +
-            `Manage your account, see your balance, and read the API docs at ${(process.env.PUBLIC_SITE_URL || "https://xencheats.wtf").replace(/\/+$/, "")}/reseller`,
-          ).catch(() => {});
-
-          await interaction.editReply({
-            embeds: [{
-              ...interaction.message.embeds[0].data,
-              color: 0x22c55e,
-              footer: { text: `Approved by ${interaction.user.tag}` },
-            }],
-            components: [],
-          });
-          return interaction.followUp({ embeds: [{ description: "Approved — API key DMed to the applicant.", color: 0x22c55e }], ephemeral: true });
-        }
-
-        // Deny
-        await supabaseAdmin
-          .from("resellers")
-          .update({ status: "denied", denied_at: new Date().toISOString(), denied_by: interaction.user.id, updated_at: new Date().toISOString() })
-          .eq("id", resellerId);
-        await sendDiscordDM(
-          reseller.discord_id,
-          "Thanks for applying to the XenCheats reseller program — we're not able to approve your application right now. You're welcome to reapply later.",
-        ).catch(() => {});
-        await interaction.editReply({
-          embeds: [{
-            ...interaction.message.embeds[0].data,
-            color: 0xff4444,
-            footer: { text: `Denied by ${interaction.user.tag}` },
-          }],
-          components: [],
-        });
-        return interaction.followUp({ embeds: [{ description: "Denied.", color: 0xff4444 }], ephemeral: true });
-      } catch (error) {
-        console.error("[Discord reseller review]", error.message);
-        return interaction.followUp({ embeds: [{ description: "Something went wrong processing this application.", color: 0xff4444 }], ephemeral: true });
       }
     }
 
