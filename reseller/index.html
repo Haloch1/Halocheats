@@ -107,7 +107,7 @@
           </div>
           <span class="balance-panel-note" data-reseller-discount>&mdash;</span>
         </div>
-        <p class="balance-panel-sub">Your prepaid reseller balance. Buy from the Products tab or your own integration — either way it's debited at your tier's discounted price. Top up $50+ for a 10% bonus, $250+ for 18%, $500+ for 25% &mdash; extra credit, added automatically.</p>
+        <p class="balance-panel-sub">Your prepaid reseller balance. Buy from the Products tab or your own integration — either way it's debited at your tier's discounted price. Your discount is set by how much you've topped up in total: $250+ locks in Silver (30% off), $500+ locks in Gold (35% off), and it stays there until you cross the next tier.</p>
 
         <div class="reseller-progress-wrap" data-reseller-progress-wrap hidden>
           <div class="reseller-progress-track">
@@ -125,10 +125,10 @@
         <div class="auth-pane is-active" data-reseller-pane="overview">
           <p class="inline-message info topup-message" data-reseller-topup-message hidden></p>
           <div class="topup-presets" data-reseller-topup-presets>
-            <button type="button" class="topup-preset" data-amount="5000">$50 <small>+10%</small></button>
-            <button type="button" class="topup-preset" data-amount="10000">$100 <small>+10%</small></button>
-            <button type="button" class="topup-preset" data-amount="25000">$250 <small>+18%</small></button>
-            <button type="button" class="topup-preset" data-amount="50000">$500 <small>+25%</small></button>
+            <button type="button" class="topup-preset" data-amount="5000">$50</button>
+            <button type="button" class="topup-preset" data-amount="10000">$100</button>
+            <button type="button" class="topup-preset" data-amount="25000">$250 <small>Silver</small></button>
+            <button type="button" class="topup-preset" data-amount="50000">$500 <small>Gold</small></button>
           </div>
           <label class="topup-custom">
             <span>Custom amount (USD)</span>
@@ -148,6 +148,7 @@
               <div class="member-list">
                 <div class="member-empty" data-reseller-website>Website: &mdash;</div>
                 <div class="member-empty" data-reseller-discord-server>Discord: &mdash;</div>
+                <div class="member-empty" data-reseller-topup-total>Lifetime topped up: $0.00</div>
                 <div class="member-empty" data-reseller-volume>Lifetime purchased: $0.00</div>
               </div>
             </section>

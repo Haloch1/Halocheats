@@ -75,19 +75,21 @@ const discordStaffApplicationsChannelId =
 /* Where /resellerapp submissions get posted for review (Approve/Deny buttons). */
 const discordResellerApplicationsChannelId =
   process.env.DISCORD_RESELLER_APPLICATIONS_CHANNEL_ID || discordModerationChannelId;
-/* Reseller volume tiers — higher discount at higher purchase volume. Applied
-   to lifetime_purchased_cents on the resellers row; margin is intentionally
-   thinner here than retail (Azad: "just need rep for now, don't need much
-   profit"), but RESELLER_MIN_MARGIN_CENTS below still stops any single sale
-   from going below wholesale cost + Stripe fee. */
-const RESELLER_TIERS = [
-  { tier: "gold", minVolumeCents: 50_000, discountPercent: 35 },
-  { tier: "silver", minVolumeCents: 20_000, discountPercent: 30 },
-  { tier: "new", minVolumeCents: 0, discountPercent: 25 },
+/* Reseller discount tiers — driven by LIFETIME TOP-UP AMOUNT (how much
+   they've ever deposited into their reseller balance), not purchase volume.
+   Once a reseller crosses a threshold their discount jumps and stays there
+   until they cross the next one — a standing rate, not a per-purchase bonus.
+   Margin is intentionally thinner here than retail (Azad: "just need rep for
+   now, don't need much profit"), but RESELLER_MIN_MARGIN_CENTS below still
+   stops any single sale from going below wholesale cost + Stripe fee. */
+const RESELLER_TOPUP_TIERS = [
+  { tier: "gold", minTopupCents: 50_000, discountPercent: 35 },
+  { tier: "silver", minTopupCents: 25_000, discountPercent: 30 },
+  { tier: "new", minTopupCents: 0, discountPercent: 25 },
 ];
 const RESELLER_MIN_MARGIN_CENTS = 5; // absolute floor above wholesale+fee
-function resellerTierForVolume(volumeCents) {
-  return RESELLER_TIERS.find((t) => volumeCents >= t.minVolumeCents) || RESELLER_TIERS[RESELLER_TIERS.length - 1];
+function resellerTierForTopup(topupCents) {
+  return RESELLER_TOPUP_TIERS.find((t) => topupCents >= t.minTopupCents) || RESELLER_TOPUP_TIERS[RESELLER_TOPUP_TIERS.length - 1];
 }
 /* Balance top-up bonus tiers — customer pays the base amount, gets bonus
    credit on top. Costs nothing until they actually spend it, and by then
@@ -1406,7 +1408,7 @@ async function ensureResellerApiAccess(req) {
     }
     const { data, error } = await supabaseAdmin
       .from("resellers")
-      .select("id, discord_id, status, tier, discount_percent, balance_cents, lifetime_purchased_cents")
+      .select("id, discord_id, status, tier, discount_percent, balance_cents, lifetime_purchased_cents, lifetime_topup_cents")
       .eq("api_key_hash", hashToken(apiKey))
       .eq("status", "approved")
       .maybeSingle();
@@ -10646,7 +10648,7 @@ async function creditResellerTopupFromStripe(session) {
 
   const { data: reseller, error: fetchError } = await supabaseAdmin
     .from("resellers")
-    .select("id, balance_cents")
+    .select("id, balance_cents, lifetime_topup_cents")
     .eq("id", resellerId)
     .maybeSingle();
   if (fetchError || !reseller) {
@@ -10654,22 +10656,25 @@ async function creditResellerTopupFromStripe(session) {
     return;
   }
 
-  // Same bonus tiers as the customer wallet top-up — pure upside since it's
-  // already-collected cash and only spendable at normal reseller pricing.
-  const bonusPercent = topupBonusPercentFor(amountCents);
-  const bonusCents = Math.round(amountCents * bonusPercent / 100);
-  const creditCents = amountCents + bonusCents;
+  // No bonus credit here — instead, crossing a lifetime top-up threshold
+  // sets a standing discount tier that lasts until the next threshold
+  // (see RESELLER_TOPUP_TIERS), rather than a one-time bonus on this deposit.
+  const newLifetimeTopup = (reseller.lifetime_topup_cents || 0) + amountCents;
+  const newTier = resellerTierForTopup(newLifetimeTopup);
 
   const { error } = await supabaseAdmin
     .from("resellers")
     .update({
-      balance_cents: (reseller.balance_cents || 0) + creditCents,
+      balance_cents: (reseller.balance_cents || 0) + amountCents,
+      lifetime_topup_cents: newLifetimeTopup,
+      tier: newTier.tier,
+      discount_percent: newTier.discountPercent,
       updated_at: new Date().toISOString(),
     })
     .eq("id", resellerId);
 
   if (error) throw error;
-  console.log(`[Reseller topup] Credited ${creditCents}c (paid ${amountCents}c${bonusPercent ? ` +${bonusPercent}% bonus` : ""}) to reseller ${resellerId} (session ${session.id}).`);
+  console.log(`[Reseller topup] Credited ${amountCents}c to reseller ${resellerId}, lifetime topup now ${newLifetimeTopup}c, tier now ${newTier.tier} (${newTier.discountPercent}%) (session ${session.id}).`);
 }
 
 /* Spend balance on one product selection and deliver its key through the existing
@@ -13802,7 +13807,7 @@ app.get("/api/reseller/me", async (req, res) => {
     }
     const { data: reseller } = await supabaseAdmin
       .from("resellers")
-      .select("status, tier, discount_percent, balance_cents, lifetime_purchased_cents, website, discord_server, api_key_last4, applied_at, approved_at")
+      .select("status, tier, discount_percent, balance_cents, lifetime_purchased_cents, lifetime_topup_cents, website, discord_server, api_key_last4, applied_at, approved_at")
       .eq("user_id", member.id)
       .order("applied_at", { ascending: false })
       .limit(1)
@@ -14047,22 +14052,24 @@ function buildResellerCatalog(reseller) {
     .filter((product) => product.variants.length)
     .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
 
-  const currentTier = resellerTierForVolume(reseller?.lifetime_purchased_cents || 0);
-  const tierIndex = RESELLER_TIERS.findIndex((t) => t.tier === currentTier.tier);
-  const nextTier = tierIndex > 0 ? RESELLER_TIERS[tierIndex - 1] : null; // tiers are listed highest-first
+  const lifetimeTopupCents = reseller?.lifetime_topup_cents || 0;
+  const currentTier = resellerTierForTopup(lifetimeTopupCents);
+  const tierIndex = RESELLER_TOPUP_TIERS.findIndex((t) => t.tier === currentTier.tier);
+  const nextTier = tierIndex > 0 ? RESELLER_TOPUP_TIERS[tierIndex - 1] : null; // tiers are listed highest-first
 
   return {
     tier: reseller?.tier || "legacy",
     discount_percent: discountPercent,
     balance_cents: reseller?.balance_cents ?? null,
     lifetime_purchased_cents: reseller?.lifetime_purchased_cents ?? null,
-    current_tier_min_volume_cents: currentTier.minVolumeCents,
+    lifetime_topup_cents: lifetimeTopupCents,
+    current_tier_min_volume_cents: currentTier.minTopupCents,
     next_tier: nextTier
       ? {
           tier: nextTier.tier,
           discount_percent: nextTier.discountPercent,
-          cents_to_next_tier: Math.max(0, nextTier.minVolumeCents - (reseller?.lifetime_purchased_cents || 0)),
-          min_volume_cents: nextTier.minVolumeCents,
+          cents_to_next_tier: Math.max(0, nextTier.minTopupCents - lifetimeTopupCents),
+          min_volume_cents: nextTier.minTopupCents,
         }
       : null,
     products: catalog,
@@ -14155,20 +14162,19 @@ async function performResellerPurchase(reseller, selection, quantity) {
   const orderNumber = createApiOrderNumber();
 
   if (reseller) {
-    // Debit balance, bump lifetime volume, and re-tier if they crossed a
-    // threshold — all best-effort; the keys are already assigned, so a
-    // failure here shouldn't lose the sale, just log it for manual review.
+    // Debit balance and track lifetime purchase volume for reporting — all
+    // best-effort; the keys are already assigned, so a failure here shouldn't
+    // lose the sale, just log it for manual review. Tier/discount are driven
+    // by lifetime top-up amount (see creditResellerTopupFromStripe), not
+    // purchase volume, so they're intentionally left untouched here.
     try {
       const newBalance = (reseller.balance_cents || 0) - chargeAmountCents;
       const newLifetime = (reseller.lifetime_purchased_cents || 0) + chargeAmountCents;
-      const newTier = resellerTierForVolume(newLifetime);
       await supabaseAdmin
         .from("resellers")
         .update({
           balance_cents: newBalance,
           lifetime_purchased_cents: newLifetime,
-          tier: newTier.tier,
-          discount_percent: newTier.discountPercent,
           updated_at: new Date().toISOString(),
         })
         .eq("id", reseller.id);

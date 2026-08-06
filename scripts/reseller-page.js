@@ -19,6 +19,7 @@ const keyLast4Label = document.querySelector("[data-reseller-key-last4]");
 const websiteLabel = document.querySelector("[data-reseller-website]");
 const discordServerLabel = document.querySelector("[data-reseller-discord-server]");
 const volumeLabel = document.querySelector("[data-reseller-volume]");
+const topupTotalLabel = document.querySelector("[data-reseller-topup-total]");
 
 const progressWrap = document.querySelector("[data-reseller-progress-wrap]");
 const progressFill = document.querySelector("[data-reseller-progress-fill]");
@@ -114,14 +115,14 @@ function renderProgress(reseller) {
     return;
   }
   progressWrap.hidden = false;
-  const lifetime = reseller?.lifetime_purchased_cents || 0;
+  const lifetimeTopup = reseller?.lifetime_topup_cents || 0;
   const currentFloor = reseller?.current_tier_min_volume_cents || 0;
   const span = Math.max(1, nextTier.min_volume_cents - currentFloor);
-  const progressed = Math.min(1, Math.max(0, (lifetime - currentFloor) / span));
+  const progressed = Math.min(1, Math.max(0, (lifetimeTopup - currentFloor) / span));
   progressFill.style.width = `${Math.round(progressed * 100)}%`;
   progressLabel.textContent =
-    `${centsToLabel(nextTier.cents_to_next_tier)} more in lifetime purchases to reach ` +
-    `${nextTier.tier.charAt(0).toUpperCase() + nextTier.tier.slice(1)} (${nextTier.discount_percent}% off).`;
+    `${centsToLabel(nextTier.cents_to_next_tier)} more in lifetime top-ups to reach ` +
+    `${nextTier.tier.charAt(0).toUpperCase() + nextTier.tier.slice(1)} (${nextTier.discount_percent}% off), locked in until your next top-up tier.`;
 }
 
 /* ── Products tab: category dropdown, populated once per catalog load ── */
@@ -378,6 +379,12 @@ async function loadCatalog() {
     if (balanceLabel) {
       balanceLabel.textContent = centsToLabel(data.balance_cents);
     }
+    if (tierLabel) {
+      tierLabel.textContent = (data.tier || "new").toUpperCase();
+    }
+    if (discountLabel) {
+      discountLabel.textContent = `${data.discount_percent ?? 0}% off catalog`;
+    }
   } catch {
     // Leave the last-known catalog rendered.
   }
@@ -464,6 +471,9 @@ async function loadResellerStatus() {
       }
       if (volumeLabel) {
         volumeLabel.textContent = `Lifetime purchased: ${centsToLabel(reseller.lifetime_purchased_cents)}`;
+      }
+      if (topupTotalLabel) {
+        topupTotalLabel.textContent = `Lifetime topped up: ${centsToLabel(reseller.lifetime_topup_cents)}`;
       }
       if (approvedView) {
         approvedView.hidden = false;
