@@ -3432,6 +3432,13 @@ if (isConfiguredValue(discordBotToken)) {
           .addUserOption(o => o.setName("user").setDescription("Discord user to revoke").setRequired(true))
           .addStringOption(o => o.setName("reason").setDescription("Why they're being revoked").setRequired(false)),
         new SlashCommandBuilder()
+          .setName("resellermake")
+          .setDescription("Directly approve someone as a reseller, skipping the application review (staff only)")
+          .addUserOption(o => o.setName("user").setDescription("Discord user to approve").setRequired(true))
+          .addStringOption(o => o.setName("website").setDescription("Their website").setRequired(false))
+          .addStringOption(o => o.setName("discord_server").setDescription("Their Discord server invite").setRequired(false))
+          .addStringOption(o => o.setName("volume").setDescription("Expected monthly volume").setRequired(false)),
+        new SlashCommandBuilder()
           .setName("payments")
           .setDescription("Post the accepted payment methods embed (admin only)")
           .addChannelOption(o => o.setName("channel").setDescription("Channel to post in (default: payments channel)").setRequired(false)),
@@ -8544,6 +8551,110 @@ ${rows || '<div class="ct">No messages.</div>'}
       } catch (error) {
         console.error("[Discord /resellerrevoke]", error.message);
         return interaction.editReply({ embeds: [{ description: "Something went wrong revoking this reseller.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /resellermake — staff directly approves someone as a reseller,
+       skipping the pending application + button review entirely. Useful as
+       a workaround while the approve/deny buttons are unreliable, and for
+       onboarding a reseller staff already vetted outside Discord. ── */
+    if (interaction.commandName === "resellermake") {
+      if (!isDiscordStaff(interaction.user.id, interaction.member)) {
+        return interaction.reply({ embeds: [{ description: "Staff only.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      if (!supabaseAdmin) {
+        return interaction.editReply({ embeds: [{ description: "Reseller applications aren't available right now.", color: 0xff4444 }] });
+      }
+
+      const target = interaction.options.getUser("user");
+      const website = trimField(interaction.options.getString("website") || "N/A", 200);
+      const discordServer = trimField(interaction.options.getString("discord_server") || "N/A", 200);
+      const volume = trimField(interaction.options.getString("volume") || "N/A", 100);
+
+      try {
+        const { data: existing } = await supabaseAdmin
+          .from("resellers")
+          .select("id, status")
+          .eq("discord_id", target.id)
+          .maybeSingle();
+
+        if (existing?.status === "approved") {
+          return interaction.editReply({ embeds: [{ description: `${target.tag} is already an approved reseller.`, color: 0xffa500 }] });
+        }
+
+        let linkedUserId = null;
+        try {
+          let page = 1;
+          while (!linkedUserId) {
+            const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 });
+            if (!list?.users?.length) break;
+            const match = list.users.find((u) => discordIdOf(u) === target.id);
+            if (match) linkedUserId = match.id;
+            if (list.users.length < 1000) break;
+            page++;
+          }
+        } catch (linkError) {
+          console.warn("[Discord /resellermake] Account link lookup failed:", linkError.message);
+        }
+
+        const rawApiKey = `xr_${createSecretToken(24)}`;
+        const row = {
+          discord_id: target.id,
+          user_id: linkedUserId,
+          website,
+          discord_server: discordServer,
+          monthly_volume_estimate: volume,
+          application_reason: `Manually approved by ${interaction.user.tag} via /resellermake`,
+          status: "approved",
+          tier: "new",
+          discount_percent: 0,
+          api_key_hash: hashToken(rawApiKey),
+          api_key_last4: rawApiKey.slice(-4),
+          applied_at: new Date().toISOString(),
+          approved_at: new Date().toISOString(),
+          approved_by: interaction.user.id,
+        };
+
+        let resellerId;
+        if (existing) {
+          resellerId = existing.id;
+          const { error: updateError } = await supabaseAdmin.from("resellers").update(row).eq("id", existing.id);
+          if (updateError) throw updateError;
+        } else {
+          const { data: inserted, error: insertError } = await supabaseAdmin
+            .from("resellers")
+            .insert(row)
+            .select("id")
+            .single();
+          if (insertError) throw insertError;
+          resellerId = inserted.id;
+        }
+
+        if (discordGuildId && discordResellerRoleId) {
+          try {
+            const guild = await discordBot.guilds.fetch(discordGuildId);
+            const member = await guild.members.fetch(target.id);
+            await member.roles.add(discordResellerRoleId);
+          } catch (roleError) {
+            console.warn("[Discord /resellermake] Could not assign reseller role:", roleError.message);
+          }
+        }
+
+        await sendDiscordDM(
+          target.id,
+          `🎉 You've been approved as a XenCheats reseller!\n\n` +
+          `**Your API key (save this now — it will not be shown again):**\n\`${rawApiKey}\`\n\n` +
+          `Your discount is set by how much you top up in total: $50+ gets you 15% off, $100+ gets 20% off, $200+ gets 25% off — it locks in and stays until you cross the next tier.\n\n` +
+          `Manage your account, see your balance, and read the API docs at ${(process.env.PUBLIC_SITE_URL || "https://xencheats.wtf").replace(/\/+$/, "")}/reseller`,
+        ).catch(() => {});
+
+        return interaction.editReply({
+          embeds: [{ description: `Approved ${target.tag} as a reseller (ID: ${resellerId}) and DMed their API key.`, color: 0x22c55e }],
+        });
+      } catch (error) {
+        console.error("[Discord /resellermake]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong approving this reseller.", color: 0xff4444 }] });
       }
     }
 
