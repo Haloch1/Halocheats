@@ -3074,6 +3074,83 @@ async function maintainDiscordTickets() {
   }
 }
 
+/* Shared by the Discord /resellerapp modal AND the website application form
+   (POST /api/reseller/apply) so both paths insert + notify staff identically.
+   `userId` links a signed-in site account for the /reseller web panel — best
+   effort from Discord (looked up by discord_id), passed directly from the
+   website path since the session already IS the account. Throws on failure. */
+async function submitResellerApplication({ discordId, discordTag, userId, website, discordServer, volume, why, extra }) {
+  if (!supabaseAdmin) {
+    throw new Error("Reseller applications aren't available right now.");
+  }
+  if (!discordResellerApplicationsChannelId) {
+    throw new Error("Reseller applications aren't configured yet.");
+  }
+
+  let linkedUserId = userId || null;
+  if (!linkedUserId) {
+    // Best-effort link to a site account so the /reseller web panel can find
+    // this application later. Not required — an unlinked applicant can still
+    // be approved and get their API key via DM, they just won't see a
+    // dashboard until they sign in with a linked Discord.
+    try {
+      let page = 1;
+      while (!linkedUserId) {
+        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 });
+        if (!list?.users?.length) break;
+        const match = list.users.find((u) => discordIdOf(u) === discordId);
+        if (match) linkedUserId = match.id;
+        if (list.users.length < 1000) break;
+        page++;
+      }
+    } catch (linkError) {
+      console.warn("[Reseller application] Account link lookup failed:", linkError.message);
+    }
+  }
+
+  const { data: row, error: insertError } = await supabaseAdmin
+    .from("resellers")
+    .insert({
+      discord_id: discordId,
+      user_id: linkedUserId,
+      website: website.slice(0, 200),
+      discord_server: discordServer.slice(0, 200),
+      monthly_volume_estimate: volume.slice(0, 100),
+      application_reason: `${why}${extra ? `\n\nExtra: ${extra}` : ""}`.slice(0, 1200),
+      status: "pending",
+    })
+    .select("id")
+    .single();
+  if (insertError) throw insertError;
+
+  const channel = await discordBot.channels.fetch(discordResellerApplicationsChannelId);
+  await channel.send({
+    embeds: [{
+      title: "New reseller application",
+      color: 0x7c3aed,
+      fields: [
+        { name: "Applicant", value: discordTag ? `<@${discordId}> (${discordTag})` : `<@${discordId}>`, inline: false },
+        { name: "Website", value: website.slice(0, 500), inline: false },
+        { name: "Discord server", value: discordServer.slice(0, 500), inline: false },
+        { name: "Expected monthly volume", value: volume.slice(0, 200), inline: false },
+        { name: "Why they want to resell", value: why.slice(0, 1000), inline: false },
+        ...(extra ? [{ name: "Extra", value: extra.slice(0, 500), inline: false }] : []),
+      ],
+      footer: { text: `Reseller ID: ${row.id} | Discord ID: ${discordId}` },
+      timestamp: new Date().toISOString(),
+    }],
+    components: [{
+      type: 1,
+      components: [
+        { type: 2, style: 3, label: "Approve", customId: `reseller_approve:${row.id}`, emoji: { name: "✅" } },
+        { type: 2, style: 4, label: "Deny", customId: `reseller_deny:${row.id}`, emoji: { name: "❌" } },
+      ],
+    }],
+  });
+
+  return row;
+}
+
 let discordBot = null;
 
 if (isConfiguredValue(discordBotToken)) {
@@ -8390,63 +8467,14 @@ ${rows || '<div class="ct">No messages.</div>'}
       }
 
       try {
-        // Best-effort link to a site account so the /reseller web panel can
-        // find this application later. Not required — an unlinked applicant
-        // can still be approved and get their API key via DM, they just
-        // won't see a dashboard until they sign in with a linked Discord.
-        let linkedUserId = null;
-        try {
-          let page = 1;
-          while (!linkedUserId) {
-            const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 });
-            if (!list?.users?.length) break;
-            const match = list.users.find((u) => discordIdOf(u) === applicant.id);
-            if (match) linkedUserId = match.id;
-            if (list.users.length < 1000) break;
-            page++;
-          }
-        } catch (linkError) {
-          console.warn("[Discord /resellerapp] Account link lookup failed:", linkError.message);
-        }
-
-        const { data: row, error: insertError } = await supabaseAdmin
-          .from("resellers")
-          .insert({
-            discord_id: applicant.id,
-            user_id: linkedUserId,
-            website: website.slice(0, 200),
-            discord_server: discordServer.slice(0, 200),
-            monthly_volume_estimate: volume.slice(0, 100),
-            application_reason: `${why}${extra ? `\n\nExtra: ${extra}` : ""}`.slice(0, 1200),
-            status: "pending",
-          })
-          .select("id")
-          .single();
-        if (insertError) throw insertError;
-
-        const channel = await discordBot.channels.fetch(discordResellerApplicationsChannelId);
-        await channel.send({
-          embeds: [{
-            title: "New reseller application",
-            color: 0x7c3aed,
-            fields: [
-              { name: "Applicant", value: `<@${applicant.id}> (${applicant.tag})`, inline: false },
-              { name: "Website", value: website.slice(0, 500), inline: false },
-              { name: "Discord server", value: discordServer.slice(0, 500), inline: false },
-              { name: "Expected monthly volume", value: volume.slice(0, 200), inline: false },
-              { name: "Why they want to resell", value: why.slice(0, 1000), inline: false },
-              ...(extra ? [{ name: "Extra", value: extra.slice(0, 500), inline: false }] : []),
-            ],
-            footer: { text: `Reseller ID: ${row.id} | Discord ID: ${applicant.id}` },
-            timestamp: new Date().toISOString(),
-          }],
-          components: [{
-            type: 1,
-            components: [
-              { type: 2, style: 3, label: "Approve", customId: `reseller_approve:${row.id}`, emoji: { name: "✅" } },
-              { type: 2, style: 4, label: "Deny", customId: `reseller_deny:${row.id}`, emoji: { name: "❌" } },
-            ],
-          }],
+        await submitResellerApplication({
+          discordId: applicant.id,
+          discordTag: applicant.tag,
+          website,
+          discordServer,
+          volume,
+          why,
+          extra,
         });
         return interaction.editReply({
           embeds: [{ description: "Application submitted. The team will review it and DM you if approved.", color: 0x22c55e }],
@@ -10617,16 +10645,22 @@ async function creditResellerTopupFromStripe(session) {
     return;
   }
 
+  // Same bonus tiers as the customer wallet top-up — pure upside since it's
+  // already-collected cash and only spendable at normal reseller pricing.
+  const bonusPercent = topupBonusPercentFor(amountCents);
+  const bonusCents = Math.round(amountCents * bonusPercent / 100);
+  const creditCents = amountCents + bonusCents;
+
   const { error } = await supabaseAdmin
     .from("resellers")
     .update({
-      balance_cents: (reseller.balance_cents || 0) + amountCents,
+      balance_cents: (reseller.balance_cents || 0) + creditCents,
       updated_at: new Date().toISOString(),
     })
     .eq("id", resellerId);
 
   if (error) throw error;
-  console.log(`[Reseller topup] Credited ${amountCents}c to reseller ${resellerId} (session ${session.id}).`);
+  console.log(`[Reseller topup] Credited ${creditCents}c (paid ${amountCents}c${bonusPercent ? ` +${bonusPercent}% bonus` : ""}) to reseller ${resellerId} (session ${session.id}).`);
 }
 
 /* Spend balance on one product selection and deliver its key through the existing
@@ -13776,6 +13810,77 @@ app.get("/api/reseller/me", async (req, res) => {
   }
 });
 
+/* ── Website reseller application form (alternative to Discord /resellerapp) ── */
+app.post("/api/reseller/apply", async (req, res) => {
+  try {
+    const member = await getAuthenticatedUser(req, res);
+
+    if (!supabaseAdmin) {
+      return res.status(500).json({ error: "Reseller applications aren't available right now." });
+    }
+
+    const discordId = discordIdOf(member);
+    if (!discordId) {
+      return res.status(400).json({
+        error: "Link your Discord account first — approval and your API key are delivered over Discord DM. Link it from your account page, then apply again.",
+      });
+    }
+
+    const website = trimField(req.body?.website, 200);
+    const discordServer = trimField(req.body?.discordServer, 200);
+    const volume = trimField(req.body?.volume, 100);
+    const why = trimField(req.body?.why, 700);
+    const extra = trimField(req.body?.extra, 500);
+
+    if (!website || !discordServer || !volume || !why) {
+      return res.status(400).json({ error: "Fill in your website, Discord server, expected volume, and why you want to resell." });
+    }
+
+    const { data: existing } = await supabaseAdmin
+      .from("resellers")
+      .select("id, status")
+      .eq("user_id", member.id)
+      .in("status", ["pending", "approved"])
+      .maybeSingle();
+
+    if (existing?.status === "approved") {
+      return res.status(409).json({ error: "You're already an approved reseller — check the Products tab, or ask staff if something looks wrong." });
+    }
+    if (existing?.status === "pending") {
+      return res.status(409).json({ error: "You already have a reseller application pending review." });
+    }
+
+    let discordTag = null;
+    try {
+      if (discordBot && discordGuildId) {
+        const guild = await discordBot.guilds.fetch(discordGuildId);
+        const guildMember = await guild.members.fetch(discordId).catch(() => null);
+        discordTag = guildMember?.user?.tag || null;
+      }
+    } catch {
+      // Non-fatal — the application still gets posted, just without a resolved tag.
+    }
+
+    await submitResellerApplication({
+      discordId,
+      discordTag,
+      userId: member.id,
+      website,
+      discordServer,
+      volume,
+      why,
+      extra,
+    });
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("[Reseller apply]", error.message);
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to submit your application.",
+    });
+  }
+});
+
 app.get("/api/account", async (req, res) => {
   try {
     const member = await getAuthenticatedUser(req, res);
@@ -13908,6 +14013,7 @@ function buildResellerCatalog(reseller) {
     .map((product) => ({
       product_slug: product.slug,
       name: product.name,
+      category: product.category || product.game || "Other",
       variants: (product.variants || [])
         .filter((variant) => variant.stockLabel !== "Unavailable" && !variant.checkoutBlocked)
         .map((variant) => {
@@ -13929,7 +14035,8 @@ function buildResellerCatalog(reseller) {
           };
         }),
     }))
-    .filter((product) => product.variants.length);
+    .filter((product) => product.variants.length)
+    .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
 
   const currentTier = resellerTierForVolume(reseller?.lifetime_purchased_cents || 0);
   const tierIndex = RESELLER_TIERS.findIndex((t) => t.tier === currentTier.tier);

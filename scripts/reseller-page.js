@@ -8,6 +8,8 @@ const guestView = document.querySelector("[data-reseller-guest]");
 const noneView = document.querySelector("[data-reseller-none]");
 const pendingView = document.querySelector("[data-reseller-pending]");
 const deniedView = document.querySelector("[data-reseller-denied]");
+const deniedEyebrow = document.querySelector("[data-reseller-denied-eyebrow]");
+const deniedCopy = document.querySelector("[data-reseller-denied-copy]");
 const approvedView = document.querySelector("[data-reseller-approved]");
 
 const tierLabel = document.querySelector("[data-reseller-tier]");
@@ -30,11 +32,36 @@ const topupPresetWrap = document.querySelector("[data-reseller-topup-presets]");
 const topupCustomInput = document.querySelector("[data-reseller-topup-custom]");
 const topupSubmitButton = document.querySelector("[data-reseller-topup-submit]");
 
-const productsBody = document.querySelector("[data-reseller-products-body]");
+const applyForm = document.querySelector("[data-reseller-apply-form]");
+const applyMessage = document.querySelector("[data-reseller-apply-message]");
+
+const productsGroups = document.querySelector("[data-reseller-products-groups]");
 const productSearchInput = document.querySelector("[data-reseller-search]");
+const categoryFilterSelect = document.querySelector("[data-reseller-category-filter]");
 const buyMessage = document.querySelector("[data-reseller-buy-message]");
 const keyReveal = document.querySelector("[data-reseller-key-reveal]");
 const keyRevealValue = document.querySelector("[data-reseller-key-reveal-value]");
+const keyCopyButton = document.querySelector("[data-reseller-key-copy]");
+const keyDismissButton = document.querySelector("[data-reseller-key-dismiss]");
+
+keyCopyButton?.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(keyRevealValue?.textContent || "");
+    const original = keyCopyButton.textContent;
+    keyCopyButton.textContent = "Copied!";
+    window.setTimeout(() => {
+      keyCopyButton.textContent = original;
+    }, 1500);
+  } catch {
+    // Clipboard API unavailable — the key is still visible to select/copy manually.
+  }
+});
+
+keyDismissButton?.addEventListener("click", () => {
+  if (keyReveal) {
+    keyReveal.hidden = true;
+  }
+});
 
 let latestCatalog = [];
 let latestReseller = null;
@@ -97,53 +124,123 @@ function renderProgress(reseller) {
     `${nextTier.tier.charAt(0).toUpperCase() + nextTier.tier.slice(1)} (${nextTier.discount_percent}% off).`;
 }
 
-/* ── Products tab: render catalog table ── */
+/* ── Products tab: category dropdown, populated once per catalog load ── */
+function populateCategoryFilter() {
+  if (!categoryFilterSelect) {
+    return;
+  }
+  const previousValue = categoryFilterSelect.value;
+  const categories = [...new Set(latestCatalog.map((p) => p.category || "Other"))].sort();
+  categoryFilterSelect.innerHTML =
+    `<option value="">All categories</option>` +
+    categories.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+  if (categories.includes(previousValue)) {
+    categoryFilterSelect.value = previousValue;
+  }
+}
+
+/* ── Products tab: render catalog grouped by category, one card per product ── */
 function renderProducts(filterText = "") {
-  if (!productsBody) {
+  if (!productsGroups) {
     return;
   }
   const query = filterText.trim().toLowerCase();
-  const rows = [];
+  const categoryFilter = categoryFilterSelect?.value || "";
+
+  const byCategory = new Map();
   latestCatalog.forEach((product) => {
-    product.variants.forEach((variant) => {
-      const label = `${product.name} - ${variant.name}`;
-      if (query && !label.toLowerCase().includes(query)) {
-        return;
-      }
-      const discountPercent = variant.list_amount_cents
-        ? Math.round((1 - variant.your_amount_cents / variant.list_amount_cents) * 100)
-        : 0;
-      rows.push(`
-        <tr>
-          <td>${escapeHtml(label)}</td>
-          <td><span class="reseller-price-list">${centsToLabel(variant.list_amount_cents)}</span></td>
-          <td>
-            <span class="reseller-price-yours">${centsToLabel(variant.your_amount_cents)}</span>
-            ${discountPercent ? `<span class="reseller-discount-pill">-${discountPercent}%</span>` : ""}
-          </td>
-          <td>
-            <span class="reseller-stock-pill ${variant.in_stock ? "in-stock" : "out-of-stock"}">
-              ${variant.in_stock ? "In stock" : "Out of stock"}
-            </span>
-          </td>
-          <td><input type="number" class="reseller-qty-input" min="1" max="10" value="1" data-qty-input /></td>
-          <td>
-            <button
-              type="button"
-              class="button button-primary reseller-buy-button"
-              data-buy-button
-              data-inventory-slug="${escapeHtml(variant.inventory_slug)}"
-              ${variant.in_stock ? "" : "disabled"}
-            >Buy</button>
-          </td>
-        </tr>
-      `);
+    const category = product.category || "Other";
+    if (categoryFilter && category !== categoryFilter) {
+      return;
+    }
+    const matchingVariants = product.variants.filter((variant) => {
+      if (!query) return true;
+      return `${product.name} ${variant.name}`.toLowerCase().includes(query);
     });
+    if (!matchingVariants.length) {
+      return;
+    }
+    if (!byCategory.has(category)) {
+      byCategory.set(category, []);
+    }
+    byCategory.get(category).push({ ...product, variants: matchingVariants });
   });
 
-  productsBody.innerHTML = rows.length
-    ? rows.join("")
-    : `<tr><td colspan="6">${query ? "No products match your search." : "No products available right now."}</td></tr>`;
+  if (!byCategory.size) {
+    productsGroups.innerHTML = `<p class="reseller-loading">${
+      query || categoryFilter ? "No products match your filters." : "No products available right now."
+    }</p>`;
+    return;
+  }
+
+  const sections = [];
+  for (const [category, categoryProducts] of [...byCategory.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    const productCards = categoryProducts.map((product) => {
+      const variantRows = product.variants.map((variant) => {
+        const discountPercent = variant.list_amount_cents
+          ? Math.round((1 - variant.your_amount_cents / variant.list_amount_cents) * 100)
+          : 0;
+        return `
+          <tr>
+            <td>${escapeHtml(variant.name)}</td>
+            <td><span class="reseller-price-list">${centsToLabel(variant.list_amount_cents)}</span></td>
+            <td>
+              <span class="reseller-price-yours">${centsToLabel(variant.your_amount_cents)}</span>
+              ${discountPercent ? `<span class="reseller-discount-pill">-${discountPercent}%</span>` : ""}
+            </td>
+            <td>
+              <span class="reseller-stock-pill ${variant.in_stock ? "in-stock" : "out-of-stock"}">
+                ${variant.in_stock ? "In stock" : "Out of stock"}
+              </span>
+            </td>
+            <td><input type="number" class="reseller-qty-input" min="1" max="10" value="1" data-qty-input /></td>
+            <td>
+              <button
+                type="button"
+                class="button button-primary reseller-buy-button"
+                data-buy-button
+                data-inventory-slug="${escapeHtml(variant.inventory_slug)}"
+                ${variant.in_stock ? "" : "disabled"}
+              >Buy</button>
+            </td>
+          </tr>
+        `;
+      }).join("");
+
+      return `
+        <div class="reseller-product-card">
+          <div class="reseller-product-card-heading">${escapeHtml(product.name)}</div>
+          <div class="reseller-table-wrap">
+            <table class="reseller-table">
+              <thead>
+                <tr>
+                  <th>Duration</th>
+                  <th>List price</th>
+                  <th>Your price</th>
+                  <th>Stock</th>
+                  <th>Qty</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>${variantRows}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    sections.push(`
+      <div class="reseller-category-group">
+        <div class="reseller-category-heading">
+          <h4>${escapeHtml(category)}</h4>
+          <span class="reseller-category-count">${categoryProducts.length} product${categoryProducts.length > 1 ? "s" : ""}</span>
+        </div>
+        ${productCards}
+      </div>
+    `);
+  }
+
+  productsGroups.innerHTML = sections.join("");
 }
 
 async function handleBuyClick(event) {
@@ -196,8 +293,9 @@ async function handleBuyClick(event) {
   }
 }
 
-productsBody?.addEventListener("click", handleBuyClick);
+productsGroups?.addEventListener("click", handleBuyClick);
 productSearchInput?.addEventListener("input", () => renderProducts(productSearchInput.value));
+categoryFilterSelect?.addEventListener("change", () => renderProducts(productSearchInput?.value || ""));
 
 /* ── Top up ── */
 function readTopupAmountCents() {
@@ -274,6 +372,7 @@ async function loadCatalog() {
     const data = await response.json();
     latestCatalog = data.products || [];
     latestReseller = data;
+    populateCategoryFilter();
     renderProducts(productSearchInput?.value || "");
     renderProgress(data);
     if (balanceLabel) {
@@ -326,6 +425,17 @@ async function loadResellerStatus() {
     }
 
     if (data.status === "denied" || data.status === "revoked") {
+      if (data.status === "revoked") {
+        if (deniedEyebrow) deniedEyebrow.textContent = "Reseller access revoked";
+        if (deniedCopy) {
+          deniedCopy.innerHTML = `Your reseller access was revoked by staff. You're welcome to apply again here, or run <code>/resellerapp</code> in Discord.`;
+        }
+      } else {
+        if (deniedEyebrow) deniedEyebrow.textContent = "Application not approved";
+        if (deniedCopy) {
+          deniedCopy.innerHTML = `Your reseller application wasn't approved this time. You're welcome to apply again here, or run <code>/resellerapp</code> in Discord.`;
+        }
+      }
       if (deniedView) {
         deniedView.hidden = false;
       }
@@ -369,6 +479,58 @@ async function loadResellerStatus() {
     renderMessage(messageBox, error.message || "Unable to load your reseller status right now.", "error");
   }
 }
+
+/* ── Website reseller application form ── */
+applyForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  const session = await getCurrentSession();
+  if (!session?.access_token) {
+    renderMessage(applyMessage, "Sign in again to apply.", "warn");
+    return;
+  }
+
+  const formData = new FormData(applyForm);
+  const submitButton = applyForm.querySelector('button[type="submit"]');
+  const originalText = submitButton?.textContent;
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Submitting...";
+  }
+
+  try {
+    const response = await fetch("/api/reseller/apply", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        website: formData.get("website"),
+        discordServer: formData.get("discordServer"),
+        volume: formData.get("volume"),
+        why: formData.get("why"),
+        extra: formData.get("extra"),
+      }),
+    });
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || "Unable to submit your application.");
+    }
+
+    renderMessage(applyMessage, "Application submitted. The team will review it and DM you on Discord.", "success");
+    applyForm.reset();
+    window.setTimeout(loadResellerStatus, 1200);
+  } catch (error) {
+    renderMessage(applyMessage, error instanceof Error ? error.message : "Unable to submit your application.", "error");
+  } finally {
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.textContent = originalText;
+    }
+  }
+});
 
 const topupParam = new URLSearchParams(window.location.search).get("topup");
 if (topupParam === "success") {

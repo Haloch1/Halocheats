@@ -60,9 +60,33 @@
       </section>
 
       <section class="auth-card reveal" data-delay="40" data-reseller-none hidden>
-        <p class="eyebrow">Not a reseller yet</p>
-        <p>Apply in our Discord — run <code>/resellerapp</code> in any channel and fill out the short form. Staff review every application manually.</p>
-        <a class="button button-primary" href="https://discord.gg/xencheats" target="_blank">Open Discord</a>
+        <p class="eyebrow">Apply to become a reseller</p>
+        <p>Apply here, or run <code>/resellerapp</code> in our Discord — either way staff review it manually and DM you the decision.</p>
+
+        <form class="auth-form" data-reseller-apply-form>
+          <p class="inline-message info" data-reseller-apply-message hidden></p>
+          <label>
+            Your website
+            <input type="text" name="website" placeholder="https://yoursite.com" maxlength="200" required />
+          </label>
+          <label>
+            Your Discord server invite
+            <input type="text" name="discordServer" placeholder="discord.gg/yourserver" maxlength="200" required />
+          </label>
+          <label>
+            Expected monthly purchase volume
+            <input type="text" name="volume" placeholder="e.g. $200-500/month" maxlength="100" required />
+          </label>
+          <label>
+            Why do you want to resell for us?
+            <textarea name="why" rows="4" maxlength="700" required></textarea>
+          </label>
+          <label>
+            Anything else we should know? (optional)
+            <textarea name="extra" rows="3" maxlength="500"></textarea>
+          </label>
+          <button class="button button-primary" type="submit">Submit application</button>
+        </form>
       </section>
 
       <section class="auth-card reveal" data-delay="40" data-reseller-pending hidden>
@@ -71,8 +95,8 @@
       </section>
 
       <section class="auth-card reveal" data-delay="40" data-reseller-denied hidden>
-        <p class="eyebrow">Application not approved</p>
-        <p>Your reseller application wasn't approved this time. You're welcome to run <code>/resellerapp</code> again later.</p>
+        <p class="eyebrow" data-reseller-denied-eyebrow>Application not approved</p>
+        <p data-reseller-denied-copy>Your reseller application wasn't approved this time. You're welcome to apply again here, or run <code>/resellerapp</code> in Discord.</p>
       </section>
 
       <section class="balance-panel reveal" data-delay="40" data-reseller-approved hidden>
@@ -83,7 +107,7 @@
           </div>
           <span class="balance-panel-note" data-reseller-discount>&mdash;</span>
         </div>
-        <p class="balance-panel-sub">Your prepaid reseller balance. Buy from the Products tab or your own integration — either way it's debited at your tier's discounted price.</p>
+        <p class="balance-panel-sub">Your prepaid reseller balance. Buy from the Products tab or your own integration — either way it's debited at your tier's discounted price. Top up $50+ for a 10% bonus, $250+ for 18%, $500+ for 25% &mdash; extra credit, added automatically.</p>
 
         <div class="reseller-progress-wrap" data-reseller-progress-wrap hidden>
           <div class="reseller-progress-track">
@@ -101,10 +125,10 @@
         <div class="auth-pane is-active" data-reseller-pane="overview">
           <p class="inline-message info topup-message" data-reseller-topup-message hidden></p>
           <div class="topup-presets" data-reseller-topup-presets>
-            <button type="button" class="topup-preset" data-amount="5000">$50</button>
-            <button type="button" class="topup-preset" data-amount="10000">$100</button>
-            <button type="button" class="topup-preset" data-amount="25000">$250</button>
-            <button type="button" class="topup-preset" data-amount="50000">$500</button>
+            <button type="button" class="topup-preset" data-amount="5000">$50 <small>+10%</small></button>
+            <button type="button" class="topup-preset" data-amount="10000">$100 <small>+10%</small></button>
+            <button type="button" class="topup-preset" data-amount="25000">$250 <small>+18%</small></button>
+            <button type="button" class="topup-preset" data-amount="50000">$500 <small>+25%</small></button>
           </div>
           <label class="topup-custom">
             <span>Custom amount (USD)</span>
@@ -132,27 +156,26 @@
 
         <div class="auth-pane" data-reseller-pane="products" hidden>
           <div class="reseller-key-reveal" data-reseller-key-reveal hidden>
-            <strong>Key delivered — copy it now:</strong>
+            <div class="reseller-key-reveal-head">
+              <strong>Key delivered — copy it now:</strong>
+              <div class="reseller-key-reveal-actions">
+                <button type="button" class="button button-secondary" data-reseller-key-copy>Copy</button>
+                <button type="button" class="button button-secondary" data-reseller-key-dismiss>Dismiss</button>
+              </div>
+            </div>
             <code data-reseller-key-reveal-value></code>
           </div>
           <p class="inline-message info" data-reseller-buy-message hidden></p>
-          <input type="search" class="reseller-search" placeholder="Search products..." data-reseller-search />
-          <div class="reseller-table-wrap">
-            <table class="reseller-table">
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>List price</th>
-                  <th>Your price</th>
-                  <th>Stock</th>
-                  <th>Qty</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody data-reseller-products-body>
-                <tr><td colspan="6">Loading catalog...</td></tr>
-              </tbody>
-            </table>
+
+          <div class="reseller-filter-row">
+            <input type="search" class="reseller-search" placeholder="Search products..." data-reseller-search />
+            <select class="reseller-category-select" data-reseller-category-filter>
+              <option value="">All categories</option>
+            </select>
+          </div>
+
+          <div data-reseller-products-groups>
+            <p class="reseller-loading">Loading catalog...</p>
           </div>
         </div>
 
