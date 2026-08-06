@@ -14185,6 +14185,17 @@ async function lookupPromo(rawCode) {
 }
 
 /* Async promo application used at checkout (supports env + DB drop codes). */
+/* Admin accounts get a flat 15% off catalog prices, stacked before any promo code. */
+const ADMIN_DISCOUNT_PERCENT = 15;
+function memberDiscountPercent(member) {
+  return member?.app_metadata?.role === "admin" ? ADMIN_DISCOUNT_PERCENT : 0;
+}
+function applyMemberDiscount(amountCents, member) {
+  const percent = memberDiscountPercent(member);
+  if (!percent) return amountCents;
+  return Math.max(50, Math.round(amountCents * (1 - percent / 100)));
+}
+
 async function applyPromoAsync(amountCents, rawCode) {
   const found = await lookupPromo(rawCode);
   if (!found) return { amount: amountCents, code: null, percent: 0, source: null };
@@ -14284,17 +14295,22 @@ app.post("/api/create-checkout-session", async (req, res) => {
   }
 
   /* ── Build the display name for Stripe receipt ── */
-  const baseAmount = selection.variant.amount; // cents, already includes overrides
+  const rawBaseAmount = selection.variant.amount; // cents, already includes overrides
 
-  if (!baseAmount || baseAmount <= 0) {
+  if (!rawBaseAmount || rawBaseAmount <= 0) {
     return res.status(400).json({ error: "Invalid price for this variant." });
   }
+
+  const adminDiscountPercent = memberDiscountPercent(member);
+  const baseAmount = applyMemberDiscount(rawBaseAmount, member);
 
   const promo = await applyPromoAsync(baseAmount, promoCode);
   const checkoutAmount = promo.amount;
   const checkoutName = promo.code
     ? `${selection.product.name} - ${selection.variant.name} (${promo.code} -${promo.percent}%)`
-    : `${selection.product.name} - ${selection.variant.name}`;
+    : adminDiscountPercent
+      ? `${selection.product.name} - ${selection.variant.name} (Admin -${adminDiscountPercent}%)`
+      : `${selection.product.name} - ${selection.variant.name}`;
 
   try {
     if (!supabaseAdmin) {
@@ -14678,10 +14694,11 @@ app.post("/api/purchase-with-balance", async (req, res) => {
     });
   }
 
-  const baseAmount = selection.variant.amount;
-  if (!baseAmount || baseAmount <= 0) {
+  const rawBaseAmount = selection.variant.amount;
+  if (!rawBaseAmount || rawBaseAmount <= 0) {
     return res.status(400).json({ error: "Invalid price for this variant." });
   }
+  const baseAmount = applyMemberDiscount(rawBaseAmount, member);
 
   const promo = await applyPromoAsync(baseAmount, promoCode);
   const amountCents = promo.amount;
@@ -14755,7 +14772,7 @@ app.post("/api/cart/checkout", async (req, res) => {
     const quantity = Math.min(Math.max(parseInt(item?.quantity, 10) || 1, 1), 10);
     for (let i = 0; i < quantity; i += 1) {
       selections.push(selection);
-      totalCents += selection.variant.amount;
+      totalCents += applyMemberDiscount(selection.variant.amount, member);
     }
   }
 
@@ -14788,7 +14805,7 @@ app.post("/api/cart/checkout", async (req, res) => {
   try {
     for (const selection of selections) {
       activeSelection = selection;
-      const result = await fulfillFromBalance(member, selection, selection.variant.amount, selection.product.name);
+      const result = await fulfillFromBalance(member, selection, applyMemberDiscount(selection.variant.amount, member), selection.product.name);
       delivered.push({ product: selection.product.name, keyValue: result.keyValue });
     }
   } catch (error) {
@@ -14865,7 +14882,7 @@ app.post("/api/cart/create-stripe-session", async (req, res) => {
     ) {
       return res.status(409).json({ error: `${selection.product.name} is currently unavailable.` });
     }
-    const amount = selection.variant.amount;
+    const amount = applyMemberDiscount(selection.variant.amount, member);
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: `Invalid price for ${selection.product.name}.` });
     }
