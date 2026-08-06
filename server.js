@@ -435,6 +435,8 @@ const discordAiDailyLimit = Math.max(500, Number(process.env.DISCORD_AI_DAILY_LI
 const discordTicketAiMaxReplies = Math.max(250, Number(process.env.DISCORD_TICKET_AI_MAX_REPLIES || 250));
 /* Role granted to repeat buyers (2+ fulfilled orders) */
 const discordRepeatBuyerRoleId = process.env.DISCORD_REPEAT_BUYER_ROLE_ID || "";
+/* Role granted to approved resellers */
+const discordResellerRoleId = process.env.DISCORD_RESELLER_ROLE_ID || "";
 const OWNER_ID = "1327675126338293921";
 const BOT_ADMINS = [OWNER_ID, "1191199172448239639", "1517857266936709141"]; // madebyedits
 const OWNER_ONLY_COMMANDS = new Set([
@@ -3344,6 +3346,11 @@ if (isConfiguredValue(discordBotToken)) {
         new SlashCommandBuilder()
           .setName("resellerapp")
           .setDescription("Apply to become a XenCheats reseller"),
+        new SlashCommandBuilder()
+          .setName("resellerrevoke")
+          .setDescription("Revoke an approved reseller's access (staff only)")
+          .addUserOption(o => o.setName("user").setDescription("Discord user to revoke").setRequired(true))
+          .addStringOption(o => o.setName("reason").setDescription("Why they're being revoked").setRequired(false)),
         new SlashCommandBuilder()
           .setName("payments")
           .setDescription("Post the accepted payment methods embed (admin only)")
@@ -8425,6 +8432,63 @@ ${rows || '<div class="ct">No messages.</div>'}
       }
     }
 
+    /* ── /resellerrevoke — pull an approved reseller's access and role (staff only) ── */
+    if (interaction.commandName === "resellerrevoke") {
+      if (!isDiscordStaff(interaction.user.id, interaction.member)) {
+        return interaction.reply({ embeds: [{ description: "Staff only.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      if (!supabaseAdmin) {
+        return interaction.editReply({ embeds: [{ description: "Accounts are not available right now.", color: 0xff4444 }] });
+      }
+      const target = interaction.options.getUser("user");
+      const reason = interaction.options.getString("reason") || "No reason given";
+      try {
+        const { data: reseller, error: fetchError } = await supabaseAdmin
+          .from("resellers")
+          .select("id, status")
+          .eq("discord_id", target.id)
+          .maybeSingle();
+        if (fetchError || !reseller || reseller.status !== "approved") {
+          return interaction.editReply({ embeds: [{ description: `${target.tag} is not currently an approved reseller.`, color: 0xffa500 }] });
+        }
+
+        await supabaseAdmin
+          .from("resellers")
+          .update({
+            status: "revoked",
+            api_key_hash: null,
+            api_key_last4: null,
+            denied_at: new Date().toISOString(),
+            denied_by: interaction.user.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", reseller.id);
+
+        if (discordGuildId && discordResellerRoleId) {
+          try {
+            const guild = await discordBot.guilds.fetch(discordGuildId);
+            const member = await guild.members.fetch(target.id);
+            if (member.roles.cache.has(discordResellerRoleId)) {
+              await member.roles.remove(discordResellerRoleId);
+            }
+          } catch (roleError) {
+            console.warn("[Discord /resellerrevoke] Could not remove reseller role:", roleError.message);
+          }
+        }
+
+        await sendDiscordDM(
+          target.id,
+          `Your XenCheats reseller access has been revoked. Reason: ${reason}\n\nYour API key no longer works. Contact staff if you have questions.`,
+        ).catch(() => {});
+
+        return interaction.editReply({ embeds: [{ description: `Revoked reseller access for ${target.tag}.`, color: 0x22c55e }] });
+      } catch (error) {
+        console.error("[Discord /resellerrevoke]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong revoking this reseller.", color: 0xff4444 }] });
+      }
+    }
+
     /* ── Reseller application Approve/Deny buttons ── */
     if (interaction.isButton && interaction.isButton() && (interaction.customId.startsWith("reseller_approve:") || interaction.customId.startsWith("reseller_deny:"))) {
       if (!isDiscordStaff(interaction.user.id, interaction.member)) {
@@ -8461,6 +8525,16 @@ ${rows || '<div class="ct">No messages.</div>'}
             })
             .eq("id", resellerId);
           if (updateError) throw updateError;
+
+          if (discordGuildId && discordResellerRoleId) {
+            try {
+              const guild = await discordBot.guilds.fetch(discordGuildId);
+              const member = await guild.members.fetch(reseller.discord_id);
+              await member.roles.add(discordResellerRoleId);
+            } catch (roleError) {
+              console.warn("[Discord reseller review] Could not assign reseller role:", roleError.message);
+            }
+          }
 
           await sendDiscordDM(
             reseller.discord_id,
