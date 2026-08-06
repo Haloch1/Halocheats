@@ -5215,6 +5215,19 @@ ${rows || '<div class="ct">No messages.</div>'}
   }
 
   discordBot.on("interactionCreate", async (interaction) => {
+    // ── Diagnostic: surface how long it took the process to even start
+    // handling this interaction. Discord gives modal/command acks a 3s
+    // window; if this lag is ever large it means something else (a message
+    // handler, a long synchronous loop, event-loop contention) is blocking
+    // the process, not a bug in the specific handler below. ──
+    const __dispatchLagMs = Date.now() - interaction.createdTimestamp;
+    if (__dispatchLagMs > 1200) {
+      console.warn(
+        `[Discord] Slow interaction dispatch (${__dispatchLagMs}ms) for ${interaction.type} ` +
+        `${interaction.commandName || interaction.customId || "?"} from ${interaction.user?.tag || interaction.user?.id}`
+      );
+    }
+
     // ── Autocomplete for /retryunfulfilled — deliberately includes unavailable
     // products too (an order placed while a product was still on sale still
     // needs retrying even if it's since been marked out of stock). ──
@@ -8343,7 +8356,21 @@ ${rows || '<div class="ct">No messages.</div>'}
 
     /* ── Handle reseller application submissions ── */
     if (interaction.isModalSubmit && interaction.isModalSubmit() && interaction.customId === "reseller_application_modal") {
-      await interaction.deferReply({ ephemeral: true });
+      try {
+        await interaction.deferReply({ ephemeral: true });
+      } catch (ackError) {
+        // If this throws (already acknowledged, unknown interaction / timed
+        // out, etc.) there is nothing we can reply with — Discord will show
+        // its own generic "Something went wrong" on the modal. Log clearly
+        // so this shows up in Render logs instead of vanishing as an
+        // unhandled rejection.
+        console.error(
+          `[Discord /resellerapp] Failed to acknowledge modal submit from ${interaction.user?.tag} ` +
+          `(dispatch lag ${Date.now() - interaction.createdTimestamp}ms):`,
+          ackError.message
+        );
+        return;
+      }
       const applicant = interaction.user;
       const website = interaction.fields.getTextInputValue("resellerapp_website");
       const discordServer = interaction.fields.getTextInputValue("resellerapp_discord");
