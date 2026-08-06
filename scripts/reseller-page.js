@@ -64,13 +64,25 @@ keyDismissButton?.addEventListener("click", () => {
   }
 });
 
-/* ── API tab: rotate key ── */
+/* ── API tab: generate/rotate key ── */
 const rotateButton = document.querySelector("[data-reseller-rotate-key]");
 const rotateMessage = document.querySelector("[data-reseller-rotate-message]");
 const rotateReveal = document.querySelector("[data-reseller-rotate-reveal]");
 const rotateRevealValue = document.querySelector("[data-reseller-rotate-reveal-value]");
 const rotateCopyButton = document.querySelector("[data-reseller-rotate-copy]");
 const rotateDismissButton = document.querySelector("[data-reseller-rotate-dismiss]");
+const rotateHint = document.querySelector("[data-reseller-rotate-hint]");
+
+function updateKeyButtonState(hasKey) {
+  if (rotateButton) {
+    rotateButton.textContent = hasKey ? "Regenerate API key" : "Generate API key";
+  }
+  if (rotateHint) {
+    rotateHint.textContent = hasKey
+      ? "Regenerating immediately disables your old key. Anything using it will need the new one."
+      : "You don't have a key yet — generate one to start using the API.";
+  }
+}
 
 rotateCopyButton?.addEventListener("click", async () => {
   try {
@@ -92,11 +104,14 @@ rotateDismissButton?.addEventListener("click", () => {
 });
 
 rotateButton?.addEventListener("click", async () => {
-  const confirmed = window.confirm(
-    "Regenerate your API key? Your current key will stop working immediately — anything integrated against it will need the new one."
-  );
-  if (!confirmed) {
-    return;
+  const hasKey = rotateButton.textContent.startsWith("Regenerate");
+  if (hasKey) {
+    const confirmed = window.confirm(
+      "Regenerate your API key? Your current key will stop working immediately — anything integrated against it will need the new one."
+    );
+    if (!confirmed) {
+      return;
+    }
   }
 
   const session = await getCurrentSession();
@@ -127,6 +142,7 @@ rotateButton?.addEventListener("click", async () => {
     if (keyLast4Label) {
       keyLast4Label.textContent = `...${data.api_key_last4}`;
     }
+    updateKeyButtonState(true);
     renderMessage(rotateMessage, "New API key generated.", "success");
   } catch (error) {
     renderMessage(rotateMessage, error instanceof Error ? error.message : "Unable to rotate your API key.", "error");
@@ -533,8 +549,9 @@ async function loadResellerStatus() {
         discountLabel.textContent = `${reseller.discount_percent ?? 0}% off catalog`;
       }
       if (keyLast4Label) {
-        keyLast4Label.textContent = reseller.api_key_last4 ? `...${reseller.api_key_last4}` : "not issued yet";
+        keyLast4Label.textContent = reseller.api_key_last4 ? `...${reseller.api_key_last4}` : "not generated yet";
       }
+      updateKeyButtonState(Boolean(reseller.api_key_last4));
       if (websiteLabel) {
         websiteLabel.textContent = `Website: ${reseller.website || "—"}`;
       }

@@ -447,7 +447,7 @@ const OWNER_ONLY_COMMANDS = new Set([
   "ticket-panel", "invest", "investments", "uninvest", "accountstats",
   "leaderboard", "reinvite-all",
 ]);
-const ADMIN_ONLY_COMMANDS = new Set(["orderlookup", "staffactivity", "ips", "media-panel", "ticketbot"]);
+const ADMIN_ONLY_COMMANDS = new Set(["orderlookup", "staffactivity", "ips", "media-panel", "reseller-panel", "ticketbot"]);
 const discordStaffGuideChannelId = process.env.DISCORD_STAFF_GUIDE_CHANNEL_ID || "1530269093100388583";
 const discordStatusSourceChannelId = process.env.DISCORD_STATUS_SOURCE_CHANNEL_ID || "1531112552891813949";
 const discordStatusTargetChannelId = process.env.DISCORD_STATUS_TARGET_CHANNEL_ID || "1531148640481972284";
@@ -3460,6 +3460,10 @@ if (isConfiguredValue(discordBotToken)) {
           .setName("media-panel")
           .setDescription("Post the media/content creator program rules (admin only)")
           .addChannelOption(o => o.setName("channel").setDescription("Channel to post in (default: media channel)").setRequired(false)),
+        new SlashCommandBuilder()
+          .setName("reseller-panel")
+          .setDescription("Post the reseller program info embed (admin only)")
+          .addChannelOption(o => o.setName("channel").setDescription("Channel to post in (default: current channel)").setRequired(false)),
       ];
 
       const commands = commandBuilders.map((command) => {
@@ -5376,15 +5380,12 @@ ${rows || '<div class="ct">No messages.</div>'}
         }
 
         if (action === "reseller_approve") {
-          const rawApiKey = `xr_${createSecretToken(24)}`;
           const { error: updateError } = await supabaseAdmin
             .from("resellers")
             .update({
               status: "approved",
               tier: "new",
               discount_percent: 0,
-              api_key_hash: hashToken(rawApiKey),
-              api_key_last4: rawApiKey.slice(-4),
               approved_at: new Date().toISOString(),
               approved_by: interaction.user.id,
               updated_at: new Date().toISOString(),
@@ -5405,9 +5406,9 @@ ${rows || '<div class="ct">No messages.</div>'}
           await sendDiscordDM(
             reseller.discord_id,
             `🎉 Your XenCheats reseller application was approved!\n\n` +
-            `**Your API key (save this now — it will not be shown again):**\n\`${rawApiKey}\`\n\n` +
+            `Log into the reseller panel to generate your API key — it's only ever shown there, not over Discord.\n\n` +
             `Your discount is set by how much you top up in total: $50+ gets you 15% off, $100+ gets 20% off, $200+ gets 25% off — it locks in and stays until you cross the next tier.\n\n` +
-            `Manage your account, see your balance, and read the API docs at ${(process.env.PUBLIC_SITE_URL || "https://xencheats.wtf").replace(/\/+$/, "")}/reseller`,
+            `Manage your account, see your balance, and generate your key at ${(process.env.PUBLIC_SITE_URL || "https://xencheats.wtf").replace(/\/+$/, "")}/reseller`,
           ).catch(() => {});
 
           await interaction.editReply({
@@ -5418,7 +5419,7 @@ ${rows || '<div class="ct">No messages.</div>'}
             }],
             components: [],
           });
-          return interaction.followUp({ embeds: [{ description: "Approved — API key DMed to the applicant.", color: 0x22c55e }], ephemeral: true });
+          return interaction.followUp({ embeds: [{ description: "Approved — they can generate their API key in the reseller panel.", color: 0x22c55e }], ephemeral: true });
         }
 
         // Deny
@@ -8202,6 +8203,53 @@ ${rows || '<div class="ct">No messages.</div>'}
       }
     }
 
+    /* ── /reseller-panel — Post the reseller program info embed ── */
+    if (interaction.commandName === "reseller-panel") {
+      if (!isDiscordAdminInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const channel = interaction.options.getChannel("channel") || interaction.channel;
+      const siteUrl = (process.env.PUBLIC_SITE_URL || "https://xencheats.wtf").replace(/\/+$/, "");
+      try {
+        await channel.send({
+          embeds: [{
+            title: "🤝 XenCheats Reseller Program",
+            description:
+              "Buy keys at a discount and resell them however you want — your own site, your own Discord, wherever. "
+              + "The more you top up over time, the deeper your discount, and it's locked in until you cross into the next tier.",
+            color: 0xd82028,
+            fields: [
+              {
+                name: "① How to apply",
+                value: `Apply on our site at [xencheats.wtf/reseller](${siteUrl}/reseller) or run \`/resellerapp\` right here in Discord. Staff review every application manually and DM you the decision.`,
+                inline: false,
+              },
+              {
+                name: "② Top up, unlock your discount",
+                value: "**$50+** lifetime top-ups → **15% off**\n**$100+** lifetime top-ups → **20% off**\n**$200+** lifetime top-ups → **25% off**\n\nYour discount is set by your all-time top-up total and stays locked in until you cross into the next tier.",
+                inline: false,
+              },
+              {
+                name: "③ Buying keys",
+                value: "Once approved, generate your API key in the reseller panel (never sent over Discord) and buy through the API, or just buy directly from the Products tab in the panel — either way it's debited from your prepaid balance at your tier's price.",
+                inline: false,
+              },
+              {
+                name: "Ready?",
+                value: `[Open the reseller panel](${siteUrl}/reseller) or run \`/resellerapp\`.`,
+                inline: false,
+              },
+            ],
+            footer: { text: "XenCheats | Reseller Program" },
+            timestamp: new Date().toISOString(),
+          }],
+        });
+        return interaction.reply({ embeds: [{ description: `Reseller program info posted in <#${channel.id}>.`, color: 0x22c55e }], ephemeral: true });
+      } catch (err) {
+        return interaction.reply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }], ephemeral: true });
+      }
+    }
+
     /* ── /invest — Log a reseller balance deposit ── */
     if (interaction.commandName === "invest") {
       if (!isDiscordOwnerInteraction(interaction)) {
@@ -8758,7 +8806,6 @@ ${rows || '<div class="ct">No messages.</div>'}
           console.warn("[Discord /resellermake] Account link lookup failed:", linkError.message);
         }
 
-        const rawApiKey = `xr_${createSecretToken(24)}`;
         const row = {
           discord_id: target.id,
           user_id: linkedUserId,
@@ -8769,8 +8816,6 @@ ${rows || '<div class="ct">No messages.</div>'}
           status: "approved",
           tier: "new",
           discount_percent: 0,
-          api_key_hash: hashToken(rawApiKey),
-          api_key_last4: rawApiKey.slice(-4),
           applied_at: new Date().toISOString(),
           approved_at: new Date().toISOString(),
           approved_by: interaction.user.id,
@@ -8804,13 +8849,13 @@ ${rows || '<div class="ct">No messages.</div>'}
         await sendDiscordDM(
           target.id,
           `🎉 You've been approved as a XenCheats reseller!\n\n` +
-          `**Your API key (save this now — it will not be shown again):**\n\`${rawApiKey}\`\n\n` +
+          `Log into the reseller panel to generate your API key — it's only ever shown there, not over Discord.\n\n` +
           `Your discount is set by how much you top up in total: $50+ gets you 15% off, $100+ gets 20% off, $200+ gets 25% off — it locks in and stays until you cross the next tier.\n\n` +
-          `Manage your account, see your balance, and read the API docs at ${(process.env.PUBLIC_SITE_URL || "https://xencheats.wtf").replace(/\/+$/, "")}/reseller`,
+          `Manage your account, see your balance, and generate your key at ${(process.env.PUBLIC_SITE_URL || "https://xencheats.wtf").replace(/\/+$/, "")}/reseller`,
         ).catch(() => {});
 
         return interaction.editReply({
-          embeds: [{ description: `Approved ${target.tag} as a reseller (ID: ${resellerId}) and DMed their API key.`, color: 0x22c55e }],
+          embeds: [{ description: `Approved ${target.tag} as a reseller (ID: ${resellerId}) — they can generate their API key in the reseller panel.`, color: 0x22c55e }],
         });
       } catch (error) {
         console.error("[Discord /resellermake]", error.message);

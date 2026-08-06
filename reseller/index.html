@@ -185,7 +185,7 @@
               <p class="eyebrow">API</p>
               <h4>Your integration</h4>
             </div>
-            <p>Your API key was DMed to you on Discord when you were approved (ends in <code data-reseller-key-last4>&mdash;</code>). It is not shown again here — keep it safe and treat it like a password.</p>
+            <p data-reseller-key-status>Generate your API key below (ends in <code data-reseller-key-last4>&mdash;</code> once created). It's only ever shown here, once, right after you generate or regenerate it — keep it safe and treat it like a password.</p>
             <p>Base URL: <code>https://xencheats.wtf</code></p>
 
             <div class="reseller-key-reveal" data-reseller-rotate-reveal hidden>
@@ -199,8 +199,8 @@
               <code data-reseller-rotate-reveal-value></code>
             </div>
             <p class="inline-message info" data-reseller-rotate-message hidden></p>
-            <button type="button" class="button button-secondary" data-reseller-rotate-key style="margin-top: 8px">Regenerate API key</button>
-            <p style="margin-top: 8px; font-size: 0.85em; opacity: 0.75">Regenerating immediately disables your old key. Anything using it will need the new one.</p>
+            <button type="button" class="button button-primary" data-reseller-rotate-key style="margin-top: 8px">Generate API key</button>
+            <p style="margin-top: 8px; font-size: 0.85em; opacity: 0.75" data-reseller-rotate-hint>Regenerating immediately disables your old key. Anything using it will need the new one.</p>
 
             <h4 style="margin-top:1.25rem">List products &amp; your pricing</h4>
             <pre class="code-block"><code>GET /api/reseller/products
@@ -235,6 +235,7 @@ Content-Type: application/json
           <a href="/terms/">Terms</a>
           <a href="/privacy/">Privacy</a>
           <a href="https://discord.gg/xencheats" target="_blank">Discord</a>
+          <a href="https://discord.gg/xencheats" target="_blank">Media Program</a>
         </div>
         <div class="footer-copy">&copy; 2025 XenCheats. All rights reserved.</div>
       </div>
