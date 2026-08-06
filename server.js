@@ -8704,6 +8704,14 @@ ${rows || '<div class="ct">No messages.</div>'}
     /* ── Reseller application Approve/Deny buttons ── */
     if (interaction.isButton && interaction.isButton() && (interaction.customId.startsWith("reseller_approve:") || interaction.customId.startsWith("reseller_deny:"))) {
       console.log(`[Discord reseller review] Block reached for ${interaction.customId} from ${interaction.user?.tag}`);
+      // TEMP DIAGNOSTIC: prove in Discord itself (not just logs) that this
+      // block is actually entered. Remove once the real bug is confirmed.
+      try {
+        await interaction.reply({ content: "DEBUG: reseller review block entered", ephemeral: true });
+      } catch (debugReplyError) {
+        console.error("[Discord reseller review] DEBUG reply failed:", debugReplyError?.message || debugReplyError);
+      }
+      return;
       const isStaff = isDiscordStaff(interaction.user.id, interaction.member);
       console.log(`[Discord reseller review] isDiscordStaff=${isStaff} member=${interaction.member ? "present" : "MISSING"}`);
       if (!isStaff) {
