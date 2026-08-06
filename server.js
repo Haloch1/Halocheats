@@ -5323,11 +5323,32 @@ ${rows || '<div class="ct">No messages.</div>'}
     // prints this line, the click isn't reaching the bot process at all
     // (Discord-side / gateway issue, not a code bug). If it DOES print but
     // nothing after it prints, the bug is in that specific block. ──
+    const __isResellerReviewMatch = Boolean(
+      interaction.isButton?.() &&
+      typeof interaction.customId === "string" &&
+      (interaction.customId.startsWith("reseller_approve:") || interaction.customId.startsWith("reseller_deny:"))
+    );
     console.log(
       `[Discord interaction] type=${interaction.type} isButton=${interaction.isButton?.() || false} ` +
       `command=${interaction.commandName || "-"} customId=${interaction.customId || "-"} ` +
-      `user=${interaction.user?.tag || interaction.user?.id || "?"} guild=${interaction.guildId || "-"}`
+      `user=${interaction.user?.tag || interaction.user?.id || "?"} guild=${interaction.guildId || "-"} ` +
+      `resellerMatch=${__isResellerReviewMatch}`
     );
+
+    // TEMP DIAGNOSTIC: if this matches, reply immediately, before ANY other
+    // code in this handler runs (even before /pingtest). This is the most
+    // upstream possible position — if this doesn't fire, nothing downstream
+    // in this function can be the cause. Remove once the real bug is found.
+    if (__isResellerReviewMatch) {
+      console.log(`[Discord reseller review] TOP-OF-HANDLER match for ${interaction.customId}`);
+      try {
+        await interaction.reply({ content: "DEBUG: matched at top of handler", ephemeral: true });
+        console.log("[Discord reseller review] TOP-OF-HANDLER debug reply sent");
+      } catch (topDebugError) {
+        console.error("[Discord reseller review] TOP-OF-HANDLER debug reply FAILED:", topDebugError?.message || topDebugError);
+      }
+      return;
+    }
 
     // ── DIAGNOSTIC: /pingtest posts a button; clicking it should reply
     // "pong" instantly. Positioned first in dispatch on purpose — if this
