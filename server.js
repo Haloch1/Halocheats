@@ -3439,6 +3439,9 @@ if (isConfiguredValue(discordBotToken)) {
           .addStringOption(o => o.setName("discord_server").setDescription("Their Discord server invite").setRequired(false))
           .addStringOption(o => o.setName("volume").setDescription("Expected monthly volume").setRequired(false)),
         new SlashCommandBuilder()
+          .setName("pingtest")
+          .setDescription("Diagnostic: posts a button to test whether button interactions are reaching the bot"),
+        new SlashCommandBuilder()
           .setName("payments")
           .setDescription("Post the accepted payment methods embed (admin only)")
           .addChannelOption(o => o.setName("channel").setDescription("Channel to post in (default: payments channel)").setRequired(false)),
@@ -5313,6 +5316,35 @@ ${rows || '<div class="ct">No messages.</div>'}
         `[Discord] Slow interaction dispatch (${__dispatchLagMs}ms) for ${interaction.type} ` +
         `${interaction.commandName || interaction.customId || "?"} from ${interaction.user?.tag || interaction.user?.id}`
       );
+    }
+
+    // ── DIAGNOSTIC: /pingtest posts a button; clicking it should reply
+    // "pong" instantly. Positioned first in dispatch on purpose — if this
+    // doesn't work, no button anywhere in the bot can, ruling out anything
+    // specific to reseller code. Remove once the real bug is found. ──
+    if (interaction.isChatInputCommand && interaction.isChatInputCommand() && interaction.commandName === "pingtest") {
+      console.log(`[pingtest] Command received from ${interaction.user?.tag}, dispatch lag ${Date.now() - interaction.createdTimestamp}ms`);
+      try {
+        await interaction.reply({
+          content: "pingtest button posted",
+          components: [{ type: 1, components: [{ type: 2, style: 1, label: "Click me", customId: "pingtest_button" }] }],
+          ephemeral: true,
+        });
+        console.log("[pingtest] Command reply sent successfully");
+      } catch (error) {
+        console.error("[pingtest] Command reply FAILED:", error.message);
+      }
+      return;
+    }
+    if (interaction.isButton && interaction.isButton() && interaction.customId === "pingtest_button") {
+      console.log(`[pingtest] Button click received from ${interaction.user?.tag}, dispatch lag ${Date.now() - interaction.createdTimestamp}ms`);
+      try {
+        await interaction.reply({ content: "pong", ephemeral: true });
+        console.log("[pingtest] Button reply sent successfully");
+      } catch (error) {
+        console.error("[pingtest] Button reply FAILED:", error.message);
+      }
+      return;
     }
 
     // ── Autocomplete for /retryunfulfilled — deliberately includes unavailable
