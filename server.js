@@ -8550,7 +8550,16 @@ ${rows || '<div class="ct">No messages.</div>'}
         return interaction.reply({ embeds: [{ description: "Only staff can review reseller applications.", color: 0xff4444 }], ephemeral: true });
       }
       const [action, resellerId] = interaction.customId.split(":");
-      await interaction.deferUpdate();
+      try {
+        await interaction.deferUpdate();
+      } catch (ackError) {
+        console.error(
+          `[Discord reseller review] Failed to acknowledge button click from ${interaction.user?.tag} ` +
+          `(dispatch lag ${Date.now() - interaction.createdTimestamp}ms):`,
+          ackError.message
+        );
+        return;
+      }
       try {
         const { data: reseller, error: fetchError } = await supabaseAdmin
           .from("resellers")
