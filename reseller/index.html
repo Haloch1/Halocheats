@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/assets/nox-logo.png" />
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+    <title>Reseller Program | XenCheats</title>
+    <meta
+      name="description"
+      content="Become a XenCheats reseller: tiered discounts, a prepaid balance, and an API to sell keys through your own site or Discord."
+    />
+    <meta property="og:title" content="Reseller Program | XenCheats" />
+    <meta property="og:description" content="Become a XenCheats reseller: tiered discounts, a prepaid balance, and an API to sell keys through your own site or Discord." />
+    <meta property="og:image" content="https://xencheats.wtf/assets/nox-logo.png" />
+    <meta property="og:url" content="https://xencheats.wtf/reseller/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="XenCheats" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../styles-v2.css" />
+  </head>
+  <body>
+    <header class="topbar reveal" data-delay="0">
+      <div class="topbar-shell">
+        <a class="brand" href="/" aria-label="XenCheats home">
+          <img src="../assets/nox-logo.png" alt="XenCheats logo" />
+          <div>
+            <strong>XenCheats</strong>
+            <span>Authorized Cheats</span>
+          </div>
+        </a>
+        <nav class="nav">
+          <a href="/">Home</a>
+          <a href="/products/">Products</a>
+          <a href="/status/">Status</a>
+          <a href="https://discord.gg/xencheats" target="_blank" class="nav-discord" aria-label="Discord"><svg width="20" height="15" viewBox="0 0 71 55" fill="currentColor"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.4.2a.2.2 0 0 0-.2.1 40.8 40.8 0 0 0-1.8 3.7 54 54 0 0 0-16.2 0A37.4 37.4 0 0 0 25.4.3a.2.2 0 0 0-.2-.1A58.4 58.4 0 0 0 10.5 4.9a.2.2 0 0 0-.1.1C1.5 18.7-.9 32.2.3 45.5v.2a58.9 58.9 0 0 0 17.7 9a.2.2 0 0 0 .3-.1 42 42 0 0 0 3.6-5.9.2.2 0 0 0-.1-.3 38.8 38.8 0 0 1-5.5-2.6.2.2 0 0 1 0-.4l1.1-.9a.2.2 0 0 1 .2 0 42 42 0 0 0 35.6 0 .2.2 0 0 1 .2 0l1.1.9a.2.2 0 0 1 0 .4 36.4 36.4 0 0 1-5.5 2.6.2.2 0 0 0-.1.3 47.2 47.2 0 0 0 3.6 5.9.2.2 0 0 0 .3.1A58.7 58.7 0 0 0 70.5 45.7v-.2c1.4-15-2.3-28.4-9.9-40.1a.2.2 0 0 0-.1-.1h-.4ZM23.7 37.3c-3.5 0-6.3-3.2-6.3-7s2.8-7 6.3-7 6.4 3.2 6.3 7-2.8 7-6.3 7Zm23.3 0c-3.5 0-6.3-3.2-6.3-7s2.8-7 6.3-7 6.4 3.2 6.3 7-2.8 7-6.3 7Z"/></svg> Discord</a>
+        </nav>
+        <a class="nav-cta" href="/account/">Account</a>
+      </div>
+    </header>
+
+    <main class="section">
+      <h1 class="sr-only">Reseller Program</h1>
+      <div class="section-heading reveal" data-delay="10">
+        <p class="eyebrow">Reseller Program</p>
+        <h2>Sell XenCheats keys through your own site or Discord.</h2>
+      </div>
+
+      <div class="inline-message info reveal" data-delay="30" data-reseller-message hidden></div>
+
+      <section class="auth-card reveal" data-delay="40" data-reseller-guest hidden>
+        <p class="eyebrow">Sign in required</p>
+        <p>Sign in to your XenCheats account (link your Discord if you haven't) to see your reseller status.</p>
+        <a class="button button-primary" href="/account/">Sign in</a>
+      </section>
+
+      <section class="auth-card reveal" data-delay="40" data-reseller-none hidden>
+        <p class="eyebrow">Not a reseller yet</p>
+        <p>Apply in our Discord — run <code>/resellerapp</code> in any channel and fill out the short form. Staff review every application manually.</p>
+        <a class="button button-primary" href="https://discord.gg/xencheats" target="_blank">Open Discord</a>
+      </section>
+
+      <section class="auth-card reveal" data-delay="40" data-reseller-pending hidden>
+        <p class="eyebrow">Application pending</p>
+        <p>Your reseller application is waiting on staff review. We'll DM you on Discord once it's decided.</p>
+      </section>
+
+      <section class="auth-card reveal" data-delay="40" data-reseller-denied hidden>
+        <p class="eyebrow">Application not approved</p>
+        <p>Your reseller application wasn't approved this time. You're welcome to run <code>/resellerapp</code> again later.</p>
+      </section>
+
+      <section class="balance-panel reveal" data-delay="40" data-reseller-approved hidden>
+        <div class="balance-panel-head">
+          <div>
+            <p class="eyebrow">Tier <span data-reseller-tier></span></p>
+            <strong class="balance-panel-amount" data-reseller-balance>$0.00</strong>
+          </div>
+          <span class="balance-panel-note" data-reseller-discount>&mdash;</span>
+        </div>
+        <p class="balance-panel-sub">Your prepaid reseller balance. Every <code>/api/reseller/buy</code> call is debited from it at your tier's discounted price. Ask staff to add funds, or ask about a top-up flow.</p>
+
+        <div class="member-grid">
+          <section class="member-panel">
+            <div class="member-panel-heading">
+              <p class="eyebrow">API</p>
+              <h4>Your integration</h4>
+            </div>
+            <p>Your API key was DMed to you on Discord when you were approved (ends in <code data-reseller-key-last4>&mdash;</code>). It is not shown again here — keep it safe and treat it like a password.</p>
+            <p>Base URL: <code>https://xencheats.wtf</code></p>
+
+            <h4 style="margin-top:1.25rem">List products &amp; your pricing</h4>
+            <pre class="code-block"><code>GET /api/reseller/products
+Authorization: Bearer &lt;your_api_key&gt;</code></pre>
+
+            <h4 style="margin-top:1.25rem">Buy a key</h4>
+            <pre class="code-block"><code>POST /api/reseller/buy
+Authorization: Bearer &lt;your_api_key&gt;
+Content-Type: application/json
+
+{
+  "inventory_slug": "cs2-strikeforce-day",
+  "quantity": 1
+}</code></pre>
+            <p>Response includes <code>license_key</code>, <code>amount_cents</code> (your discounted price, already debited from your balance), and <code>order_number</code>. A 200 with <code>success:false</code> and <code>error:"Insufficient reseller balance."</code> means you need more balance before buying.</p>
+          </section>
+
+          <section class="member-panel">
+            <div class="member-panel-heading">
+              <p class="eyebrow">Your info</p>
+              <h4>On file</h4>
+            </div>
+            <div class="member-list">
+              <div class="member-empty" data-reseller-website>Website: &mdash;</div>
+              <div class="member-empty" data-reseller-discord-server>Discord: &mdash;</div>
+              <div class="member-empty" data-reseller-volume>Lifetime purchased: $0.00</div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <img src="../assets/nox-logo.png" alt="XenCheats logo" />
+          <strong>XenCheats</strong>
+        </div>
+        <div class="footer-links">
+          <a href="/products/">Products</a>
+          <a href="/instructions/">Instructions</a>
+          <a href="#" data-open-support>Help</a>
+          <a href="/status/">Status</a>
+          <a href="/terms/">Terms</a>
+          <a href="/privacy/">Privacy</a>
+          <a href="https://discord.gg/xencheats" target="_blank">Discord</a>
+        </div>
+        <div class="footer-copy">&copy; 2025 XenCheats. All rights reserved.</div>
+      </div>
+    </footer>
+
+    <script type="module" src="/scripts/effects.js"></script>
+    <script type="module" src="../scripts/reseller-page.js"></script>
+  </body>
+</html>

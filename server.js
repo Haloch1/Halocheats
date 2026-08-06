@@ -72,6 +72,35 @@ const discordModerationChannelId = process.env.DISCORD_MODERATION_CHANNEL_ID || 
    moderation channel if a dedicated one isn't set on Render. */
 const discordStaffApplicationsChannelId =
   process.env.DISCORD_STAFF_APPLICATIONS_CHANNEL_ID || discordModerationChannelId;
+/* Where /resellerapp submissions get posted for review (Approve/Deny buttons). */
+const discordResellerApplicationsChannelId =
+  process.env.DISCORD_RESELLER_APPLICATIONS_CHANNEL_ID || discordModerationChannelId;
+/* Reseller volume tiers — higher discount at higher purchase volume. Applied
+   to lifetime_purchased_cents on the resellers row; margin is intentionally
+   thinner here than retail (Azad: "just need rep for now, don't need much
+   profit"), but RESELLER_MIN_MARGIN_CENTS below still stops any single sale
+   from going below wholesale cost + Stripe fee. */
+const RESELLER_TIERS = [
+  { tier: "gold", minVolumeCents: 50_000, discountPercent: 35 },
+  { tier: "silver", minVolumeCents: 20_000, discountPercent: 30 },
+  { tier: "new", minVolumeCents: 0, discountPercent: 25 },
+];
+const RESELLER_MIN_MARGIN_CENTS = 5; // absolute floor above wholesale+fee
+function resellerTierForVolume(volumeCents) {
+  return RESELLER_TIERS.find((t) => volumeCents >= t.minVolumeCents) || RESELLER_TIERS[RESELLER_TIERS.length - 1];
+}
+/* Balance top-up bonus tiers — customer pays the base amount, gets bonus
+   credit on top. Costs nothing until they actually spend it, and by then
+   it's prepaid cash already in hand, so this is safe even at a high %. */
+const TOPUP_BONUS_TIERS = [
+  { minAmountCents: 30_000, bonusPercent: 25 },
+  { minAmountCents: 15_000, bonusPercent: 18 },
+  { minAmountCents: 5_000, bonusPercent: 10 },
+  { minAmountCents: 0, bonusPercent: 0 },
+];
+function topupBonusPercentFor(amountCents) {
+  return (TOPUP_BONUS_TIERS.find((t) => amountCents >= t.minAmountCents) || TOPUP_BONUS_TIERS[TOPUP_BONUS_TIERS.length - 1]).bonusPercent;
+}
 const discordErrorChannelId = process.env.DISCORD_ERROR_CHANNEL_ID || "1530317219337076837";
 const aiQualityAlertChannelId = process.env.AI_QUALITY_ALERT_CHANNEL_ID || discordErrorChannelId;
 const aiQualityModel = process.env.AI_QUALITY_MODEL || "gemini-2.5-flash";
@@ -1354,21 +1383,35 @@ function secureTokenMatches(candidate, allowedToken) {
   );
 }
 
-function ensureResellerApiAccess(req) {
-  const configuredKeys = getConfiguredResellerApiKeys();
-
-  if (!configuredKeys.length) {
-    throw Object.assign(new Error("Reseller API is not configured."), {
-      status: 500,
-    });
+/* Extended for the reseller program: a valid key is now EITHER a legacy flat
+   key from RESELLER_API_KEYS (unchanged behavior — full catalog price, no
+   identity, no balance) OR a per-reseller key issued via /resellerapp
+   approval (looked up by hash in the resellers table, status='approved').
+   Returns { apiKey, reseller } — reseller is null for a legacy flat key. */
+async function ensureResellerApiAccess(req) {
+  const apiKey = getBearerApiKey(req);
+  if (!apiKey) {
+    throw Object.assign(new Error("API access denied."), { status: 401 });
   }
 
-  const apiKey = getBearerApiKey(req);
+  const configuredKeys = getConfiguredResellerApiKeys();
+  const isLegacyKey = configuredKeys.some((key) => secureTokenMatches(apiKey, key));
 
-  if (!apiKey || !configuredKeys.some((key) => secureTokenMatches(apiKey, key))) {
-    throw Object.assign(new Error("API access denied."), {
-      status: 401,
-    });
+  let reseller = null;
+  if (!isLegacyKey) {
+    if (!supabaseAdmin) {
+      throw Object.assign(new Error("Reseller API is not configured."), { status: 500 });
+    }
+    const { data, error } = await supabaseAdmin
+      .from("resellers")
+      .select("id, discord_id, status, tier, discount_percent, balance_cents, lifetime_purchased_cents")
+      .eq("api_key_hash", hashToken(apiKey))
+      .eq("status", "approved")
+      .maybeSingle();
+    if (error || !data) {
+      throw Object.assign(new Error("API access denied."), { status: 401 });
+    }
+    reseller = data;
   }
 
   checkRateLimit(
@@ -1378,7 +1421,7 @@ function ensureResellerApiAccess(req) {
     "Too many API requests."
   );
 
-  return apiKey;
+  return { apiKey, reseller };
 }
 
 function normalizeVariantLabel(value) {
@@ -3298,6 +3341,9 @@ if (isConfiguredValue(discordBotToken)) {
         new SlashCommandBuilder()
           .setName("staffapp")
           .setDescription("Apply to join the XenCheats staff team"),
+        new SlashCommandBuilder()
+          .setName("resellerapp")
+          .setDescription("Apply to become a XenCheats reseller"),
         new SlashCommandBuilder()
           .setName("payments")
           .setDescription("Post the accepted payment methods embed (admin only)")
@@ -8201,6 +8247,264 @@ ${rows || '<div class="ct">No messages.</div>'}
       }
     }
 
+    /* ── /resellerapp — open the reseller application modal ── */
+    if (interaction.commandName === "resellerapp") {
+      if (isOnSlashCooldown("resellerapp", interaction.user.id, 24 * 60 * 60_000)) {
+        return interaction.reply({
+          embeds: [{ description: "You've already submitted a reseller application recently. Give the team time to review it before applying again.", color: 0xf59e0b }],
+          ephemeral: true,
+        });
+      }
+      if (supabaseAdmin) {
+        try {
+          const { data: existing } = await supabaseAdmin
+            .from("resellers")
+            .select("id, status")
+            .eq("discord_id", interaction.user.id)
+            .in("status", ["pending", "approved"])
+            .maybeSingle();
+          if (existing?.status === "approved") {
+            return interaction.reply({
+              embeds: [{ description: "You're already an approved reseller — check your DMs for your API key, or ask staff if you lost it.", color: 0xf59e0b }],
+              ephemeral: true,
+            });
+          }
+          if (existing?.status === "pending") {
+            return interaction.reply({
+              embeds: [{ description: "You already have a reseller application pending review.", color: 0xf59e0b }],
+              ephemeral: true,
+            });
+          }
+        } catch (error) {
+          console.error("[Discord /resellerapp] Lookup error:", error.message);
+        }
+      }
+
+      const modal = new ModalBuilder()
+        .setCustomId("reseller_application_modal")
+        .setTitle("XenCheats Reseller Application");
+
+      const websiteInput = new TextInputBuilder()
+        .setCustomId("resellerapp_website")
+        .setLabel("Your website")
+        .setPlaceholder("https://yoursite.com")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(200);
+
+      const discordServerInput = new TextInputBuilder()
+        .setCustomId("resellerapp_discord")
+        .setLabel("Your Discord server invite")
+        .setPlaceholder("discord.gg/yourserver")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(200);
+
+      const volumeInput = new TextInputBuilder()
+        .setCustomId("resellerapp_volume")
+        .setLabel("Expected monthly purchase volume")
+        .setPlaceholder("e.g. $200-500/month")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(100);
+
+      const whyInput = new TextInputBuilder()
+        .setCustomId("resellerapp_why")
+        .setLabel("Why do you want to resell for us?")
+        .setPlaceholder("Your audience, how you'll sell/promote, any past reselling experience...")
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true)
+        .setMaxLength(700);
+
+      const extraInput = new TextInputBuilder()
+        .setCustomId("resellerapp_extra")
+        .setLabel("Anything else we should know?")
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setMaxLength(500);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(websiteInput),
+        new ActionRowBuilder().addComponents(discordServerInput),
+        new ActionRowBuilder().addComponents(volumeInput),
+        new ActionRowBuilder().addComponents(whyInput),
+        new ActionRowBuilder().addComponents(extraInput),
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    /* ── Handle reseller application submissions ── */
+    if (interaction.isModalSubmit && interaction.isModalSubmit() && interaction.customId === "reseller_application_modal") {
+      await interaction.deferReply({ ephemeral: true });
+      const applicant = interaction.user;
+      const website = interaction.fields.getTextInputValue("resellerapp_website");
+      const discordServer = interaction.fields.getTextInputValue("resellerapp_discord");
+      const volume = interaction.fields.getTextInputValue("resellerapp_volume");
+      const why = interaction.fields.getTextInputValue("resellerapp_why");
+      const extra = interaction.fields.getTextInputValue("resellerapp_extra") || "";
+
+      if (!supabaseAdmin) {
+        return interaction.editReply({
+          embeds: [{ description: "Reseller applications aren't available right now — please let an admin know.", color: 0xff4444 }],
+        });
+      }
+      if (!discordResellerApplicationsChannelId) {
+        return interaction.editReply({
+          embeds: [{ description: "Reseller applications aren't configured yet — please let an admin know.", color: 0xff4444 }],
+        });
+      }
+
+      try {
+        // Best-effort link to a site account so the /reseller web panel can
+        // find this application later. Not required — an unlinked applicant
+        // can still be approved and get their API key via DM, they just
+        // won't see a dashboard until they sign in with a linked Discord.
+        let linkedUserId = null;
+        try {
+          let page = 1;
+          while (!linkedUserId) {
+            const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 });
+            if (!list?.users?.length) break;
+            const match = list.users.find((u) => discordIdOf(u) === applicant.id);
+            if (match) linkedUserId = match.id;
+            if (list.users.length < 1000) break;
+            page++;
+          }
+        } catch (linkError) {
+          console.warn("[Discord /resellerapp] Account link lookup failed:", linkError.message);
+        }
+
+        const { data: row, error: insertError } = await supabaseAdmin
+          .from("resellers")
+          .insert({
+            discord_id: applicant.id,
+            user_id: linkedUserId,
+            website: website.slice(0, 200),
+            discord_server: discordServer.slice(0, 200),
+            monthly_volume_estimate: volume.slice(0, 100),
+            application_reason: `${why}${extra ? `\n\nExtra: ${extra}` : ""}`.slice(0, 1200),
+            status: "pending",
+          })
+          .select("id")
+          .single();
+        if (insertError) throw insertError;
+
+        const channel = await discordBot.channels.fetch(discordResellerApplicationsChannelId);
+        await channel.send({
+          embeds: [{
+            title: "New reseller application",
+            color: 0x7c3aed,
+            fields: [
+              { name: "Applicant", value: `<@${applicant.id}> (${applicant.tag})`, inline: false },
+              { name: "Website", value: website.slice(0, 500), inline: false },
+              { name: "Discord server", value: discordServer.slice(0, 500), inline: false },
+              { name: "Expected monthly volume", value: volume.slice(0, 200), inline: false },
+              { name: "Why they want to resell", value: why.slice(0, 1000), inline: false },
+              ...(extra ? [{ name: "Extra", value: extra.slice(0, 500), inline: false }] : []),
+            ],
+            footer: { text: `Reseller ID: ${row.id} | Discord ID: ${applicant.id}` },
+            timestamp: new Date().toISOString(),
+          }],
+          components: [{
+            type: 1,
+            components: [
+              { type: 2, style: 3, label: "Approve", customId: `reseller_approve:${row.id}`, emoji: { name: "✅" } },
+              { type: 2, style: 4, label: "Deny", customId: `reseller_deny:${row.id}`, emoji: { name: "❌" } },
+            ],
+          }],
+        });
+        return interaction.editReply({
+          embeds: [{ description: "Application submitted. The team will review it and DM you if approved.", color: 0x22c55e }],
+        });
+      } catch (error) {
+        console.error("[Discord /resellerapp]", error.message);
+        return interaction.editReply({
+          embeds: [{ description: "Something went wrong submitting your application. Try again in a moment.", color: 0xff4444 }],
+        });
+      }
+    }
+
+    /* ── Reseller application Approve/Deny buttons ── */
+    if (interaction.isButton && interaction.isButton() && (interaction.customId.startsWith("reseller_approve:") || interaction.customId.startsWith("reseller_deny:"))) {
+      if (!isDiscordStaff(interaction.user.id, interaction.member)) {
+        return interaction.reply({ embeds: [{ description: "Only staff can review reseller applications.", color: 0xff4444 }], ephemeral: true });
+      }
+      const [action, resellerId] = interaction.customId.split(":");
+      await interaction.deferUpdate();
+      try {
+        const { data: reseller, error: fetchError } = await supabaseAdmin
+          .from("resellers")
+          .select("id, discord_id, status")
+          .eq("id", resellerId)
+          .maybeSingle();
+        if (fetchError || !reseller) {
+          return interaction.followUp({ embeds: [{ description: "Could not find this reseller application.", color: 0xff4444 }], ephemeral: true });
+        }
+        if (reseller.status !== "pending") {
+          return interaction.followUp({ embeds: [{ description: `This application was already ${reseller.status}.`, color: 0xf59e0b }], ephemeral: true });
+        }
+
+        if (action === "reseller_approve") {
+          const rawApiKey = `xr_${createSecretToken(24)}`;
+          const { error: updateError } = await supabaseAdmin
+            .from("resellers")
+            .update({
+              status: "approved",
+              tier: "new",
+              discount_percent: 25,
+              api_key_hash: hashToken(rawApiKey),
+              api_key_last4: rawApiKey.slice(-4),
+              approved_at: new Date().toISOString(),
+              approved_by: interaction.user.id,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", resellerId);
+          if (updateError) throw updateError;
+
+          await sendDiscordDM(
+            reseller.discord_id,
+            `🎉 Your XenCheats reseller application was approved!\n\n` +
+            `**Your API key (save this now — it will not be shown again):**\n\`${rawApiKey}\`\n\n` +
+            `You start at the **New** tier — 25% off catalog prices, moving up automatically as your purchase volume grows (30% off at $200+/mo, 35% off at $500+/mo).\n\n` +
+            `Manage your account, see your balance, and read the API docs at ${(process.env.PUBLIC_SITE_URL || "https://xencheats.wtf").replace(/\/+$/, "")}/reseller`,
+          ).catch(() => {});
+
+          await interaction.editReply({
+            embeds: [{
+              ...interaction.message.embeds[0].data,
+              color: 0x22c55e,
+              footer: { text: `Approved by ${interaction.user.tag}` },
+            }],
+            components: [],
+          });
+          return interaction.followUp({ embeds: [{ description: "Approved — API key DMed to the applicant.", color: 0x22c55e }], ephemeral: true });
+        }
+
+        // Deny
+        await supabaseAdmin
+          .from("resellers")
+          .update({ status: "denied", denied_at: new Date().toISOString(), denied_by: interaction.user.id, updated_at: new Date().toISOString() })
+          .eq("id", resellerId);
+        await sendDiscordDM(
+          reseller.discord_id,
+          "Thanks for applying to the XenCheats reseller program — we're not able to approve your application right now. You're welcome to reapply later.",
+        ).catch(() => {});
+        await interaction.editReply({
+          embeds: [{
+            ...interaction.message.embeds[0].data,
+            color: 0xff4444,
+            footer: { text: `Denied by ${interaction.user.tag}` },
+          }],
+          components: [],
+        });
+        return interaction.followUp({ embeds: [{ description: "Denied.", color: 0xff4444 }], ephemeral: true });
+      } catch (error) {
+        console.error("[Discord reseller review]", error.message);
+        return interaction.followUp({ embeds: [{ description: "Something went wrong processing this application.", color: 0xff4444 }], ephemeral: true });
+      }
+    }
+
     /* ── /account — Show the member's orders, keys, and expiry ── */
     if (interaction.commandName === "account") {
       if (isOnSlashCooldown("account", interaction.user.id)) {
@@ -10173,16 +10477,24 @@ async function creditTopupFromStripe(session) {
     return;
   }
 
+  // Bonus credit tiers reward a bigger top-up with extra store balance — pure
+  // upside for the customer since it's already-collected cash, and it costs
+  // nothing until they spend it (at which point normal product margin still
+  // applies to whatever they buy).
+  const bonusPercent = topupBonusPercentFor(amountCents);
+  const bonusCents = Math.round(amountCents * bonusPercent / 100);
+  const creditCents = amountCents + bonusCents;
+
   const { error } = await supabaseAdmin.rpc("credit_balance", {
     p_user_id: userId,
-    p_amount_cents: amountCents,
+    p_amount_cents: creditCents,
     p_type: "topup",
     p_stripe_session_id: session.id,
-    p_note: "card top-up",
+    p_note: bonusPercent ? `card top-up (+${bonusPercent}% bonus, ${bonusCents}c)` : "card top-up",
   });
 
   if (error) throw error;
-  console.log(`[Topup] Credited ${amountCents}c to ${userId} (session ${session.id}).`);
+  console.log(`[Topup] Credited ${creditCents}c (paid ${amountCents}c${bonusPercent ? ` +${bonusPercent}% bonus` : ""}) to ${userId} (session ${session.id}).`);
 }
 
 /* Spend balance on one product selection and deliver its key through the existing
@@ -10397,15 +10709,18 @@ app.post("/api/nowpayments-ipn", express.json(), async (req, res) => {
     }
 
     try {
+      const cryptoBonusPercent = topupBonusPercentFor(topupAmountCents);
+      const cryptoBonusCents = Math.round(topupAmountCents * cryptoBonusPercent / 100);
+      const cryptoCreditCents = topupAmountCents + cryptoBonusCents;
       const { error: creditError } = await supabaseAdmin.rpc("credit_balance", {
         p_user_id: topupUserId,
-        p_amount_cents: topupAmountCents,
+        p_amount_cents: cryptoCreditCents,
         p_type: "topup",
         p_stripe_session_id: `crypto_${payment_id}`,
-        p_note: "crypto top-up",
+        p_note: cryptoBonusPercent ? `crypto top-up (+${cryptoBonusPercent}% bonus, ${cryptoBonusCents}c)` : "crypto top-up",
       });
       if (creditError) throw creditError;
-      console.log(`[NOWPayments IPN] Top-up credited ${topupAmountCents}c to ${topupUserId}.`);
+      console.log(`[NOWPayments IPN] Top-up credited ${cryptoCreditCents}c (paid ${topupAmountCents}c${cryptoBonusPercent ? ` +${cryptoBonusPercent}% bonus` : ""}) to ${topupUserId}.`);
       return res.json({ received: true });
     } catch (creditErr) {
       console.error("[NOWPayments IPN] Top-up credit error:", creditErr.message);
@@ -13300,6 +13615,33 @@ app.post("/api/admin/keys/import", express.json({ limit: "2mb" }), async (req, r
   }
 });
 
+/* Reseller panel data for the signed-in site member (cookie/session auth,
+   NOT the reseller API key) — powers the /reseller dashboard page. */
+app.get("/api/reseller/me", async (req, res) => {
+  try {
+    const member = await getAuthenticatedUser(req, res);
+    if (!supabaseAdmin) {
+      return res.json({ status: "none" });
+    }
+    const { data: reseller } = await supabaseAdmin
+      .from("resellers")
+      .select("status, tier, discount_percent, balance_cents, lifetime_purchased_cents, website, discord_server, api_key_last4, applied_at, approved_at")
+      .eq("user_id", member.id)
+      .order("applied_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!reseller) {
+      return res.json({ status: "none" });
+    }
+    return res.json({ status: reseller.status, reseller });
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to load reseller status.",
+    });
+  }
+});
+
 app.get("/api/account", async (req, res) => {
   try {
     const member = await getAuthenticatedUser(req, res);
@@ -13422,6 +13764,58 @@ app.get("/api/account", async (req, res) => {
   }
 });
 
+/* Read-only catalog listing for reseller API clients — lets them browse
+   available products/variants and see their own discounted pricing without
+   needing to already know exact inventory slugs. */
+app.get("/api/reseller/products", async (req, res) => {
+  let reseller = null;
+  try {
+    ({ reseller } = await ensureResellerApiAccess(req));
+  } catch (error) {
+    return res.status(error.status || 401).json({
+      success: false,
+      error: error instanceof Error ? error.message : "API access denied.",
+    });
+  }
+
+  const discountPercent = reseller?.discount_percent || 0;
+  const catalog = products
+    .filter((product) => isCatalogProductAvailable(product))
+    .map((product) => ({
+      product_slug: product.slug,
+      name: product.name,
+      variants: (product.variants || [])
+        .filter((variant) => variant.stockLabel !== "Unavailable" && !variant.checkoutBlocked)
+        .map((variant) => {
+          const inventorySlug = variant.inventorySlug || `${product.slug}-${variant.slug}`;
+          const listAmountCents = variant.amount || 0;
+          const yourAmountCents = discountPercent
+            ? Math.max(
+                Math.round(listAmountCents * (1 - discountPercent / 100)),
+                getWholesaleCostCents(inventorySlug) + getStripeFees(listAmountCents) + RESELLER_MIN_MARGIN_CENTS,
+              )
+            : listAmountCents;
+          return {
+            variant_slug: variant.slug,
+            inventory_slug: inventorySlug,
+            name: variant.name,
+            list_amount_cents: listAmountCents,
+            your_amount_cents: Math.min(yourAmountCents, listAmountCents),
+            in_stock: isKeyAvailable(inventorySlug),
+          };
+        }),
+    }))
+    .filter((product) => product.variants.length);
+
+  return res.json({
+    success: true,
+    tier: reseller?.tier || "legacy",
+    discount_percent: discountPercent,
+    balance_cents: reseller?.balance_cents ?? null,
+    products: catalog,
+  });
+});
+
 app.post("/api/reseller/buy", async (req, res) => {
   if (!supabaseAdmin) {
     return res.status(500).json({
@@ -13430,8 +13824,9 @@ app.post("/api/reseller/buy", async (req, res) => {
     });
   }
 
+  let reseller = null;
   try {
-    ensureResellerApiAccess(req);
+    ({ reseller } = await ensureResellerApiAccess(req));
   } catch (error) {
     return res.status(error.status || 401).json({
       success: false,
@@ -13454,6 +13849,27 @@ app.post("/api/reseller/buy", async (req, res) => {
       success: false,
       error: "This product is currently unavailable.",
     });
+  }
+
+  // Reseller-identified calls (not the legacy flat key) get their tier
+  // discount applied, funded from their prepaid balance — never below
+  // wholesale cost + Stripe fee + a small floor, even at the highest tier.
+  const listAmountCents = (selection.variant.amount || 0) * quantity;
+  let chargeAmountCents = listAmountCents;
+  if (reseller) {
+    const wholesaleCents = getWholesaleCostCents(selection.inventorySlug) * quantity;
+    const discountPercent = reseller.discount_percent || 25;
+    const discounted = Math.round(listAmountCents * (1 - discountPercent / 100));
+    const floor = wholesaleCents + getStripeFees(listAmountCents) + RESELLER_MIN_MARGIN_CENTS;
+    chargeAmountCents = Math.max(discounted, Math.min(floor, listAmountCents));
+    if ((reseller.balance_cents || 0) < chargeAmountCents) {
+      return res.json({
+        success: false,
+        error: "Insufficient reseller balance.",
+        balance_cents: reseller.balance_cents || 0,
+        required_cents: chargeAmountCents,
+      });
+    }
   }
 
   try {
@@ -13501,15 +13917,49 @@ app.post("/api/reseller/buy", async (req, res) => {
       });
     }
 
+    const orderNumber = createApiOrderNumber();
+
+    if (reseller) {
+      // Debit balance, bump lifetime volume, and re-tier if they crossed a
+      // threshold — all best-effort; the keys are already assigned, so a
+      // failure here shouldn't lose the sale, just log it for manual review.
+      try {
+        const newBalance = (reseller.balance_cents || 0) - chargeAmountCents;
+        const newLifetime = (reseller.lifetime_purchased_cents || 0) + chargeAmountCents;
+        const newTier = resellerTierForVolume(newLifetime);
+        await supabaseAdmin
+          .from("resellers")
+          .update({
+            balance_cents: newBalance,
+            lifetime_purchased_cents: newLifetime,
+            tier: newTier.tier,
+            discount_percent: newTier.discountPercent,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", reseller.id);
+        await supabaseAdmin.from("reseller_orders").insert({
+          reseller_id: reseller.id,
+          inventory_slug: selection.inventorySlug,
+          quantity,
+          list_amount_cents: listAmountCents,
+          discounted_amount_cents: chargeAmountCents,
+          order_number: orderNumber,
+          license_keys: assignedKeys.map((key) => key.key_value),
+        });
+      } catch (ledgerError) {
+        console.error("[Reseller API] Balance/order ledger update failed:", ledgerError.message);
+      }
+    }
+
     return res.json({
       success: true,
-      order_number: createApiOrderNumber(),
+      order_number: orderNumber,
       product_slug: selection.inventorySlug,
       product_name: selection.name,
       quantity,
       license_key: assignedKeys[0]?.key_value || null,
       license_keys: assignedKeys.map((key) => key.key_value),
-      amount_cents: (selection.variant.amount || 0) * quantity,
+      amount_cents: chargeAmountCents,
       fulfilled_at: assignedAt,
     });
   } catch (error) {
