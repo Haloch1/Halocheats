@@ -83,8 +83,8 @@ const discordResellerApplicationsChannelId =
    now, don't need much profit"), but RESELLER_MIN_MARGIN_CENTS below still
    stops any single sale from going below wholesale cost + Stripe fee. */
 const RESELLER_TOPUP_TIERS = [
-  { tier: "gold", minTopupCents: 20_000, discountPercent: 30 },
-  { tier: "silver", minTopupCents: 10_000, discountPercent: 25 },
+  { tier: "gold", minTopupCents: 20_000, discountPercent: 25 },
+  { tier: "silver", minTopupCents: 10_000, discountPercent: 20 },
   { tier: "bronze", minTopupCents: 5_000, discountPercent: 15 },
   { tier: "new", minTopupCents: 0, discountPercent: 0 },
 ];
@@ -8607,7 +8607,7 @@ ${rows || '<div class="ct">No messages.</div>'}
             reseller.discord_id,
             `🎉 Your XenCheats reseller application was approved!\n\n` +
             `**Your API key (save this now — it will not be shown again):**\n\`${rawApiKey}\`\n\n` +
-            `Your discount is set by how much you top up in total: $50+ gets you 15% off, $100+ gets 25% off, $200+ gets 30% off — it locks in and stays until you cross the next tier.\n\n` +
+            `Your discount is set by how much you top up in total: $50+ gets you 15% off, $100+ gets 20% off, $200+ gets 25% off — it locks in and stays until you cross the next tier.\n\n` +
             `Manage your account, see your balance, and read the API docs at ${(process.env.PUBLIC_SITE_URL || "https://xencheats.wtf").replace(/\/+$/, "")}/reseller`,
           ).catch(() => {});
 
