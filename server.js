@@ -447,7 +447,7 @@ const OWNER_ONLY_COMMANDS = new Set([
   "ticket-panel", "invest", "investments", "uninvest", "accountstats",
   "leaderboard", "reinvite-all",
 ]);
-const ADMIN_ONLY_COMMANDS = new Set(["orderlookup", "staffactivity", "ips", "media-panel", "reseller-panel", "ticketbot"]);
+const ADMIN_ONLY_COMMANDS = new Set(["orderlookup", "staffactivity", "ips", "media-panel", "reseller-panel", "postreview", "ticketbot"]);
 const discordStaffGuideChannelId = process.env.DISCORD_STAFF_GUIDE_CHANNEL_ID || "1530269093100388583";
 const discordStatusSourceChannelId = process.env.DISCORD_STATUS_SOURCE_CHANNEL_ID || "1531112552891813949";
 const discordStatusTargetChannelId = process.env.DISCORD_STATUS_TARGET_CHANNEL_ID || "1531148640481972284";
@@ -3464,6 +3464,14 @@ if (isConfiguredValue(discordBotToken)) {
           .setName("reseller-panel")
           .setDescription("Post the reseller program info embed (admin only)")
           .addChannelOption(o => o.setName("channel").setDescription("Channel to post in (default: current channel)").setRequired(false)),
+        new SlashCommandBuilder()
+          .setName("postreview")
+          .setDescription("Manually add a review (e.g. one shared as a screenshot) — posts it and saves it like a normal review (admin only)")
+          .addStringOption(o => o.setName("username").setDescription("Name to show on the review").setRequired(true))
+          .addStringOption(o => o.setName("text").setDescription("The review text").setRequired(true))
+          .addIntegerOption(o => o.setName("rating").setDescription("Star rating 1-5").setRequired(true)
+            .addChoices({ name: "1", value: 1 }, { name: "2", value: 2 }, { name: "3", value: 3 }, { name: "4", value: 4 }, { name: "5", value: 5 }))
+          .addStringOption(o => o.setName("avatar_url").setDescription("Avatar image URL (optional)").setRequired(false)),
       ];
 
       const commands = commandBuilders.map((command) => {
@@ -4272,7 +4280,8 @@ if (isConfiguredValue(discordBotToken)) {
   discordBot.on("messageCreate", async (message) => {
     if (message.author.bot || message._filtered) return;
     if (!discordReviewChannelId || message.channel.id !== discordReviewChannelId) return;
-    if (isDiscordStaff(message.author.id, message.member)) return; // Staff can post freely
+    // Staff messages go through the same moderation/rating pipeline as
+    // customer reviews now — employees can leave reviews too.
 
     const reviewText = message.content.trim();
     if (reviewText.length < 2) {
@@ -8247,6 +8256,59 @@ ${rows || '<div class="ct">No messages.</div>'}
         return interaction.reply({ embeds: [{ description: `Reseller program info posted in <#${channel.id}>.`, color: 0x22c55e }], ephemeral: true });
       } catch (err) {
         return interaction.reply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }], ephemeral: true });
+      }
+    }
+
+    /* ── /postreview — Manually add a review (e.g. a screenshot someone shared)
+       and post it in the review channel like a normal auto-processed review ── */
+    if (interaction.commandName === "postreview") {
+      if (!isDiscordAdminInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const username = trimField(interaction.options.getString("username"), 80);
+      const reviewText = trimField(interaction.options.getString("text"), 1500);
+      const rating = interaction.options.getInteger("rating");
+      const avatarUrl = trimField(interaction.options.getString("avatar_url") || "", 500) || null;
+
+      if (!username || !reviewText || !rating) {
+        return interaction.reply({ embeds: [{ description: "Username, text, and rating are all required.", color: 0xff4444 }], ephemeral: true });
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        if (supabaseAdmin) {
+          await supabaseAdmin.from("reviews").insert({
+            product_slug: "discord-review",
+            rating,
+            review_text: reviewText,
+            discord_username: username,
+            discord_avatar: avatarUrl,
+            ai_approved: true,
+            status: "approved",
+            source: "discord",
+          });
+        }
+
+        const stars = "⭐".repeat(rating);
+        if (discordReviewChannelId) {
+          const channel = await discordBot.channels.fetch(discordReviewChannelId).catch(() => null);
+          if (channel) {
+            await channel.send({
+              embeds: [{
+                author: avatarUrl ? { name: username, icon_url: avatarUrl } : { name: username },
+                description: `${stars}\n\n${reviewText}`,
+                color: 0xff2a2a,
+                footer: { text: "Verified Review - XenCheats" },
+                timestamp: new Date().toISOString(),
+              }],
+            });
+          }
+        }
+
+        return interaction.editReply({ embeds: [{ description: `Review posted and saved for **${username}**.`, color: 0x22c55e }] });
+      } catch (err) {
+        console.error("[Discord /postreview]", err.message);
+        return interaction.editReply({ embeds: [{ description: `Failed: ${err.message}`, color: 0xff4444 }] });
       }
     }
 
