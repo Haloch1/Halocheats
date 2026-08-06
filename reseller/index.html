@@ -188,6 +188,20 @@
             <p>Your API key was DMed to you on Discord when you were approved (ends in <code data-reseller-key-last4>&mdash;</code>). It is not shown again here — keep it safe and treat it like a password.</p>
             <p>Base URL: <code>https://xencheats.wtf</code></p>
 
+            <div class="reseller-key-reveal" data-reseller-rotate-reveal hidden>
+              <div class="reseller-key-reveal-head">
+                <strong>New key generated — copy it now, it won't be shown again:</strong>
+                <div class="reseller-key-reveal-actions">
+                  <button type="button" class="button button-secondary" data-reseller-rotate-copy>Copy</button>
+                  <button type="button" class="button button-secondary" data-reseller-rotate-dismiss>Dismiss</button>
+                </div>
+              </div>
+              <code data-reseller-rotate-reveal-value></code>
+            </div>
+            <p class="inline-message info" data-reseller-rotate-message hidden></p>
+            <button type="button" class="button button-secondary" data-reseller-rotate-key style="margin-top: 8px">Regenerate API key</button>
+            <p style="margin-top: 8px; font-size: 0.85em; opacity: 0.75">Regenerating immediately disables your old key. Anything using it will need the new one.</p>
+
             <h4 style="margin-top:1.25rem">List products &amp; your pricing</h4>
             <pre class="code-block"><code>GET /api/reseller/products
 Authorization: Bearer &lt;your_api_key&gt;</code></pre>

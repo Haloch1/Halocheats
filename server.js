@@ -13997,6 +13997,51 @@ app.get("/api/reseller/me", async (req, res) => {
   }
 });
 
+/* ── Rotate a reseller's API key. Old key stops working the instant this
+   runs — anything integrated against it needs updating right away. Returns
+   the new raw key once; only the hash + last4 are ever stored. ── */
+app.post("/api/reseller/rotate-key", async (req, res) => {
+  try {
+    const member = await getAuthenticatedUser(req, res);
+    if (!supabaseAdmin) {
+      return res.status(500).json({ error: "Reseller accounts aren't available right now." });
+    }
+
+    if (isOnSlashCooldown(`reseller-rotate-key:${member.id}`, member.id, 60_000)) {
+      return res.status(429).json({ error: "Give it a minute before rotating your key again." });
+    }
+
+    const { data: reseller, error: fetchError } = await supabaseAdmin
+      .from("resellers")
+      .select("id, status")
+      .eq("user_id", member.id)
+      .eq("status", "approved")
+      .maybeSingle();
+    if (fetchError) throw fetchError;
+    if (!reseller) {
+      return res.status(404).json({ error: "You don't have an approved reseller account." });
+    }
+
+    const rawApiKey = `xr_${createSecretToken(24)}`;
+    const { error: updateError } = await supabaseAdmin
+      .from("resellers")
+      .update({
+        api_key_hash: hashToken(rawApiKey),
+        api_key_last4: rawApiKey.slice(-4),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", reseller.id);
+    if (updateError) throw updateError;
+
+    return res.json({ success: true, api_key: rawApiKey, api_key_last4: rawApiKey.slice(-4) });
+  } catch (error) {
+    console.error("[Reseller rotate key]", error.message);
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to rotate your API key.",
+    });
+  }
+});
+
 /* ── Website reseller application form (alternative to Discord /resellerapp) ── */
 app.post("/api/reseller/apply", async (req, res) => {
   try {

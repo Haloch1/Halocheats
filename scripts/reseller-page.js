@@ -64,6 +64,78 @@ keyDismissButton?.addEventListener("click", () => {
   }
 });
 
+/* ── API tab: rotate key ── */
+const rotateButton = document.querySelector("[data-reseller-rotate-key]");
+const rotateMessage = document.querySelector("[data-reseller-rotate-message]");
+const rotateReveal = document.querySelector("[data-reseller-rotate-reveal]");
+const rotateRevealValue = document.querySelector("[data-reseller-rotate-reveal-value]");
+const rotateCopyButton = document.querySelector("[data-reseller-rotate-copy]");
+const rotateDismissButton = document.querySelector("[data-reseller-rotate-dismiss]");
+
+rotateCopyButton?.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(rotateRevealValue?.textContent || "");
+    const original = rotateCopyButton.textContent;
+    rotateCopyButton.textContent = "Copied!";
+    window.setTimeout(() => {
+      rotateCopyButton.textContent = original;
+    }, 1500);
+  } catch {
+    // Clipboard API unavailable — the key is still visible to select/copy manually.
+  }
+});
+
+rotateDismissButton?.addEventListener("click", () => {
+  if (rotateReveal) {
+    rotateReveal.hidden = true;
+  }
+});
+
+rotateButton?.addEventListener("click", async () => {
+  const confirmed = window.confirm(
+    "Regenerate your API key? Your current key will stop working immediately — anything integrated against it will need the new one."
+  );
+  if (!confirmed) {
+    return;
+  }
+
+  const session = await getCurrentSession();
+  if (!session?.access_token) {
+    renderMessage(rotateMessage, "Sign in again to rotate your key.", "warn");
+    return;
+  }
+
+  rotateButton.disabled = true;
+  const originalText = rotateButton.textContent;
+  rotateButton.textContent = "Regenerating...";
+
+  try {
+    const response = await fetch("/api/reseller/rotate-key", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || "Unable to rotate your API key.");
+    }
+
+    if (rotateReveal && rotateRevealValue) {
+      rotateRevealValue.textContent = data.api_key;
+      rotateReveal.hidden = false;
+    }
+    if (keyLast4Label) {
+      keyLast4Label.textContent = `...${data.api_key_last4}`;
+    }
+    renderMessage(rotateMessage, "New API key generated.", "success");
+  } catch (error) {
+    renderMessage(rotateMessage, error instanceof Error ? error.message : "Unable to rotate your API key.", "error");
+  } finally {
+    rotateButton.disabled = false;
+    rotateButton.textContent = originalText;
+  }
+});
+
 let latestCatalog = [];
 let latestReseller = null;
 
