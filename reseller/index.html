@@ -78,14 +78,85 @@
       <section class="balance-panel reveal" data-delay="40" data-reseller-approved hidden>
         <div class="balance-panel-head">
           <div>
-            <p class="eyebrow">Tier <span data-reseller-tier></span></p>
+            <span class="reseller-tier-badge" data-reseller-tier></span>
             <strong class="balance-panel-amount" data-reseller-balance>$0.00</strong>
           </div>
           <span class="balance-panel-note" data-reseller-discount>&mdash;</span>
         </div>
-        <p class="balance-panel-sub">Your prepaid reseller balance. Every <code>/api/reseller/buy</code> call is debited from it at your tier's discounted price. Ask staff to add funds, or ask about a top-up flow.</p>
+        <p class="balance-panel-sub">Your prepaid reseller balance. Buy from the Products tab or your own integration — either way it's debited at your tier's discounted price.</p>
 
-        <div class="member-grid">
+        <div class="reseller-progress-wrap" data-reseller-progress-wrap hidden>
+          <div class="reseller-progress-track">
+            <div class="reseller-progress-fill" data-reseller-progress-fill style="width: 0%"></div>
+          </div>
+          <p class="reseller-progress-label" data-reseller-progress-label></p>
+        </div>
+
+        <div class="auth-panel-switch" data-reseller-tabs>
+          <button class="auth-switch-button is-active" type="button" data-reseller-tab="overview">Top Up</button>
+          <button class="auth-switch-button" type="button" data-reseller-tab="products">Products</button>
+          <button class="auth-switch-button" type="button" data-reseller-tab="api">API &amp; Docs</button>
+        </div>
+
+        <div class="auth-pane is-active" data-reseller-pane="overview">
+          <p class="inline-message info topup-message" data-reseller-topup-message hidden></p>
+          <div class="topup-presets" data-reseller-topup-presets>
+            <button type="button" class="topup-preset" data-amount="5000">$50</button>
+            <button type="button" class="topup-preset" data-amount="10000">$100</button>
+            <button type="button" class="topup-preset" data-amount="25000">$250</button>
+            <button type="button" class="topup-preset" data-amount="50000">$500</button>
+          </div>
+          <label class="topup-custom">
+            <span>Custom amount (USD)</span>
+            <input type="number" min="5" max="2000" step="1" inputmode="decimal" placeholder="Enter an amount" data-reseller-topup-custom />
+          </label>
+
+          <div class="topup-actions">
+            <button type="button" class="button button-primary" data-reseller-topup-submit>Add Funds</button>
+          </div>
+
+          <div class="member-grid" style="margin-top: 24px">
+            <section class="member-panel">
+              <div class="member-panel-heading">
+                <p class="eyebrow">Your info</p>
+                <h4>On file</h4>
+              </div>
+              <div class="member-list">
+                <div class="member-empty" data-reseller-website>Website: &mdash;</div>
+                <div class="member-empty" data-reseller-discord-server>Discord: &mdash;</div>
+                <div class="member-empty" data-reseller-volume>Lifetime purchased: $0.00</div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="auth-pane" data-reseller-pane="products" hidden>
+          <div class="reseller-key-reveal" data-reseller-key-reveal hidden>
+            <strong>Key delivered — copy it now:</strong>
+            <code data-reseller-key-reveal-value></code>
+          </div>
+          <p class="inline-message info" data-reseller-buy-message hidden></p>
+          <input type="search" class="reseller-search" placeholder="Search products..." data-reseller-search />
+          <div class="reseller-table-wrap">
+            <table class="reseller-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>List price</th>
+                  <th>Your price</th>
+                  <th>Stock</th>
+                  <th>Qty</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody data-reseller-products-body>
+                <tr><td colspan="6">Loading catalog...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="auth-pane" data-reseller-pane="api" hidden>
           <section class="member-panel">
             <div class="member-panel-heading">
               <p class="eyebrow">API</p>
@@ -108,18 +179,6 @@ Content-Type: application/json
   "quantity": 1
 }</code></pre>
             <p>Response includes <code>license_key</code>, <code>amount_cents</code> (your discounted price, already debited from your balance), and <code>order_number</code>. A 200 with <code>success:false</code> and <code>error:"Insufficient reseller balance."</code> means you need more balance before buying.</p>
-          </section>
-
-          <section class="member-panel">
-            <div class="member-panel-heading">
-              <p class="eyebrow">Your info</p>
-              <h4>On file</h4>
-            </div>
-            <div class="member-list">
-              <div class="member-empty" data-reseller-website>Website: &mdash;</div>
-              <div class="member-empty" data-reseller-discord-server>Discord: &mdash;</div>
-              <div class="member-empty" data-reseller-volume>Lifetime purchased: $0.00</div>
-            </div>
           </section>
         </div>
       </section>

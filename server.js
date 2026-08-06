@@ -10598,6 +10598,37 @@ async function creditTopupFromStripe(session) {
   console.log(`[Topup] Credited ${creditCents}c (paid ${amountCents}c${bonusPercent ? ` +${bonusPercent}% bonus` : ""}) to ${userId} (session ${session.id}).`);
 }
 
+async function creditResellerTopupFromStripe(session) {
+  const resellerId = session.metadata?.resellerId || null;
+  const amountCents = Number(session.metadata?.amountCents) || session.amount_total || 0;
+
+  if (!resellerId || amountCents <= 0) {
+    console.warn(`[Reseller topup] Session ${session.id} missing metadata; cannot credit.`);
+    return;
+  }
+
+  const { data: reseller, error: fetchError } = await supabaseAdmin
+    .from("resellers")
+    .select("id, balance_cents")
+    .eq("id", resellerId)
+    .maybeSingle();
+  if (fetchError || !reseller) {
+    console.warn(`[Reseller topup] Session ${session.id} — reseller ${resellerId} not found.`);
+    return;
+  }
+
+  const { error } = await supabaseAdmin
+    .from("resellers")
+    .update({
+      balance_cents: (reseller.balance_cents || 0) + amountCents,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", resellerId);
+
+  if (error) throw error;
+  console.log(`[Reseller topup] Credited ${amountCents}c to reseller ${resellerId} (session ${session.id}).`);
+}
+
 /* Spend balance on one product selection and deliver its key through the existing
    fulfillment pipeline. Atomic debit; refunds automatically if delivery fails. */
 async function fulfillFromBalance(member, selection, amountCents, note) {
@@ -10733,6 +10764,8 @@ app.post(
         const completedSession = event.data.object;
         if (completedSession.metadata?.type === "balance_topup") {
           await creditTopupFromStripe(completedSession);
+        } else if (completedSession.metadata?.type === "reseller_topup") {
+          await creditResellerTopupFromStripe(completedSession);
         } else if (completedSession.metadata?.type === "cart") {
           await fulfillCartStripe(completedSession);
         } else {
@@ -13865,20 +13898,10 @@ app.get("/api/account", async (req, res) => {
   }
 });
 
-/* Read-only catalog listing for reseller API clients — lets them browse
-   available products/variants and see their own discounted pricing without
-   needing to already know exact inventory slugs. */
-app.get("/api/reseller/products", async (req, res) => {
-  let reseller = null;
-  try {
-    ({ reseller } = await ensureResellerApiAccess(req));
-  } catch (error) {
-    return res.status(error.status || 401).json({
-      success: false,
-      error: error instanceof Error ? error.message : "API access denied.",
-    });
-  }
-
+/* Shared catalog builder — used by both the API-key endpoint (GET
+   /api/reseller/products) and the session-authed website endpoint (GET
+   /api/reseller/catalog) so pricing logic only lives in one place. */
+function buildResellerCatalog(reseller) {
   const discountPercent = reseller?.discount_percent || 0;
   const catalog = products
     .filter((product) => isCatalogProductAvailable(product))
@@ -13908,14 +13931,158 @@ app.get("/api/reseller/products", async (req, res) => {
     }))
     .filter((product) => product.variants.length);
 
-  return res.json({
-    success: true,
+  const currentTier = resellerTierForVolume(reseller?.lifetime_purchased_cents || 0);
+  const tierIndex = RESELLER_TIERS.findIndex((t) => t.tier === currentTier.tier);
+  const nextTier = tierIndex > 0 ? RESELLER_TIERS[tierIndex - 1] : null; // tiers are listed highest-first
+
+  return {
     tier: reseller?.tier || "legacy",
     discount_percent: discountPercent,
     balance_cents: reseller?.balance_cents ?? null,
+    lifetime_purchased_cents: reseller?.lifetime_purchased_cents ?? null,
+    current_tier_min_volume_cents: currentTier.minVolumeCents,
+    next_tier: nextTier
+      ? {
+          tier: nextTier.tier,
+          discount_percent: nextTier.discountPercent,
+          cents_to_next_tier: Math.max(0, nextTier.minVolumeCents - (reseller?.lifetime_purchased_cents || 0)),
+          min_volume_cents: nextTier.minVolumeCents,
+        }
+      : null,
     products: catalog,
-  });
+  };
+}
+
+/* Read-only catalog listing for reseller API clients — lets them browse
+   available products/variants and see their own discounted pricing without
+   needing to already know exact inventory slugs. */
+app.get("/api/reseller/products", async (req, res) => {
+  let reseller = null;
+  try {
+    ({ reseller } = await ensureResellerApiAccess(req));
+  } catch (error) {
+    return res.status(error.status || 401).json({
+      success: false,
+      error: error instanceof Error ? error.message : "API access denied.",
+    });
+  }
+
+  return res.json({ success: true, ...buildResellerCatalog(reseller) });
 });
+
+/* Shared purchase logic — used by both the API-key endpoint (POST
+   /api/reseller/buy) and the session-authed website endpoint (POST
+   /api/reseller/purchase). `reseller` is null for a legacy flat API key
+   (full price, no balance/ledger); non-null for an identified reseller
+   (discount applied, debited from their prepaid balance). Returns a plain
+   result object — the caller decides the HTTP status/shape. */
+async function performResellerPurchase(reseller, selection, quantity) {
+  const listAmountCents = (selection.variant.amount || 0) * quantity;
+  let chargeAmountCents = listAmountCents;
+  if (reseller) {
+    const wholesaleCents = getWholesaleCostCents(selection.inventorySlug) * quantity;
+    const discountPercent = reseller.discount_percent || 25;
+    const discounted = Math.round(listAmountCents * (1 - discountPercent / 100));
+    const floor = wholesaleCents + getStripeFees(listAmountCents) + RESELLER_MIN_MARGIN_CENTS;
+    chargeAmountCents = Math.max(discounted, Math.min(floor, listAmountCents));
+    if ((reseller.balance_cents || 0) < chargeAmountCents) {
+      return {
+        success: false,
+        error: "Insufficient reseller balance.",
+        balance_cents: reseller.balance_cents || 0,
+        required_cents: chargeAmountCents,
+      };
+    }
+  }
+
+  const { data: availableKeys, error: availableKeyError } = await supabaseAdmin
+    .from("license_keys")
+    .select("id, key_value")
+    .eq("product_slug", selection.inventorySlug)
+    .eq("status", "unused")
+    .order("created_at", { ascending: true })
+    .limit(quantity);
+
+  if (availableKeyError) {
+    throw availableKeyError;
+  }
+
+  if ((availableKeys || []).length < quantity) {
+    return {
+      success: false,
+      error: "Out of stock.",
+      product_slug: selection.inventorySlug,
+      available: (availableKeys || []).length,
+    };
+  }
+
+  const assignedAt = new Date().toISOString();
+  const keyIds = availableKeys.map((key) => key.id);
+  const { data: assignedKeys, error: assignError } = await supabaseAdmin
+    .from("license_keys")
+    .update({
+      status: "assigned",
+      assigned_at: assignedAt,
+    })
+    .in("id", keyIds)
+    .eq("status", "unused")
+    .select("id, key_value");
+
+  if (assignError) {
+    throw assignError;
+  }
+
+  if ((assignedKeys || []).length < quantity) {
+    return { success: false, error: "Stock changed while processing. Try again." };
+  }
+
+  const orderNumber = createApiOrderNumber();
+
+  if (reseller) {
+    // Debit balance, bump lifetime volume, and re-tier if they crossed a
+    // threshold — all best-effort; the keys are already assigned, so a
+    // failure here shouldn't lose the sale, just log it for manual review.
+    try {
+      const newBalance = (reseller.balance_cents || 0) - chargeAmountCents;
+      const newLifetime = (reseller.lifetime_purchased_cents || 0) + chargeAmountCents;
+      const newTier = resellerTierForVolume(newLifetime);
+      await supabaseAdmin
+        .from("resellers")
+        .update({
+          balance_cents: newBalance,
+          lifetime_purchased_cents: newLifetime,
+          tier: newTier.tier,
+          discount_percent: newTier.discountPercent,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", reseller.id);
+      await supabaseAdmin.from("reseller_orders").insert({
+        reseller_id: reseller.id,
+        inventory_slug: selection.inventorySlug,
+        quantity,
+        list_amount_cents: listAmountCents,
+        discounted_amount_cents: chargeAmountCents,
+        order_number: orderNumber,
+        license_keys: assignedKeys.map((key) => key.key_value),
+      });
+    } catch (ledgerError) {
+      console.error("[Reseller] Balance/order ledger update failed:", ledgerError.message);
+    }
+  }
+
+  return {
+    success: true,
+    order_number: orderNumber,
+    product_slug: selection.inventorySlug,
+    product_name: selection.name,
+    quantity,
+    license_key: assignedKeys[0]?.key_value || null,
+    license_keys: assignedKeys.map((key) => key.key_value),
+    amount_cents: chargeAmountCents,
+    balance_cents: reseller ? (reseller.balance_cents || 0) - chargeAmountCents : null,
+    fulfilled_at: assignedAt,
+  };
+}
 
 app.post("/api/reseller/buy", async (req, res) => {
   if (!supabaseAdmin) {
@@ -13939,134 +14106,127 @@ app.post("/api/reseller/buy", async (req, res) => {
   const quantity = normalizeApiQuantity(req.body?.quantity);
 
   if (!selection) {
-    return res.status(404).json({
-      success: false,
-      error: "Product variant not found.",
-    });
+    return res.status(404).json({ success: false, error: "Product variant not found." });
   }
 
   if (!isCatalogProductAvailable(selection.product)) {
-    return res.status(409).json({
-      success: false,
-      error: "This product is currently unavailable.",
-    });
-  }
-
-  // Reseller-identified calls (not the legacy flat key) get their tier
-  // discount applied, funded from their prepaid balance — never below
-  // wholesale cost + Stripe fee + a small floor, even at the highest tier.
-  const listAmountCents = (selection.variant.amount || 0) * quantity;
-  let chargeAmountCents = listAmountCents;
-  if (reseller) {
-    const wholesaleCents = getWholesaleCostCents(selection.inventorySlug) * quantity;
-    const discountPercent = reseller.discount_percent || 25;
-    const discounted = Math.round(listAmountCents * (1 - discountPercent / 100));
-    const floor = wholesaleCents + getStripeFees(listAmountCents) + RESELLER_MIN_MARGIN_CENTS;
-    chargeAmountCents = Math.max(discounted, Math.min(floor, listAmountCents));
-    if ((reseller.balance_cents || 0) < chargeAmountCents) {
-      return res.json({
-        success: false,
-        error: "Insufficient reseller balance.",
-        balance_cents: reseller.balance_cents || 0,
-        required_cents: chargeAmountCents,
-      });
-    }
+    return res.status(409).json({ success: false, error: "This product is currently unavailable." });
   }
 
   try {
-    const { data: availableKeys, error: availableKeyError } = await supabaseAdmin
-      .from("license_keys")
-      .select("id, key_value")
-      .eq("product_slug", selection.inventorySlug)
-      .eq("status", "unused")
-      .order("created_at", { ascending: true })
-      .limit(quantity);
-
-    if (availableKeyError) {
-      throw availableKeyError;
-    }
-
-    if ((availableKeys || []).length < quantity) {
-      return res.json({
-        success: false,
-        error: "Out of stock.",
-        product_slug: selection.inventorySlug,
-        available: (availableKeys || []).length,
-      });
-    }
-
-    const assignedAt = new Date().toISOString();
-    const keyIds = availableKeys.map((key) => key.id);
-    const { data: assignedKeys, error: assignError } = await supabaseAdmin
-      .from("license_keys")
-      .update({
-        status: "assigned",
-        assigned_at: assignedAt,
-      })
-      .in("id", keyIds)
-      .eq("status", "unused")
-      .select("id, key_value");
-
-    if (assignError) {
-      throw assignError;
-    }
-
-    if ((assignedKeys || []).length < quantity) {
-      return res.json({
-        success: false,
-        error: "Stock changed while processing. Try again.",
-      });
-    }
-
-    const orderNumber = createApiOrderNumber();
-
-    if (reseller) {
-      // Debit balance, bump lifetime volume, and re-tier if they crossed a
-      // threshold — all best-effort; the keys are already assigned, so a
-      // failure here shouldn't lose the sale, just log it for manual review.
-      try {
-        const newBalance = (reseller.balance_cents || 0) - chargeAmountCents;
-        const newLifetime = (reseller.lifetime_purchased_cents || 0) + chargeAmountCents;
-        const newTier = resellerTierForVolume(newLifetime);
-        await supabaseAdmin
-          .from("resellers")
-          .update({
-            balance_cents: newBalance,
-            lifetime_purchased_cents: newLifetime,
-            tier: newTier.tier,
-            discount_percent: newTier.discountPercent,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", reseller.id);
-        await supabaseAdmin.from("reseller_orders").insert({
-          reseller_id: reseller.id,
-          inventory_slug: selection.inventorySlug,
-          quantity,
-          list_amount_cents: listAmountCents,
-          discounted_amount_cents: chargeAmountCents,
-          order_number: orderNumber,
-          license_keys: assignedKeys.map((key) => key.key_value),
-        });
-      } catch (ledgerError) {
-        console.error("[Reseller API] Balance/order ledger update failed:", ledgerError.message);
-      }
-    }
-
-    return res.json({
-      success: true,
-      order_number: orderNumber,
-      product_slug: selection.inventorySlug,
-      product_name: selection.name,
-      quantity,
-      license_key: assignedKeys[0]?.key_value || null,
-      license_keys: assignedKeys.map((key) => key.key_value),
-      amount_cents: chargeAmountCents,
-      fulfilled_at: assignedAt,
-    });
+    const result = await performResellerPurchase(reseller, selection, quantity);
+    return res.json(result);
   } catch (error) {
-    return res.status(500).json({
+    return res.status(500).json({ success: false, error: "Unable to complete reseller API order." });
+  }
+});
+
+/* ── Look up the signed-in site member's approved reseller row, or throw. ── */
+async function getApprovedResellerForMember(member) {
+  if (!supabaseAdmin) {
+    throw Object.assign(new Error("Reseller program is not configured."), { status: 500 });
+  }
+  const { data: reseller, error } = await supabaseAdmin
+    .from("resellers")
+    .select("id, discord_id, status, tier, discount_percent, balance_cents, lifetime_purchased_cents")
+    .eq("user_id", member.id)
+    .eq("status", "approved")
+    .maybeSingle();
+  if (error || !reseller) {
+    throw Object.assign(new Error("You are not an approved reseller."), { status: 403 });
+  }
+  return reseller;
+}
+
+/* ── Website reseller panel: catalog + your pricing (session auth) ── */
+app.get("/api/reseller/catalog", async (req, res) => {
+  try {
+    const member = await getAuthenticatedUser(req, res);
+    const reseller = await getApprovedResellerForMember(member);
+    return res.json({ success: true, ...buildResellerCatalog(reseller) });
+  } catch (error) {
+    return res.status(error.status || 500).json({
       success: false,
-      error: "Unable to complete reseller API order.",
+      error: error instanceof Error ? error.message : "Unable to load your reseller catalog.",
+    });
+  }
+});
+
+/* ── Website reseller panel: buy a product with reseller balance (session auth) ── */
+app.post("/api/reseller/purchase", async (req, res) => {
+  try {
+    const member = await getAuthenticatedUser(req, res);
+    const reseller = await getApprovedResellerForMember(member);
+
+    const selection = getResellerProductSelection(req.body);
+    const quantity = normalizeApiQuantity(req.body?.quantity);
+
+    if (!selection) {
+      return res.status(404).json({ success: false, error: "Product variant not found." });
+    }
+    if (!isCatalogProductAvailable(selection.product)) {
+      return res.status(409).json({ success: false, error: "This product is currently unavailable." });
+    }
+
+    const result = await performResellerPurchase(reseller, selection, quantity);
+    return res.json(result);
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Unable to complete your purchase.",
+    });
+  }
+});
+
+function normalizeResellerTopupAmount(raw) {
+  const cents = Math.round(Number(raw));
+  if (!Number.isFinite(cents) || cents < 500 || cents > 200_000) {
+    return null;
+  }
+  return cents;
+}
+
+/* ── Website reseller panel: add funds to reseller balance via Stripe ── */
+app.post("/api/reseller/topup/create-session", async (req, res) => {
+  if (!stripe) {
+    return res.status(500).json({ error: "Stripe is not configured yet." });
+  }
+  try {
+    const member = await getAuthenticatedUser(req, res);
+    const reseller = await getApprovedResellerForMember(member);
+
+    const amountCents = normalizeResellerTopupAmount(req.body?.amountCents);
+    if (!amountCents) {
+      return res.status(400).json({ error: "Enter an amount between $5 and $2,000." });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      line_items: [{
+        price_data: {
+          currency: "usd",
+          unit_amount: amountCents,
+          product_data: { name: "XenCheats reseller balance top-up" },
+        },
+        quantity: 1,
+      }],
+      customer_email: member.email || undefined,
+      payment_intent_data: {
+        receipt_email: member.email || undefined,
+      },
+      success_url: `${baseUrl}/reseller/?topup=success`,
+      cancel_url: `${baseUrl}/reseller/?topup=cancel`,
+      metadata: {
+        type: "reseller_topup",
+        resellerId: reseller.id,
+        amountCents: String(amountCents),
+      },
+    });
+
+    return res.json({ url: session.url });
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error instanceof Error ? error.message : "Unable to start the top-up.",
     });
   }
 });
