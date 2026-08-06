@@ -83,9 +83,10 @@ const discordResellerApplicationsChannelId =
    now, don't need much profit"), but RESELLER_MIN_MARGIN_CENTS below still
    stops any single sale from going below wholesale cost + Stripe fee. */
 const RESELLER_TOPUP_TIERS = [
-  { tier: "gold", minTopupCents: 50_000, discountPercent: 35 },
-  { tier: "silver", minTopupCents: 25_000, discountPercent: 30 },
-  { tier: "new", minTopupCents: 0, discountPercent: 25 },
+  { tier: "gold", minTopupCents: 20_000, discountPercent: 30 },
+  { tier: "silver", minTopupCents: 10_000, discountPercent: 25 },
+  { tier: "bronze", minTopupCents: 5_000, discountPercent: 15 },
+  { tier: "new", minTopupCents: 0, discountPercent: 0 },
 ];
 const RESELLER_MIN_MARGIN_CENTS = 5; // absolute floor above wholesale+fee
 function resellerTierForTopup(topupCents) {
@@ -8582,7 +8583,7 @@ ${rows || '<div class="ct">No messages.</div>'}
             .update({
               status: "approved",
               tier: "new",
-              discount_percent: 25,
+              discount_percent: 0,
               api_key_hash: hashToken(rawApiKey),
               api_key_last4: rawApiKey.slice(-4),
               approved_at: new Date().toISOString(),
@@ -8606,7 +8607,7 @@ ${rows || '<div class="ct">No messages.</div>'}
             reseller.discord_id,
             `🎉 Your XenCheats reseller application was approved!\n\n` +
             `**Your API key (save this now — it will not be shown again):**\n\`${rawApiKey}\`\n\n` +
-            `You start at the **New** tier — 25% off catalog prices, moving up automatically as your purchase volume grows (30% off at $200+/mo, 35% off at $500+/mo).\n\n` +
+            `Your discount is set by how much you top up in total: $50+ gets you 15% off, $100+ gets 25% off, $200+ gets 30% off — it locks in and stays until you cross the next tier.\n\n` +
             `Manage your account, see your balance, and read the API docs at ${(process.env.PUBLIC_SITE_URL || "https://xencheats.wtf").replace(/\/+$/, "")}/reseller`,
           ).catch(() => {});
 
@@ -14104,7 +14105,9 @@ async function performResellerPurchase(reseller, selection, quantity) {
   let chargeAmountCents = listAmountCents;
   if (reseller) {
     const wholesaleCents = getWholesaleCostCents(selection.inventorySlug) * quantity;
-    const discountPercent = reseller.discount_percent || 25;
+    // Nullish (not ||) — a reseller's genuine 0% "New" tier must not be
+    // silently overridden by the legacy 25% default.
+    const discountPercent = reseller.discount_percent ?? 25;
     const discounted = Math.round(listAmountCents * (1 - discountPercent / 100));
     const floor = wholesaleCents + getStripeFees(listAmountCents) + RESELLER_MIN_MARGIN_CENTS;
     chargeAmountCents = Math.max(discounted, Math.min(floor, listAmountCents));

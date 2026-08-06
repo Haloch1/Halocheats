@@ -110,7 +110,7 @@ function renderProgress(reseller) {
     progressWrap.hidden = reseller?.tier !== "gold";
     if (reseller?.tier === "gold") {
       progressFill.style.width = "100%";
-      progressLabel.textContent = "You're at the top tier — 35% off, as good as it gets.";
+      progressLabel.textContent = `You're at the top tier — ${reseller.discount_percent}% off, as good as it gets.`;
     }
     return;
   }
