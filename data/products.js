@@ -406,7 +406,7 @@ const productCatalog = [
     ],
     variants: [
       keyVariant("fortnite-arcane", "day", "1 Day Key", 700),
-      unavailableVariant("fortnite-arcane", "three-day", "3 Day Key", 0),
+      unavailableVariant("fortnite-arcane", "three-day", "3 Day Key", 1800),
       keyVariant("fortnite-arcane", "week", "7 Day Key", 3500),
       keyVariant("fortnite-arcane", "month", "30 Day Key", 6000),
     ],
@@ -899,7 +899,7 @@ const productCatalog = [
     badge: "Undetected",
     slug: "cs2-predator",
     name: "CS2 - Predator",
-    priceDisplay: `From ${money(150)}`,
+    priceDisplay: `From ${money(195)}`,
     summary:
       "Private Counter-Strike 2 cheat covering a fully configurable aimbot, pSilent aim, triggerbot, informative ESP, an inventory changer for skins/gloves/agents, and world settings like night mode, C4 timer, and grenade helpers.",
     features: ["Aimbot", "pSilent aim", "Triggerbot", "Player & item ESP", "Inventory changer"],
@@ -922,7 +922,7 @@ const productCatalog = [
       "Full-screen mode: not supported (windowed/borderless only)",
     ],
     variants: [
-      keyVariant("cs2-predator", "day", "1 Day Key", 150),
+      keyVariant("cs2-predator", "day", "1 Day Key", 195),
       keyVariant("cs2-predator", "week", "7 Day Key", 350),
       keyVariant("cs2-predator", "month", "30 Day Key", 590),
       keyVariant("cs2-predator", "three-month", "90 Day Key", 1360),
@@ -933,7 +933,7 @@ const productCatalog = [
     badge: "Undetected",
     slug: "cs2-arcane",
     name: "CS2 - Arcane Cheat",
-    priceDisplay: `From ${money(150)}`,
+    priceDisplay: `From ${money(195)}`,
     summary:
       "Full-featured Counter-Strike 2 package covering a configurable aimbot, 2D/3D player ESP, world item ESP, triggerbot, sniper scope styles, and an internal radar.",
     features: ["Configurable aimbot", "Player & item ESP", "Triggerbot", "Radar"],
@@ -956,7 +956,7 @@ const productCatalog = [
       "Stream-Proof: No",
     ],
     variants: [
-      keyVariant("cs2-arcane", "day", "1 Day Key", 150),
+      keyVariant("cs2-arcane", "day", "1 Day Key", 195),
       keyVariant("cs2-arcane", "fifteen-day", "15 Day Key", 300),
       keyVariant("cs2-arcane", "month", "30 Day Key", 450),
     ],
@@ -966,7 +966,7 @@ const productCatalog = [
     badge: "Undetected",
     slug: "cs2-strikeforce",
     name: "CS2 - Strikeforce",
-    priceDisplay: `From ${money(60)}`,
+    priceDisplay: `From ${money(130)}`,
     summary:
       "Counter-Strike 2 aimbot and wallhack with full recoil control, world ESP for bombs and drops, and a night mode radar setup.",
     features: ["Aimbot with RCS", "Player & world ESP", "Radar"],
@@ -989,8 +989,8 @@ const productCatalog = [
       "Flashdrive required: Yes",
     ],
     variants: [
-      keyVariant("cs2-strikeforce", "day", "1 Day Key", 60),
-      keyVariant("cs2-strikeforce", "week", "7 Day Key", 180),
+      keyVariant("cs2-strikeforce", "day", "1 Day Key", 130),
+      keyVariant("cs2-strikeforce", "week", "7 Day Key", 215),
       keyVariant("cs2-strikeforce", "month", "30 Day Key", 360),
     ],
   },
@@ -999,7 +999,7 @@ const productCatalog = [
     badge: "Undetected",
     slug: "cs2-skinchanger",
     name: "CS2 - Skinchanger",
-    priceDisplay: `From ${money(125)}`,
+    priceDisplay: `From ${money(175)}`,
     summary:
       "Unlock any weapon, knife, or glove skin in Counter-Strike 2, with full control over wear, pattern, StarTrak, and custom item names.",
     features: ["Weapon/knife/glove changer", "Skin search & rarity filters", "Wear, pattern & StarTrak control"],
@@ -1020,7 +1020,7 @@ const productCatalog = [
       "Full-screen mode: not supported (windowed/borderless only)",
     ],
     variants: [
-      keyVariant("cs2-skinchanger", "day", "1 Day Key", 125),
+      keyVariant("cs2-skinchanger", "day", "1 Day Key", 175),
       keyVariant("cs2-skinchanger", "week", "7 Day Key", 300),
       keyVariant("cs2-skinchanger", "month", "30 Day Key", 600),
     ],
@@ -1064,7 +1064,7 @@ const productCatalog = [
     badge: "Undetected",
     slug: "pubg-shadow",
     name: "PUBG - Shadow",
-    priceDisplay: `From ${money(190)}`,
+    priceDisplay: `From ${money(220)}`,
     summary:
       "Full PUBG package covering player ESP, vehicle & airdrop tracking, loot detection, and a mini-map radar, with a free HWID spoofer included.",
     features: ["Player ESP", "Vehicle & airdrop ESP", "Loot ESP", "Radar"],
@@ -1085,7 +1085,7 @@ const productCatalog = [
       "Full-screen mode: not supported (windowed/borderless only)",
     ],
     variants: [
-      keyVariant("pubg-shadow", "day", "1 Day Key", 190),
+      keyVariant("pubg-shadow", "day", "1 Day Key", 220),
       keyVariant("pubg-shadow", "week", "7 Day Key", 760),
       keyVariant("pubg-shadow", "month", "30 Day Key", 1520),
     ],
@@ -1562,7 +1562,7 @@ const productCatalog = [
       "Full-screen mode: not supported (windowed/borderless only)",
     ],
     variants: [
-      unavailableVariant("eft-sugar", "day", "1 Day Key", 0),
+      unavailableVariant("eft-sugar", "day", "1 Day Key", 1400),
       keyVariant("eft-sugar", "week", "7 Day Key", 5120),
       keyVariant("eft-sugar", "month", "30 Day Key", 10230),
     ],
@@ -1687,7 +1687,7 @@ const productCatalog = [
     ...spooferMeta,
     slug: "spoofer-shadow",
     name: "Spoofer - Shadow",
-    priceDisplay: `From ${money(160)}`,
+    priceDisplay: `From ${money(200)}`,
     summary:
       "Lightweight, regularly updated temp HWID spoofer that works with EAC and BattleEye. Fast and easy to use across multiple games.",
     features: ["EAC & BattleEye support", "Lightweight", "Multi-game"],
@@ -1705,7 +1705,7 @@ const productCatalog = [
       "OS: Windows 10, Windows 11 (21H2, 22H2, 23H2, 24H2, 25H2)",
     ],
     variants: [
-      keyVariant("spoofer-shadow", "day", "1 Day Key", 160),
+      keyVariant("spoofer-shadow", "day", "1 Day Key", 200),
       keyVariant("spoofer-shadow", "week", "7 Day Key", 740),
       keyVariant("spoofer-shadow", "month", "30 Day Key", 1360),
     ],
