@@ -448,7 +448,6 @@ const discordMediaRoleId = process.env.DISCORD_MEDIA_ROLE_ID || "";
 const discordMediaManagerRoleId = process.env.DISCORD_MEDIA_MANAGER_ROLE_ID || "";
 const discordMediaCategoryId = process.env.DISCORD_MEDIA_CATEGORY_ID || "";
 const discordMediaReviewChannelId = process.env.DISCORD_MEDIA_REVIEW_CHANNEL_ID || "";
-const discordMediaContentFeedChannelId = process.env.DISCORD_MEDIA_CONTENT_FEED_CHANNEL_ID || "";
 const MEDIA_BRAND_NAME = "XenCheats";
 const MEDIA_BASE_HASHTAGS = ["#fyp", "#gaming", "#games", "#gam"];
 const OWNER_ID = "1327675126338293921";
@@ -463,6 +462,10 @@ const discordStaffGuideChannelId = process.env.DISCORD_STAFF_GUIDE_CHANNEL_ID ||
 const discordStatusSourceChannelId = process.env.DISCORD_STATUS_SOURCE_CHANNEL_ID || "1531112552891813949";
 const discordStatusTargetChannelId = process.env.DISCORD_STATUS_TARGET_CHANNEL_ID || "1531148640481972284";
 const pendingSchedules = new Map(); // id -> { timer, title, postAt }
+// messageId -> { videoUrl, authorId, authorUsername, createdAt } — a video
+// detected in someone's personal media channel, waiting on them to click
+// "Submit for review" and fill in the rest. Pruned as it grows.
+const mediaQuickSubmitCandidates = new Map();
 const slashCooldownByUser = new Map(); // `${command}:${userId}` -> ts of last use
 const ticketQueueAlertByChannel = new Map(); // channelId -> { key: last alerted customer message id, at: timestamp of that alert }
 const discordAiUsageByUser = new Map(); // userId -> { day, count, lastAt }
@@ -3298,7 +3301,8 @@ async function ensureMediaChannel(guild, discordUser, member) {
       `• Report every video you publish.\n` +
       `• Contact employees or media managers if you need help.\n\n` +
       `Stay active and follow the rules of every social-media platform you use.\n\n` +
-      `Use \`/submit-media\` in this channel to submit a video.`,
+      `**To submit a video:** just post it right here in this channel (upload the file or drop a link) and click ` +
+      `**Submit for review** when the bot prompts you — or use \`/submit-media\` directly if you'd rather fill everything in at once.`,
   });
   await welcome.pin().catch(() => {});
   return channel;
@@ -3385,13 +3389,6 @@ async function distributeMediaContent(content) {
     components: [{ type: 2, style: 1, label, customId: `media_posted:${content.id}`, emoji: { name: "📤" } }],
   }]);
 
-  if (discordMediaContentFeedChannelId) {
-    const feedChannel = await discordBot.channels.fetch(discordMediaContentFeedChannelId).catch(() => null);
-    if (feedChannel) {
-      await feedChannel.send({ embeds: [embed] }).catch((err) => console.error("[Media Network] Feed post failed:", err.message));
-    }
-  }
-
   if (supabaseAdmin) {
     const { data: members } = await supabaseAdmin
       .from("media_members")
@@ -3413,6 +3410,51 @@ async function distributeMediaContent(content) {
   if (supabaseAdmin) {
     await supabaseAdmin.from("media_content").update({ distributed_at: new Date().toISOString() }).eq("id", content.id);
   }
+}
+
+/* Shared by /submit-media and the auto-detected "post a video directly in
+   your channel" quick-submit flow — inserts the row, generates the
+   MEDIA-xxxx Content ID, and posts it to the review channel. */
+async function submitMediaForReview({ submitterId, submitterUsername, videoUrl, game, caption, creator, redistributable, campaign, notes }) {
+  const { data: inserted, error: insertError } = await supabaseAdmin
+    .from("media_content")
+    .insert({
+      submitter_discord_id: submitterId,
+      submitter_username: submitterUsername,
+      video_url: videoUrl || null,
+      game,
+      caption,
+      hashtags: mediaHashtagsFor(game),
+      creator_credit: creator,
+      campaign: campaign || null,
+      notes: notes || null,
+      redistributable,
+      status: "pending",
+    })
+    .select("*")
+    .single();
+  if (insertError) throw insertError;
+
+  const contentId = `MEDIA-${String(inserted.id).padStart(4, "0")}`;
+  const { data: content } = await supabaseAdmin
+    .from("media_content")
+    .update({ content_id: contentId })
+    .eq("id", inserted.id)
+    .select("*")
+    .single();
+
+  if (discordMediaReviewChannelId && discordBot) {
+    const reviewChannel = await discordBot.channels.fetch(discordMediaReviewChannelId).catch(() => null);
+    if (reviewChannel) {
+      const message = await reviewChannel.send({
+        embeds: [buildMediaContentEmbed(content, { forReview: true })],
+        components: mediaReviewButtons(content.id),
+      });
+      await supabaseAdmin.from("media_content").update({ review_channel_message_id: message.id }).eq("id", content.id);
+    }
+  }
+
+  return content;
 }
 
 /* Shared by the "I Posted This" modal and the /report-post backup command.
@@ -3958,6 +4000,53 @@ if (isConfiguredValue(discordBotToken)) {
       }
     } catch (err) {
       console.error("[Media Network] guildMemberUpdate error:", err.message);
+    }
+  });
+
+  /* ── Media Network: detect a video posted directly in a member's own
+     personal channel and offer a one-click "Submit for review" instead of
+     requiring /submit-media. Still goes through the same review/approval
+     pipeline — this only saves them re-typing the video link/attachment. ── */
+  discordBot.on("messageCreate", async (message) => {
+    if (message.author.bot || !supabaseAdmin) return;
+    if (!discordMediaReviewChannelId) return; // media network not configured yet
+
+    const videoAttachment = message.attachments.find((a) => a.contentType?.startsWith("video/"));
+    const linkMatch = message.content.match(/https?:\/\/\S+/);
+    const videoUrl = videoAttachment?.url || linkMatch?.[0] || null;
+    if (!videoUrl) return;
+
+    try {
+      const { data: member } = await supabaseAdmin
+        .from("media_members")
+        .select("discord_id, status")
+        .eq("channel_id", message.channel.id)
+        .eq("discord_id", message.author.id)
+        .maybeSingle();
+      if (!member || member.status !== "active") return; // not this channel's own active media member
+
+      if (mediaQuickSubmitCandidates.size > 500) {
+        const cutoff = Date.now() - 2 * 60 * 60 * 1000;
+        for (const [key, value] of mediaQuickSubmitCandidates) {
+          if (value.createdAt < cutoff) mediaQuickSubmitCandidates.delete(key);
+        }
+      }
+      mediaQuickSubmitCandidates.set(message.id, {
+        videoUrl,
+        authorId: message.author.id,
+        authorUsername: message.author.username,
+        createdAt: Date.now(),
+      });
+
+      await message.reply({
+        embeds: [{ description: "Looks like a video! Click below to submit it for review.", color: 0x7c3aed }],
+        components: [{
+          type: 1,
+          components: [{ type: 2, style: 1, label: "Submit for review", customId: `media_quick_submit:${message.id}`, emoji: { name: "📤" } }],
+        }],
+      });
+    } catch (err) {
+      console.error("[Media Network] Quick-submit detection error:", err.message);
     }
   });
 
@@ -6012,44 +6101,20 @@ ${rows || '<div class="ct">No messages.</div>'}
 
       await interaction.deferReply({ ephemeral: true });
       try {
-        const { data: inserted, error: insertError } = await supabaseAdmin
-          .from("media_content")
-          .insert({
-            submitter_discord_id: interaction.user.id,
-            submitter_username: interaction.user.username,
-            video_url: videoAttachment?.url || videoLink || null,
-            game,
-            caption,
-            hashtags: mediaHashtagsFor(game),
-            creator_credit: creator,
-            campaign,
-            notes,
-            redistributable,
-            status: "pending",
-          })
-          .select("*")
-          .single();
-        if (insertError) throw insertError;
-
-        const contentId = `MEDIA-${String(inserted.id).padStart(4, "0")}`;
-        const { data: content } = await supabaseAdmin
-          .from("media_content")
-          .update({ content_id: contentId })
-          .eq("id", inserted.id)
-          .select("*")
-          .single();
-
-        const reviewChannel = await discordBot.channels.fetch(discordMediaReviewChannelId).catch(() => null);
-        if (reviewChannel) {
-          const message = await reviewChannel.send({
-            embeds: [buildMediaContentEmbed(content, { forReview: true })],
-            components: mediaReviewButtons(content.id),
-          });
-          await supabaseAdmin.from("media_content").update({ review_channel_message_id: message.id }).eq("id", content.id);
-        }
+        const content = await submitMediaForReview({
+          submitterId: interaction.user.id,
+          submitterUsername: interaction.user.username,
+          videoUrl: videoAttachment?.url || videoLink || null,
+          game,
+          caption,
+          creator,
+          redistributable,
+          campaign,
+          notes,
+        });
 
         return interaction.editReply({
-          embeds: [{ description: `Submitted for review — your Content ID is \`${contentId}\`. You'll be notified once it's reviewed.`, color: 0x22c55e }],
+          embeds: [{ description: `Submitted for review — your Content ID is \`${content.content_id}\`. You'll be notified once it's reviewed.`, color: 0x22c55e }],
         });
       } catch (error) {
         console.error("[Discord /submit-media]", error.message);
@@ -6573,7 +6638,7 @@ ${rows || '<div class="ct">No messages.</div>'}
           description: `Approved media members get a private channel to submit and receive promotional videos for ${MEDIA_BRAND_NAME}.`,
           fields: [
             { name: "Submitting a video", value: "Use `/submit-media` in your personal media channel.", inline: false },
-            { name: "Getting approved videos", value: "Approved videos are posted to your personal channel and the shared `media-content-feed` channel.", inline: false },
+            { name: "Getting approved videos", value: "Approved videos are posted directly to your personal channel.", inline: false },
             { name: "Reporting a repost", value: "Click **I Posted This** on the video, or use `/report-post` as a backup.", inline: false },
             { name: "Required hashtags", value: MEDIA_BASE_HASHTAGS.join(" ") + " #{game}", inline: false },
             { name: "Useful commands", value: "`/media-profile` `/media-stats` `/media-members` `/media-content` `/media-leaderboard` `/media-campaign` `/media-posts`", inline: false },
@@ -6581,6 +6646,63 @@ ${rows || '<div class="ct">No messages.</div>'}
         }],
         ephemeral: true,
       });
+    }
+
+    /* ── Quick-submit button: turns a video posted directly in someone's
+       personal channel into a real submission without needing /submit-media ── */
+    if (interaction.isButton?.() && interaction.customId.startsWith("media_quick_submit:")) {
+      const messageId = interaction.customId.split(":")[1];
+      const candidate = mediaQuickSubmitCandidates.get(messageId);
+      if (!candidate) {
+        return interaction.reply({ embeds: [{ description: "This submission prompt expired — post the video again, or use `/submit-media` directly.", color: 0xff4444 }], ephemeral: true });
+      }
+      if (interaction.user.id !== candidate.authorId && !isMediaReviewerInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Only the person who posted this can submit it.", color: 0xff4444 }], ephemeral: true });
+      }
+      const modal = new ModalBuilder().setCustomId(`media_quick_submit_modal:${messageId}`).setTitle("Submit this video");
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("game").setLabel("Game").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(100)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("caption").setLabel("Suggested caption").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(900)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("creator").setLabel("Original creator credit").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(120)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("redistributable").setLabel("Can this be redistributed? (yes/no)").setStyle(TextInputStyle.Short).setRequired(true).setValue("yes").setMaxLength(3)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("campaign").setLabel("Campaign (optional)").setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(120)),
+      );
+      return interaction.showModal(modal);
+    }
+
+    if (interaction.isModalSubmit?.() && interaction.customId.startsWith("media_quick_submit_modal:")) {
+      const messageId = interaction.customId.split(":")[1];
+      const candidate = mediaQuickSubmitCandidates.get(messageId);
+      if (!candidate) {
+        return interaction.reply({ embeds: [{ description: "This submission prompt expired — post the video again, or use `/submit-media` directly.", color: 0xff4444 }], ephemeral: true });
+      }
+
+      const game = trimField(interaction.fields.getTextInputValue("game"), 100);
+      const caption = trimField(interaction.fields.getTextInputValue("caption"), 900);
+      const creator = trimField(interaction.fields.getTextInputValue("creator"), 120);
+      const redistributable = interaction.fields.getTextInputValue("redistributable").trim().toLowerCase().startsWith("y");
+      const campaign = trimField(interaction.fields.getTextInputValue("campaign") || "", 120) || null;
+
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const content = await submitMediaForReview({
+          submitterId: candidate.authorId,
+          submitterUsername: candidate.authorUsername,
+          videoUrl: candidate.videoUrl,
+          game,
+          caption,
+          creator,
+          redistributable,
+          campaign,
+        });
+        mediaQuickSubmitCandidates.delete(messageId);
+        return interaction.editReply({
+          embeds: [{ description: `Submitted for review — your Content ID is \`${content.content_id}\`. You'll be notified once it's reviewed.`, color: 0x22c55e }],
+        });
+      } catch (error) {
+        console.error("[Media quick submit modal]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong submitting your video. Try again in a moment.", color: 0xff4444 }] });
+      }
     }
 
     // ── DIAGNOSTIC: /pingtest posts a button; clicking it should reply
