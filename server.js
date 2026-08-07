@@ -449,7 +449,8 @@ const discordMediaManagerRoleId = process.env.DISCORD_MEDIA_MANAGER_ROLE_ID || "
 const discordMediaCategoryId = process.env.DISCORD_MEDIA_CATEGORY_ID || "";
 const discordMediaReviewChannelId = process.env.DISCORD_MEDIA_REVIEW_CHANNEL_ID || "";
 const MEDIA_BRAND_NAME = "XenCheats";
-const MEDIA_BASE_HASHTAGS = ["#fyp", "#gaming", "#games", "#gam"];
+const MEDIA_BASE_HASHTAGS = ["#cheats", "#hack", "#game"];
+const MEDIA_TRAILING_HASHTAG = "#fyp";
 const OWNER_ID = "1327675126338293921";
 const BOT_ADMINS = [OWNER_ID, "1191199172448239639", "1517857266936709141"]; // madebyedits
 const OWNER_ONLY_COMMANDS = new Set([
@@ -510,11 +511,11 @@ function isMediaMember(member) {
 
 function mediaHashtagFor(game) {
   const slug = String(game || "").replace(/[^a-zA-Z0-9]/g, "");
-  return slug ? `#${slug}` : "#gaming";
+  return slug ? `#${slug}` : "#game";
 }
 
 function mediaHashtagsFor(game) {
-  return [...MEDIA_BASE_HASHTAGS, mediaHashtagFor(game)];
+  return [...MEDIA_BASE_HASHTAGS, mediaHashtagFor(game), MEDIA_TRAILING_HASHTAG];
 }
 
 function isDiscordOwnerInteraction(interaction) {
@@ -3286,19 +3287,12 @@ async function ensureMediaChannel(guild, discordUser, member) {
 
   const welcome = await channel.send({
     content:
-      `Welcome, ${discordUser}! 👋\n` +
-      `This is your personal media channel for ${MEDIA_BRAND_NAME}.\n\n` +
-      `Use this channel to:\n` +
-      `• Upload promotional videos you create.\n` +
-      `• Receive approved videos from other media members.\n` +
-      `• Download approved videos and post them on your social-media accounts.\n` +
-      `• Repost as many approved videos as you reasonably can.\n` +
+      `Welcome, ${discordUser}! 👋 This is your personal media channel for ${MEDIA_BRAND_NAME}.\n\n` +
+      `**Rules:**\n` +
+      `• Post every video you make here in your channel, and post it on Discord too.\n` +
       `• Use the provided captions, credits, and hashtags.\n` +
-      `• Report every video you publish.\n` +
-      `• Contact employees or media managers if you need help.\n\n` +
-      `Stay active and follow the rules of every social-media platform you use.\n\n` +
-      `**To submit a video:** just post it right here in this channel (upload the file or drop a link) — it's ` +
-      `sent for review automatically, no button to click. Or use \`/submit-media\` directly if you'd rather fill in the game/caption/creator yourself.`,
+      `• Report every video you post.\n\n` +
+      `**To submit:** just post the video here (file or link) — it goes to review automatically, no button needed.`,
   });
   await welcome.pin().catch(() => {});
   return channel;
@@ -6634,7 +6628,7 @@ ${rows || '<div class="ct">No messages.</div>'}
             { name: "Submitting a video", value: "Use `/submit-media` in your personal media channel.", inline: false },
             { name: "Getting approved videos", value: "Approved videos are posted directly to your personal channel.", inline: false },
             { name: "Reporting a repost", value: "Click **I Posted This** on the video, or use `/report-post` as a backup.", inline: false },
-            { name: "Required hashtags", value: MEDIA_BASE_HASHTAGS.join(" ") + " #{game}", inline: false },
+            { name: "Required hashtags", value: [...MEDIA_BASE_HASHTAGS, "#{game}", MEDIA_TRAILING_HASHTAG].join(" "), inline: false },
             { name: "Useful commands", value: "`/media-profile` `/media-stats` `/media-members` `/media-content` `/media-leaderboard` `/media-campaign` `/media-posts`", inline: false },
           ],
         }],
