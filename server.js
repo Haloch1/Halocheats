@@ -440,6 +440,17 @@ const discordTicketAiMaxReplies = Math.max(250, Number(process.env.DISCORD_TICKE
 const discordRepeatBuyerRoleId = process.env.DISCORD_REPEAT_BUYER_ROLE_ID || "";
 /* Role granted to approved resellers */
 const discordResellerRoleId = process.env.DISCORD_RESELLER_ROLE_ID || "";
+/* ── Media Network ──
+   Role granted to approved content creators; automatically gets them a
+   private personal channel (see guildMemberUpdate below). Media managers
+   review/approve/distribute content alongside employees and admins. */
+const discordMediaRoleId = process.env.DISCORD_MEDIA_ROLE_ID || "";
+const discordMediaManagerRoleId = process.env.DISCORD_MEDIA_MANAGER_ROLE_ID || "";
+const discordMediaCategoryId = process.env.DISCORD_MEDIA_CATEGORY_ID || "";
+const discordMediaReviewChannelId = process.env.DISCORD_MEDIA_REVIEW_CHANNEL_ID || "";
+const discordMediaContentFeedChannelId = process.env.DISCORD_MEDIA_CONTENT_FEED_CHANNEL_ID || "";
+const MEDIA_BRAND_NAME = "XenCheats";
+const MEDIA_BASE_HASHTAGS = ["#fyp", "#gaming", "#games", "#gam"];
 const OWNER_ID = "1327675126338293921";
 const BOT_ADMINS = [OWNER_ID, "1191199172448239639", "1517857266936709141"]; // madebyedits
 const OWNER_ONLY_COMMANDS = new Set([
@@ -480,12 +491,47 @@ function isDiscordStaff(userId, member) {
   return isDiscordAdmin(userId, member) || hasDiscordRole(member, discordEmployeeRoleId);
 }
 
+/* Media Network permission tiers. Media managers sit alongside employees for
+   review purposes but are a distinct role from Employee (a media manager
+   isn't necessarily general support staff, and vice versa). */
+function isDiscordMediaManager(userId, member) {
+  return isDiscordAdmin(userId, member) || hasDiscordRole(member, discordMediaManagerRoleId);
+}
+
+/* Anyone allowed to review submitted content / reported post links:
+   employees, media managers, and admins (owner/admin already covered by
+   isDiscordAdmin inside both branches). */
+function isMediaReviewer(userId, member) {
+  return isDiscordStaff(userId, member) || isDiscordMediaManager(userId, member);
+}
+
+function isMediaMember(member) {
+  return hasDiscordRole(member, discordMediaRoleId);
+}
+
+function mediaHashtagFor(game) {
+  const slug = String(game || "").replace(/[^a-zA-Z0-9]/g, "");
+  return slug ? `#${slug}` : "#gaming";
+}
+
+function mediaHashtagsFor(game) {
+  return [...MEDIA_BASE_HASHTAGS, mediaHashtagFor(game)];
+}
+
 function isDiscordOwnerInteraction(interaction) {
   return isDiscordOwner(interaction.user.id, interaction.member);
 }
 
 function isDiscordAdminInteraction(interaction) {
   return isDiscordAdmin(interaction.user.id, interaction.member);
+}
+
+function isMediaReviewerInteraction(interaction) {
+  return isMediaReviewer(interaction.user.id, interaction.member);
+}
+
+function isDiscordMediaManagerInteraction(interaction) {
+  return isDiscordMediaManager(interaction.user.id, interaction.member);
 }
 
 /* Authoritative Discord ID lookup. discord_id is mirrored into app_metadata,
@@ -3154,6 +3200,291 @@ async function submitResellerApplication({ discordId, discordTag, userId, websit
   return row;
 }
 
+/* ── Media Network: personal channel automation ──
+   Triggered from guildMemberUpdate when the Media role is added/removed, and
+   also callable from /media-status when staff manually flip someone to
+   "removed"/"active" without touching the actual Discord role. */
+function mediaChannelNameFor(username) {
+  const safe = String(username || "member").toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  return `media-${safe || "member"}`.slice(0, 90);
+}
+
+async function ensureMediaChannel(guild, discordUser, member) {
+  if (!supabaseAdmin || !guild) return null;
+  const { data: existing, error: fetchError } = await supabaseAdmin
+    .from("media_members")
+    .select("*")
+    .eq("discord_id", discordUser.id)
+    .maybeSingle();
+  if (fetchError) throw fetchError;
+
+  const staffOverwrites = [discordEmployeeRoleId, discordMediaManagerRoleId, discordAdminRoleId, discordOwnerRoleId]
+    .filter(Boolean)
+    .map((roleId) => ({
+      id: roleId,
+      allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles],
+    }));
+  const memberOverwrite = {
+    id: discordUser.id,
+    allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles],
+  };
+  const botOverwrite = discordBot?.user
+    ? [{ id: discordBot.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ReadMessageHistory] }]
+    : [];
+  const permissionOverwrites = [
+    { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+    memberOverwrite,
+    ...botOverwrite,
+    ...staffOverwrites,
+  ];
+
+  // Restore path: a previously-archived channel already exists — unlock it
+  // instead of creating a new one.
+  if (existing?.channel_id) {
+    const channel = await guild.channels.fetch(existing.channel_id).catch(() => null);
+    if (channel) {
+      await channel.permissionOverwrites.set(permissionOverwrites).catch(() => {});
+      const properName = mediaChannelNameFor(discordUser.username);
+      if (channel.name !== properName) {
+        await channel.setName(properName).catch(() => {});
+      }
+      await supabaseAdmin
+        .from("media_members")
+        .update({ status: "active", username: discordUser.username, updated_at: new Date().toISOString(), status_reason: null })
+        .eq("id", existing.id);
+      if (existing.status === "removed") {
+        await channel.send({
+          embeds: [{ description: `Welcome back, ${discordUser}! Your media channel and history have been restored.`, color: 0x22c55e }],
+        }).catch(() => {});
+      }
+      return channel;
+    }
+    // Row pointed at a channel that no longer exists (deleted manually) — fall
+    // through and create a fresh one, keeping the same member row.
+  }
+
+  const channel = await guild.channels.create({
+    name: mediaChannelNameFor(discordUser.username),
+    type: ChannelType.GuildText,
+    parent: discordMediaCategoryId || undefined,
+    topic: `Personal media channel for ${discordUser.tag} (${discordUser.id})`,
+    permissionOverwrites,
+  });
+
+  if (existing) {
+    await supabaseAdmin
+      .from("media_members")
+      .update({ channel_id: channel.id, status: "active", username: discordUser.username, updated_at: new Date().toISOString(), status_reason: null })
+      .eq("id", existing.id);
+  } else {
+    await supabaseAdmin.from("media_members").insert({
+      discord_id: discordUser.id,
+      username: discordUser.username,
+      channel_id: channel.id,
+      status: "active",
+    });
+  }
+
+  const welcome = await channel.send({
+    content:
+      `Welcome, ${discordUser}! 👋\n` +
+      `This is your personal media channel for ${MEDIA_BRAND_NAME}.\n\n` +
+      `Use this channel to:\n` +
+      `• Upload promotional videos you create.\n` +
+      `• Receive approved videos from other media members.\n` +
+      `• Download approved videos and post them on your social-media accounts.\n` +
+      `• Repost as many approved videos as you reasonably can.\n` +
+      `• Use the provided captions, credits, and hashtags.\n` +
+      `• Report every video you publish.\n` +
+      `• Contact employees or media managers if you need help.\n\n` +
+      `Stay active and follow the rules of every social-media platform you use.\n\n` +
+      `Use \`/submit-media\` in this channel to submit a video.`,
+  });
+  await welcome.pin().catch(() => {});
+  return channel;
+}
+
+async function archiveMediaChannel(guild, discordUser, { reason = null, changedBy = null } = {}) {
+  if (!supabaseAdmin) return;
+  const { data: existing } = await supabaseAdmin
+    .from("media_members")
+    .select("*")
+    .eq("discord_id", discordUser.id)
+    .maybeSingle();
+  if (!existing) return;
+
+  if (existing.channel_id && guild) {
+    const channel = await guild.channels.fetch(existing.channel_id).catch(() => null);
+    if (channel) {
+      // Lock instead of delete: staff can still see history, the member can't.
+      await channel.permissionOverwrites.edit(discordUser.id, { ViewChannel: false, SendMessages: false }).catch(() => {});
+      const archivedName = `archived-${mediaChannelNameFor(discordUser.username).replace(/^media-/, "")}`.slice(0, 90);
+      await channel.setName(archivedName).catch(() => {});
+      await channel.send({
+        embeds: [{ description: `This media channel has been archived — ${discordUser.tag} is no longer an active media member. History and stats are kept.`, color: 0xf59e0b }],
+      }).catch(() => {});
+    }
+  }
+
+  await supabaseAdmin
+    .from("media_members")
+    .update({
+      status: "removed",
+      status_reason: reason,
+      status_changed_by: changedBy,
+      status_changed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", existing.id);
+}
+
+function buildMediaContentEmbed(content, { forReview = false } = {}) {
+  const fields = [
+    { name: "Game", value: content.game, inline: true },
+    { name: "Content ID", value: `\`${content.content_id || "pending"}\``, inline: true },
+    { name: "Redistributable", value: content.redistributable ? "Yes" : "No", inline: true },
+    { name: "Creator credit", value: content.creator_credit, inline: false },
+    { name: "Caption", value: content.caption.slice(0, 1000), inline: false },
+    { name: "Hashtags", value: (content.hashtags || []).join(" ") || "—", inline: false },
+  ];
+  if (content.campaign) fields.push({ name: "Campaign", value: content.campaign, inline: true });
+  if (content.notes) fields.push({ name: "Notes", value: content.notes.slice(0, 500), inline: false });
+  if (forReview) fields.push({ name: "Submitted by", value: `<@${content.submitter_discord_id}>`, inline: true });
+  return {
+    title: forReview ? "New media submission" : "New Approved Media Video",
+    description: content.video_url ? `[Video link](${content.video_url})` : "See attached video.",
+    color: forReview ? 0x7c3aed : 0x22c55e,
+    fields,
+    footer: { text: `${MEDIA_BRAND_NAME} Media Network` },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function mediaReviewButtons(contentDbId) {
+  return [{
+    type: 1,
+    components: [
+      { type: 2, style: 3, label: "Approve", customId: `media_review_approve:${contentDbId}`, emoji: { name: "✅" } },
+      { type: 2, style: 4, label: "Reject", customId: `media_review_reject:${contentDbId}`, emoji: { name: "❌" } },
+      { type: 2, style: 2, label: "Request Changes", customId: `media_review_changes:${contentDbId}`, emoji: { name: "✏️" } },
+      { type: 2, style: 2, label: "Edit Details", customId: `media_review_edit:${contentDbId}`, emoji: { name: "🛠️" } },
+      { type: 2, style: 2, label: "Not Redistributable", customId: `media_review_norepost:${contentDbId}`, emoji: { name: "🚫" } },
+    ],
+  }];
+}
+
+/* Distributes an approved+redistributable video to the shared content-feed
+   channel and every active media member's personal channel. Each personal
+   copy gets its own "I Posted This" button/message so posting status can be
+   tracked per member without disabling the button globally. */
+async function distributeMediaContent(content) {
+  if (!discordBot || !discordGuildId) return;
+  const embed = buildMediaContentEmbed(content);
+  const postedButton = (label = "I Posted This") => ([{
+    type: 1,
+    components: [{ type: 2, style: 1, label, customId: `media_posted:${content.id}`, emoji: { name: "📤" } }],
+  }]);
+
+  if (discordMediaContentFeedChannelId) {
+    const feedChannel = await discordBot.channels.fetch(discordMediaContentFeedChannelId).catch(() => null);
+    if (feedChannel) {
+      await feedChannel.send({ embeds: [embed] }).catch((err) => console.error("[Media Network] Feed post failed:", err.message));
+    }
+  }
+
+  if (supabaseAdmin) {
+    const { data: members } = await supabaseAdmin
+      .from("media_members")
+      .select("discord_id, channel_id")
+      .eq("status", "active");
+    for (const member of members || []) {
+      if (!member.channel_id) continue;
+      try {
+        const channel = await discordBot.channels.fetch(member.channel_id);
+        if (channel) {
+          await channel.send({ embeds: [embed], components: postedButton() });
+        }
+      } catch (err) {
+        console.warn(`[Media Network] Could not deliver to ${member.discord_id}:`, err.message);
+      }
+    }
+  }
+
+  if (supabaseAdmin) {
+    await supabaseAdmin.from("media_content").update({ distributed_at: new Date().toISOString() }).eq("id", content.id);
+  }
+}
+
+/* Shared by the "I Posted This" modal and the /report-post backup command.
+   Relies on the DB's unique index (content, member, platform) as the source
+   of truth for duplicate prevention — the pre-check here is just for a
+   friendlier error message before hitting that constraint. */
+async function recordMediaPostReport({ content, memberDiscordId, memberUsername, platform, link }) {
+  if (!supabaseAdmin) return { success: false, error: "Post tracking isn't available right now." };
+  if (!/^https?:\/\//i.test(link)) {
+    return { success: false, error: "That doesn't look like a valid link — include https://" };
+  }
+
+  const { data: existing } = await supabaseAdmin
+    .from("media_posts")
+    .select("id")
+    .eq("content_db_id", content.id)
+    .eq("member_discord_id", memberDiscordId)
+    .ilike("platform", platform)
+    .maybeSingle();
+  if (existing) {
+    return { success: false, error: `You've already reported a post on ${platform} for this video. Ask a media manager if you need to report a different link on the same platform.` };
+  }
+
+  const { data: postRow, error: insertError } = await supabaseAdmin.from("media_posts").insert({
+    content_db_id: content.id,
+    content_id: content.content_id,
+    member_discord_id: memberDiscordId,
+    member_username: memberUsername,
+    platform,
+    link,
+    campaign: content.campaign,
+    status: "pending_verification",
+  }).select("id").single();
+  if (insertError) {
+    if (insertError.code === "23505") {
+      return { success: false, error: `You've already reported a post on ${platform} for this video.` };
+    }
+    throw insertError;
+  }
+
+  if (discordMediaReviewChannelId && discordBot) {
+    const reviewChannel = await discordBot.channels.fetch(discordMediaReviewChannelId).catch(() => null);
+    if (reviewChannel) {
+      await reviewChannel.send({
+        embeds: [{
+          title: "New reported post — needs verification",
+          color: 0x7c3aed,
+          fields: [
+            { name: "Content ID", value: `\`${content.content_id}\``, inline: true },
+            { name: "Platform", value: platform, inline: true },
+            { name: "Member", value: `<@${memberDiscordId}>`, inline: true },
+            { name: "Link", value: link.slice(0, 500), inline: false },
+          ],
+          footer: { text: "Verify below, or use /media-posts to see all pending reports." },
+          timestamp: new Date().toISOString(),
+        }],
+        components: [{
+          type: 1,
+          components: [
+            { type: 2, style: 3, label: "Approve", customId: `media_post_review_approve:${postRow.id}`, emoji: { name: "✅" } },
+            { type: 2, style: 4, label: "Reject", customId: `media_post_review_reject:${postRow.id}`, emoji: { name: "❌" } },
+            { type: 2, style: 2, label: "Flag Invalid", customId: `media_post_review_flag:${postRow.id}`, emoji: { name: "🚩" } },
+            { type: 2, style: 2, label: "Request Correction", customId: `media_post_review_correction:${postRow.id}`, emoji: { name: "✏️" } },
+          ],
+        }],
+      }).catch(() => {});
+    }
+  }
+
+  return { success: true };
+}
+
 let discordBot = null;
 
 if (isConfiguredValue(discordBotToken)) {
@@ -3472,6 +3803,69 @@ if (isConfiguredValue(discordBotToken)) {
           .addIntegerOption(o => o.setName("rating").setDescription("Star rating 1-5").setRequired(true)
             .addChoices({ name: "1", value: 1 }, { name: "2", value: 2 }, { name: "3", value: 3 }, { name: "4", value: 4 }, { name: "5", value: 5 }))
           .addStringOption(o => o.setName("avatar_url").setDescription("Avatar image URL (optional)").setRequired(false)),
+        new SlashCommandBuilder()
+          .setName("submit-media")
+          .setDescription("Submit a promotional video for review (media members)")
+          .addStringOption(o => o.setName("game").setDescription("Which game this video is for").setRequired(true))
+          .addStringOption(o => o.setName("caption").setDescription("Suggested caption for the post").setRequired(true))
+          .addStringOption(o => o.setName("creator").setDescription("Original creator credit").setRequired(true))
+          .addBooleanOption(o => o.setName("redistributable").setDescription("Can this be redistributed to other media members?").setRequired(true))
+          .addAttachmentOption(o => o.setName("video").setDescription("The video file").setRequired(false))
+          .addStringOption(o => o.setName("video_link").setDescription("Link to the video, if not attaching a file").setRequired(false))
+          .addStringOption(o => o.setName("campaign").setDescription("Campaign name (optional)").setRequired(false))
+          .addStringOption(o => o.setName("notes").setDescription("Anything else reviewers should know (optional)").setRequired(false)),
+        new SlashCommandBuilder()
+          .setName("report-post")
+          .setDescription("Report a video you published (backup for the \"I Posted This\" button)")
+          .addStringOption(o => o.setName("content_id").setDescription("The video's Content ID, e.g. MEDIA-0042").setRequired(true))
+          .addStringOption(o => o.setName("platform").setDescription("Where you posted it (TikTok, Instagram, YouTube, etc.)").setRequired(true))
+          .addStringOption(o => o.setName("link").setDescription("Link to your published post").setRequired(true)),
+        new SlashCommandBuilder()
+          .setName("media-status")
+          .setDescription("Pause, review, remove, or restore a media member (media manager/admin only)")
+          .addUserOption(o => o.setName("user").setDescription("The media member").setRequired(true))
+          .addStringOption(o => o.setName("status").setDescription("New status").setRequired(true)
+            .addChoices(
+              { name: "Active", value: "active" },
+              { name: "Paused", value: "paused" },
+              { name: "Under Review", value: "under_review" },
+              { name: "Removed", value: "removed" },
+            ))
+          .addStringOption(o => o.setName("reason").setDescription("Why (optional)").setRequired(false)),
+        new SlashCommandBuilder()
+          .setName("media-profile")
+          .setDescription("View a media member's profile and stats")
+          .addUserOption(o => o.setName("user").setDescription("Defaults to you").setRequired(false)),
+        new SlashCommandBuilder()
+          .setName("media-stats")
+          .setDescription("View overall media network stats (staff only)"),
+        new SlashCommandBuilder()
+          .setName("media-members")
+          .setDescription("List media members, optionally filtered by status (staff only)")
+          .addStringOption(o => o.setName("status").setDescription("Filter by status").setRequired(false)
+            .addChoices(
+              { name: "Active", value: "active" },
+              { name: "Paused", value: "paused" },
+              { name: "Under Review", value: "under_review" },
+              { name: "Removed", value: "removed" },
+            )),
+        new SlashCommandBuilder()
+          .setName("media-content")
+          .setDescription("Look up a submitted video by Content ID")
+          .addStringOption(o => o.setName("content_id").setDescription("e.g. MEDIA-0042").setRequired(true)),
+        new SlashCommandBuilder()
+          .setName("media-leaderboard")
+          .setDescription("Top media members by approved reposts"),
+        new SlashCommandBuilder()
+          .setName("media-campaign")
+          .setDescription("View stats for a specific campaign")
+          .addStringOption(o => o.setName("name").setDescription("Campaign name").setRequired(true)),
+        new SlashCommandBuilder()
+          .setName("media-posts")
+          .setDescription("List reported posts awaiting verification (staff only)"),
+        new SlashCommandBuilder()
+          .setName("media-help")
+          .setDescription("Explain how the media network works"),
       ];
 
       const commands = commandBuilders.map((command) => {
@@ -3543,6 +3937,27 @@ if (isConfiguredValue(discordBotToken)) {
         console.error("[Discord] Leaves log error:", err.message);
       }
 
+    }
+  });
+
+  /* ── Media Network: role add/remove drives personal channel automation ── */
+  discordBot.on("guildMemberUpdate", async (oldMember, newMember) => {
+    if (!discordMediaRoleId) return;
+    if (discordGuildId && newMember.guild.id !== discordGuildId) return;
+    const hadRole = oldMember.roles?.cache?.has?.(discordMediaRoleId);
+    const hasRole = newMember.roles?.cache?.has?.(discordMediaRoleId);
+    if (hadRole === hasRole) return;
+
+    try {
+      if (hasRole) {
+        await ensureMediaChannel(newMember.guild, newMember.user, newMember);
+        console.log(`[Media Network] Created/restored media channel for ${newMember.user.tag}`);
+      } else {
+        await archiveMediaChannel(newMember.guild, newMember.user, { reason: "Media role removed", changedBy: "discord-role-sync" });
+        console.log(`[Media Network] Archived media channel for ${newMember.user.tag}`);
+      }
+    } catch (err) {
+      console.error("[Media Network] guildMemberUpdate error:", err.message);
     }
   });
 
@@ -5569,6 +5984,603 @@ ${rows || '<div class="ct">No messages.</div>'}
           embeds: [{ description: "Something went wrong submitting your application. Try again in a moment.", color: 0xff4444 }],
         });
       }
+    }
+
+    /* ── /submit-media — media member submits a video for review ── */
+    if (interaction.commandName === "submit-media") {
+      if (!isMediaMember(interaction.member) && !isMediaReviewerInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "You need the Media role to submit videos.", color: 0xff4444 }], ephemeral: true });
+      }
+      const game = trimField(interaction.options.getString("game"), 60);
+      const caption = trimField(interaction.options.getString("caption"), 900);
+      const creator = trimField(interaction.options.getString("creator"), 120);
+      const redistributable = interaction.options.getBoolean("redistributable");
+      const videoAttachment = interaction.options.getAttachment("video");
+      const videoLink = trimField(interaction.options.getString("video_link") || "", 500);
+      const campaign = trimField(interaction.options.getString("campaign") || "", 120) || null;
+      const notes = trimField(interaction.options.getString("notes") || "", 500) || null;
+
+      if (!videoAttachment && !videoLink) {
+        return interaction.reply({ embeds: [{ description: "Attach a video file or provide a video link.", color: 0xff4444 }], ephemeral: true });
+      }
+      if (videoAttachment && videoAttachment.contentType && !videoAttachment.contentType.startsWith("video/")) {
+        return interaction.reply({ embeds: [{ description: "That attachment doesn't look like a video file.", color: 0xff4444 }], ephemeral: true });
+      }
+      if (!discordMediaReviewChannelId) {
+        return interaction.reply({ embeds: [{ description: "The media review channel isn't configured yet — ask an admin to set DISCORD_MEDIA_REVIEW_CHANNEL_ID.", color: 0xff4444 }], ephemeral: true });
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: inserted, error: insertError } = await supabaseAdmin
+          .from("media_content")
+          .insert({
+            submitter_discord_id: interaction.user.id,
+            submitter_username: interaction.user.username,
+            video_url: videoAttachment?.url || videoLink || null,
+            game,
+            caption,
+            hashtags: mediaHashtagsFor(game),
+            creator_credit: creator,
+            campaign,
+            notes,
+            redistributable,
+            status: "pending",
+          })
+          .select("*")
+          .single();
+        if (insertError) throw insertError;
+
+        const contentId = `MEDIA-${String(inserted.id).padStart(4, "0")}`;
+        const { data: content } = await supabaseAdmin
+          .from("media_content")
+          .update({ content_id: contentId })
+          .eq("id", inserted.id)
+          .select("*")
+          .single();
+
+        const reviewChannel = await discordBot.channels.fetch(discordMediaReviewChannelId).catch(() => null);
+        if (reviewChannel) {
+          const message = await reviewChannel.send({
+            embeds: [buildMediaContentEmbed(content, { forReview: true })],
+            components: mediaReviewButtons(content.id),
+          });
+          await supabaseAdmin.from("media_content").update({ review_channel_message_id: message.id }).eq("id", content.id);
+        }
+
+        return interaction.editReply({
+          embeds: [{ description: `Submitted for review — your Content ID is \`${contentId}\`. You'll be notified once it's reviewed.`, color: 0x22c55e }],
+        });
+      } catch (error) {
+        console.error("[Discord /submit-media]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong submitting your video. Try again in a moment.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /media-status — pause/review/remove/restore a media member ── */
+    if (interaction.commandName === "media-status") {
+      if (!isDiscordMediaManagerInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Media manager or admin only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const target = interaction.options.getUser("user");
+      const status = interaction.options.getString("status");
+      const reason = trimField(interaction.options.getString("reason") || "", 300) || null;
+
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: existing } = await supabaseAdmin
+          .from("media_members")
+          .select("*")
+          .eq("discord_id", target.id)
+          .maybeSingle();
+        if (!existing) {
+          return interaction.editReply({ embeds: [{ description: `${target.tag} isn't a media member yet.`, color: 0xff4444 }] });
+        }
+
+        if (status === "removed") {
+          const guild = discordGuildId ? await discordBot.guilds.fetch(discordGuildId).catch(() => null) : null;
+          await archiveMediaChannel(guild, target, { reason, changedBy: interaction.user.id });
+        } else if (status === "active" && existing.status === "removed") {
+          const guild = discordGuildId ? await discordBot.guilds.fetch(discordGuildId).catch(() => null) : null;
+          if (guild) await ensureMediaChannel(guild, target, null);
+        } else {
+          await supabaseAdmin
+            .from("media_members")
+            .update({ status, status_reason: reason, status_changed_by: interaction.user.id, status_changed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+            .eq("id", existing.id);
+        }
+
+        await sendDiscordDM(target.id, `Your XenCheats media member status was changed to **${status.replace(/_/g, " ")}**${reason ? ` — ${reason}` : ""}.`).catch(() => {});
+        return interaction.editReply({ embeds: [{ description: `${target.tag}'s status is now **${status.replace(/_/g, " ")}**.`, color: 0x22c55e }] });
+      } catch (error) {
+        console.error("[Discord /media-status]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong updating that member's status.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /report-post — backup for the "I Posted This" button ── */
+    if (interaction.commandName === "report-post") {
+      const contentIdInput = trimField(interaction.options.getString("content_id"), 30).toUpperCase();
+      const platform = trimField(interaction.options.getString("platform"), 40);
+      const link = trimField(interaction.options.getString("link"), 500);
+
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: content } = await supabaseAdmin
+          .from("media_content")
+          .select("*")
+          .eq("content_id", contentIdInput)
+          .maybeSingle();
+        if (!content) {
+          return interaction.editReply({ embeds: [{ description: `No video found with Content ID \`${contentIdInput}\`.`, color: 0xff4444 }] });
+        }
+        const result = await recordMediaPostReport({
+          content,
+          memberDiscordId: interaction.user.id,
+          memberUsername: interaction.user.username,
+          platform,
+          link,
+        });
+        if (!result.success) {
+          return interaction.editReply({ embeds: [{ description: result.error, color: 0xff4444 }] });
+        }
+        return interaction.editReply({ embeds: [{ description: "✅ Your post has been recorded successfully. Thank you for helping promote the brand!", color: 0x22c55e }] });
+      } catch (error) {
+        console.error("[Discord /report-post]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong recording your post.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── Media review buttons: Approve / Reject / Request Changes / Edit / Not Redistributable ── */
+    if (interaction.isButton?.() && interaction.customId.startsWith("media_review_")) {
+      if (!isMediaReviewerInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Employees, media managers, and admins only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const [, action, contentDbId] = interaction.customId.match(/^media_review_([a-z]+):(\d+)$/) || [];
+      if (!action || !contentDbId) return;
+
+      // Reject / Request Changes / Edit collect input via a modal first.
+      if (action === "reject" || action === "changes") {
+        const modal = new ModalBuilder()
+          .setCustomId(`media_review_${action}_modal:${contentDbId}`)
+          .setTitle(action === "reject" ? "Reject video" : "Request changes");
+        modal.addComponents(new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("reason")
+            .setLabel(action === "reject" ? "Why is this being rejected?" : "What needs to change?")
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(true)
+            .setMaxLength(700),
+        ));
+        return interaction.showModal(modal);
+      }
+
+      if (action === "edit") {
+        const { data: content } = await supabaseAdmin.from("media_content").select("*").eq("id", contentDbId).maybeSingle();
+        if (!content) return interaction.reply({ embeds: [{ description: "Couldn't find that submission.", color: 0xff4444 }], ephemeral: true });
+        const modal = new ModalBuilder().setCustomId(`media_review_edit_modal:${contentDbId}`).setTitle("Edit video details");
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("game").setLabel("Game").setStyle(TextInputStyle.Short).setRequired(true).setValue(content.game.slice(0, 100))),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("caption").setLabel("Caption").setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(content.caption.slice(0, 1000))),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("hashtags").setLabel("Hashtags (space-separated)").setStyle(TextInputStyle.Short).setRequired(true).setValue((content.hashtags || []).join(" ").slice(0, 200))),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("creator").setLabel("Creator credit").setStyle(TextInputStyle.Short).setRequired(true).setValue(content.creator_credit.slice(0, 120))),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("campaign").setLabel("Campaign (optional)").setStyle(TextInputStyle.Short).setRequired(false).setValue((content.campaign || "").slice(0, 120))),
+        );
+        return interaction.showModal(modal);
+      }
+
+      // Approve / Not Redistributable act immediately, no modal.
+      await interaction.deferUpdate();
+      try {
+        const { data: content, error: fetchError } = await supabaseAdmin.from("media_content").select("*").eq("id", contentDbId).maybeSingle();
+        if (fetchError || !content) return interaction.followUp({ embeds: [{ description: "Couldn't find that submission.", color: 0xff4444 }], ephemeral: true });
+
+        if (action === "approve") {
+          const { data: updated } = await supabaseAdmin.from("media_content").update({ status: "approved", updated_at: new Date().toISOString() }).eq("id", contentDbId).select("*").single();
+          await supabaseAdmin.from("media_content_reviews").insert({ content_id: contentDbId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: "approved" });
+          await interaction.editReply({ embeds: [buildMediaContentEmbed(updated, { forReview: true })], components: [] });
+          await interaction.followUp({ embeds: [{ description: `Approved \`${updated.content_id}\`.${updated.redistributable ? " Distributing now..." : " Not marked redistributable, so it will not be distributed."}`, color: 0x22c55e }], ephemeral: true });
+          await sendDiscordDM(content.submitter_discord_id, `🎉 Your video \`${updated.content_id}\` was approved!${updated.redistributable ? " It's being distributed to the media network now." : ""}`).catch(() => {});
+          if (updated.redistributable) await distributeMediaContent(updated);
+          return;
+        }
+
+        if (action === "norepost") {
+          const { data: updated } = await supabaseAdmin.from("media_content").update({ redistributable: false, updated_at: new Date().toISOString() }).eq("id", contentDbId).select("*").single();
+          await supabaseAdmin.from("media_content_reviews").insert({ content_id: contentDbId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: "not_redistributable" });
+          await interaction.editReply({ embeds: [buildMediaContentEmbed(updated, { forReview: true })], components: mediaReviewButtons(contentDbId) });
+          return interaction.followUp({ embeds: [{ description: `Marked \`${updated.content_id}\` as not redistributable.`, color: 0xf59e0b }], ephemeral: true });
+        }
+      } catch (error) {
+        console.error("[Media review]", error.message);
+        return interaction.followUp({ embeds: [{ description: "Something went wrong processing that review action.", color: 0xff4444 }], ephemeral: true });
+      }
+    }
+
+    /* ── Media review modals: Reject / Request Changes / Edit submit ── */
+    if (interaction.isModalSubmit?.() && interaction.customId.startsWith("media_review_") && interaction.customId.includes("_modal:")) {
+      if (!isMediaReviewerInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Employees, media managers, and admins only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const [, kind, contentDbId] = interaction.customId.match(/^media_review_([a-z]+)_modal:(\d+)$/) || [];
+      if (!kind || !contentDbId) return;
+
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: content, error: fetchError } = await supabaseAdmin.from("media_content").select("*").eq("id", contentDbId).maybeSingle();
+        if (fetchError || !content) return interaction.editReply({ embeds: [{ description: "Couldn't find that submission.", color: 0xff4444 }] });
+
+        if (kind === "reject" || kind === "changes") {
+          const reason = interaction.fields.getTextInputValue("reason");
+          const status = kind === "reject" ? "rejected" : "changes_requested";
+          const { data: updated } = await supabaseAdmin.from("media_content").update({ status, updated_at: new Date().toISOString() }).eq("id", contentDbId).select("*").single();
+          await supabaseAdmin.from("media_content_reviews").insert({ content_id: contentDbId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: status, notes: reason });
+
+          const reviewChannel = discordMediaReviewChannelId ? await discordBot.channels.fetch(discordMediaReviewChannelId).catch(() => null) : null;
+          if (reviewChannel && content.review_channel_message_id) {
+            const message = await reviewChannel.messages.fetch(content.review_channel_message_id).catch(() => null);
+            if (message) {
+              const embed = buildMediaContentEmbed(updated, { forReview: true });
+              embed.footer = { text: `${kind === "reject" ? "Rejected" : "Changes requested"} by ${interaction.user.tag}: ${reason}`.slice(0, 250) };
+              await message.edit({ embeds: [embed], components: kind === "reject" ? [] : mediaReviewButtons(contentDbId) }).catch(() => {});
+            }
+          }
+
+          await sendDiscordDM(content.submitter_discord_id, kind === "reject"
+            ? `Your video \`${content.content_id}\` was not approved: ${reason}`
+            : `Changes were requested on your video \`${content.content_id}\`: ${reason}\n\nSubmit an updated version with \`/submit-media\`.`).catch(() => {});
+          return interaction.editReply({ embeds: [{ description: `Marked \`${content.content_id}\` as ${status.replace("_", " ")}.`, color: kind === "reject" ? 0xff4444 : 0xf59e0b }] });
+        }
+
+        if (kind === "edit") {
+          const game = trimField(interaction.fields.getTextInputValue("game"), 100);
+          const caption = trimField(interaction.fields.getTextInputValue("caption"), 1000);
+          const hashtagsRaw = trimField(interaction.fields.getTextInputValue("hashtags"), 200);
+          const creator = trimField(interaction.fields.getTextInputValue("creator"), 120);
+          const campaign = trimField(interaction.fields.getTextInputValue("campaign") || "", 120) || null;
+          const hashtags = hashtagsRaw.split(/\s+/).filter(Boolean).map((tag) => (tag.startsWith("#") ? tag : `#${tag}`));
+
+          const { data: updated } = await supabaseAdmin
+            .from("media_content")
+            .update({ game, caption, hashtags, creator_credit: creator, campaign, updated_at: new Date().toISOString() })
+            .eq("id", contentDbId)
+            .select("*")
+            .single();
+          await supabaseAdmin.from("media_content_reviews").insert({ content_id: contentDbId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: "edited" });
+
+          const reviewChannel = discordMediaReviewChannelId ? await discordBot.channels.fetch(discordMediaReviewChannelId).catch(() => null) : null;
+          if (reviewChannel && content.review_channel_message_id) {
+            const message = await reviewChannel.messages.fetch(content.review_channel_message_id).catch(() => null);
+            if (message) await message.edit({ embeds: [buildMediaContentEmbed(updated, { forReview: true })], components: mediaReviewButtons(contentDbId) }).catch(() => {});
+          }
+          return interaction.editReply({ embeds: [{ description: `Updated details for \`${updated.content_id}\`.`, color: 0x22c55e }] });
+        }
+      } catch (error) {
+        console.error("[Media review modal]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong saving that.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── "I Posted This" button — opens a small modal for platform + link ── */
+    if (interaction.isButton?.() && interaction.customId.startsWith("media_posted:")) {
+      const contentDbId = interaction.customId.split(":")[1];
+      const modal = new ModalBuilder().setCustomId(`media_posted_modal:${contentDbId}`).setTitle("I Posted This");
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("platform").setLabel("Platform (TikTok, Instagram, YouTube...)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(40)),
+        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("link").setLabel("Link to your published post").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(500)),
+      );
+      return interaction.showModal(modal);
+    }
+
+    /* ── "I Posted This" modal submit ── */
+    if (interaction.isModalSubmit?.() && interaction.customId.startsWith("media_posted_modal:")) {
+      const contentDbId = interaction.customId.split(":")[1];
+      const platform = trimField(interaction.fields.getTextInputValue("platform"), 40);
+      const link = trimField(interaction.fields.getTextInputValue("link"), 500);
+
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: content } = await supabaseAdmin.from("media_content").select("*").eq("id", contentDbId).maybeSingle();
+        if (!content) return interaction.editReply({ embeds: [{ description: "Couldn't find that video.", color: 0xff4444 }] });
+
+        const result = await recordMediaPostReport({
+          content,
+          memberDiscordId: interaction.user.id,
+          memberUsername: interaction.user.username,
+          platform,
+          link,
+        });
+        if (!result.success) {
+          return interaction.editReply({ embeds: [{ description: result.error, color: 0xff4444 }] });
+        }
+
+        // Update just this member's copy of the message — posting status is
+        // tracked per member, not disabled globally for everyone who got it.
+        try {
+          await interaction.message.edit({
+            components: [{
+              type: 1,
+              components: [{ type: 2, style: 3, label: "✅ Posted", customId: `media_posted_done:${contentDbId}`, disabled: true }],
+            }],
+          });
+        } catch {}
+
+        return interaction.editReply({ embeds: [{ description: "✅ Your post has been recorded successfully. Thank you for helping promote the brand!", color: 0x22c55e }] });
+      } catch (error) {
+        console.error("[Media posted modal]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong recording your post.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── Post verification buttons (staff review reported links) ── */
+    if (interaction.isButton?.() && interaction.customId.startsWith("media_post_review_")) {
+      if (!isMediaReviewerInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Employees, media managers, and admins only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const [, action, postId] = interaction.customId.match(/^media_post_review_([a-z]+):(\d+)$/) || [];
+      if (!action || !postId) return;
+
+      if (action === "correction") {
+        const modal = new ModalBuilder().setCustomId(`media_post_correction_modal:${postId}`).setTitle("Request a corrected link");
+        modal.addComponents(new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId("notes").setLabel("What needs fixing?").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(500),
+        ));
+        return interaction.showModal(modal);
+      }
+
+      await interaction.deferUpdate();
+      try {
+        const statusMap = { approve: "approved", reject: "rejected", flag: "flagged" };
+        const status = statusMap[action];
+        if (!status) return;
+        const { data: post } = await supabaseAdmin.from("media_posts").update({ status, updated_at: new Date().toISOString() }).eq("id", postId).select("*").single();
+        await supabaseAdmin.from("media_post_reviews").insert({ post_id: postId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: status });
+        await interaction.editReply({
+          embeds: [{ description: `Reported post on **${post.platform}** for \`${post.content_id}\` marked **${status}** by ${interaction.user.tag}.`, color: status === "approved" ? 0x22c55e : 0xff4444 }],
+          components: [],
+        });
+      } catch (error) {
+        console.error("[Media post review]", error.message);
+      }
+    }
+
+    if (interaction.isModalSubmit?.() && interaction.customId.startsWith("media_post_correction_modal:")) {
+      if (!isMediaReviewerInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Employees, media managers, and admins only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const postId = interaction.customId.split(":")[1];
+      const notes = interaction.fields.getTextInputValue("notes");
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: post } = await supabaseAdmin.from("media_posts").update({ status: "needs_correction", updated_at: new Date().toISOString() }).eq("id", postId).select("*").single();
+        await supabaseAdmin.from("media_post_reviews").insert({ post_id: postId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: "needs_correction", notes });
+        await sendDiscordDM(post.member_discord_id, `Your reported post for \`${post.content_id}\` on ${post.platform} needs a correction: ${notes}\n\nUse \`/report-post\` to submit the fixed link.`).catch(() => {});
+        return interaction.editReply({ embeds: [{ description: "Correction requested.", color: 0xf59e0b }] });
+      } catch (error) {
+        console.error("[Media post correction modal]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /media-profile — a member's own or another member's stats ── */
+    if (interaction.commandName === "media-profile") {
+      const target = interaction.options.getUser("user") || interaction.user;
+      if (target.id !== interaction.user.id && !isMediaReviewerInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "You can only view your own profile.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: member } = await supabaseAdmin.from("media_members").select("*").eq("discord_id", target.id).maybeSingle();
+        if (!member) {
+          return interaction.editReply({ embeds: [{ description: `${target.tag} isn't a media member.`, color: 0xff4444 }] });
+        }
+        const { count: submitted } = await supabaseAdmin.from("media_content").select("id", { count: "exact", head: true }).eq("submitter_discord_id", target.id);
+        const { count: approved } = await supabaseAdmin.from("media_content").select("id", { count: "exact", head: true }).eq("submitter_discord_id", target.id).eq("status", "approved");
+        const { count: reposts } = await supabaseAdmin.from("media_posts").select("id", { count: "exact", head: true }).eq("member_discord_id", target.id).eq("status", "approved");
+        const { count: pendingReposts } = await supabaseAdmin.from("media_posts").select("id", { count: "exact", head: true }).eq("member_discord_id", target.id).eq("status", "pending_verification");
+
+        return interaction.editReply({
+          embeds: [{
+            title: `Media profile — ${target.tag}`,
+            color: 0x7c3aed,
+            fields: [
+              { name: "Status", value: member.status.replace(/_/g, " "), inline: true },
+              { name: "Joined", value: `<t:${Math.floor(new Date(member.joined_at).getTime() / 1000)}:R>`, inline: true },
+              { name: "Videos submitted", value: String(submitted || 0), inline: true },
+              { name: "Videos approved", value: String(approved || 0), inline: true },
+              { name: "Approved reposts", value: String(reposts || 0), inline: true },
+              { name: "Pending verification", value: String(pendingReposts || 0), inline: true },
+            ],
+          }],
+        });
+      } catch (error) {
+        console.error("[Discord /media-profile]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong loading that profile.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /media-stats — overall network stats (staff only) ── */
+    if (interaction.commandName === "media-stats") {
+      if (!isMediaReviewerInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Employees, media managers, and admins only.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const counts = async (table, filters = {}) => {
+          let query = supabaseAdmin.from(table).select("id", { count: "exact", head: true });
+          for (const [key, value] of Object.entries(filters)) query = query.eq(key, value);
+          const { count } = await query;
+          return count || 0;
+        };
+        const [active, paused, underReview, removed, submitted, approved, rejected, pendingVerification] = await Promise.all([
+          counts("media_members", { status: "active" }),
+          counts("media_members", { status: "paused" }),
+          counts("media_members", { status: "under_review" }),
+          counts("media_members", { status: "removed" }),
+          counts("media_content"),
+          counts("media_content", { status: "approved" }),
+          counts("media_content", { status: "rejected" }),
+          counts("media_posts", { status: "pending_verification" }),
+        ]);
+        return interaction.editReply({
+          embeds: [{
+            title: "Media Network stats",
+            color: 0x7c3aed,
+            fields: [
+              { name: "Active members", value: String(active), inline: true },
+              { name: "Paused", value: String(paused), inline: true },
+              { name: "Under review", value: String(underReview), inline: true },
+              { name: "Removed", value: String(removed), inline: true },
+              { name: "Videos submitted", value: String(submitted), inline: true },
+              { name: "Videos approved", value: String(approved), inline: true },
+              { name: "Videos rejected", value: String(rejected), inline: true },
+              { name: "Pending post verifications", value: String(pendingVerification), inline: true },
+            ],
+          }],
+        });
+      } catch (error) {
+        console.error("[Discord /media-stats]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong loading stats.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /media-members — list members, optionally filtered by status ── */
+    if (interaction.commandName === "media-members") {
+      if (!isMediaReviewerInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Employees, media managers, and admins only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const statusFilter = interaction.options.getString("status");
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        let query = supabaseAdmin.from("media_members").select("*").order("joined_at", { ascending: false }).limit(25);
+        if (statusFilter) query = query.eq("status", statusFilter);
+        const { data: members } = await query;
+        if (!members?.length) {
+          return interaction.editReply({ embeds: [{ description: "No media members found.", color: 0xf59e0b }] });
+        }
+        const lines = members.map((m) => `<@${m.discord_id}> — **${m.status.replace(/_/g, " ")}** — joined <t:${Math.floor(new Date(m.joined_at).getTime() / 1000)}:R>`);
+        return interaction.editReply({ embeds: [{ title: `Media members${statusFilter ? ` — ${statusFilter}` : ""}`, description: lines.join("\n").slice(0, 4000), color: 0x7c3aed }] });
+      } catch (error) {
+        console.error("[Discord /media-members]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong loading members.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /media-content — look up a submission by Content ID ── */
+    if (interaction.commandName === "media-content") {
+      if (!isMediaReviewerInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Employees, media managers, and admins only.", color: 0xff4444 }], ephemeral: true });
+      }
+      const contentIdInput = trimField(interaction.options.getString("content_id"), 30).toUpperCase();
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: content } = await supabaseAdmin.from("media_content").select("*").eq("content_id", contentIdInput).maybeSingle();
+        if (!content) {
+          return interaction.editReply({ embeds: [{ description: `No video found with Content ID \`${contentIdInput}\`.`, color: 0xff4444 }] });
+        }
+        const { data: posts } = await supabaseAdmin.from("media_posts").select("member_discord_id, platform, status").eq("content_db_id", content.id).order("created_at", { ascending: false }).limit(25);
+        const embed = buildMediaContentEmbed(content, { forReview: true });
+        if (posts?.length) {
+          embed.fields.push({
+            name: `Reported posts (${posts.length})`,
+            value: posts.map((p) => `<@${p.member_discord_id}> — ${p.platform} — ${p.status.replace(/_/g, " ")}`).join("\n").slice(0, 1000),
+            inline: false,
+          });
+        }
+        return interaction.editReply({ embeds: [embed] });
+      } catch (error) {
+        console.error("[Discord /media-content]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong looking that up.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /media-leaderboard — top members by approved reposts ── */
+    if (interaction.commandName === "media-leaderboard") {
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: posts } = await supabaseAdmin.from("media_posts").select("member_discord_id").eq("status", "approved").limit(2000);
+        const counts = new Map();
+        for (const p of posts || []) counts.set(p.member_discord_id, (counts.get(p.member_discord_id) || 0) + 1);
+        const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+        if (!top.length) {
+          return interaction.editReply({ embeds: [{ description: "No approved reposts yet.", color: 0xf59e0b }] });
+        }
+        const lines = top.map(([discordId, count], i) => `**${i + 1}.** <@${discordId}> — ${count} approved repost${count === 1 ? "" : "s"}`);
+        return interaction.editReply({ embeds: [{ title: "Media leaderboard", description: lines.join("\n"), color: 0x7c3aed }] });
+      } catch (error) {
+        console.error("[Discord /media-leaderboard]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong loading the leaderboard.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /media-campaign — stats for one campaign ── */
+    if (interaction.commandName === "media-campaign") {
+      const name = trimField(interaction.options.getString("name"), 120);
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: content } = await supabaseAdmin.from("media_content").select("id, status").eq("campaign", name);
+        if (!content?.length) {
+          return interaction.editReply({ embeds: [{ description: `No videos found for campaign **${name}**.`, color: 0xf59e0b }] });
+        }
+        const approvedIds = content.filter((c) => c.status === "approved").map((c) => c.id);
+        let approvedReposts = 0;
+        if (approvedIds.length) {
+          const { count } = await supabaseAdmin.from("media_posts").select("id", { count: "exact", head: true }).in("content_db_id", approvedIds).eq("status", "approved");
+          approvedReposts = count || 0;
+        }
+        return interaction.editReply({
+          embeds: [{
+            title: `Campaign — ${name}`,
+            color: 0x7c3aed,
+            fields: [
+              { name: "Videos", value: String(content.length), inline: true },
+              { name: "Approved videos", value: String(approvedIds.length), inline: true },
+              { name: "Approved reposts", value: String(approvedReposts), inline: true },
+            ],
+          }],
+        });
+      } catch (error) {
+        console.error("[Discord /media-campaign]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong loading that campaign.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /media-posts — pending post verifications (staff only) ── */
+    if (interaction.commandName === "media-posts") {
+      if (!isMediaReviewerInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Employees, media managers, and admins only.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: posts } = await supabaseAdmin.from("media_posts").select("*").eq("status", "pending_verification").order("created_at", { ascending: true }).limit(15);
+        if (!posts?.length) {
+          return interaction.editReply({ embeds: [{ description: "No reported posts are waiting on verification.", color: 0x22c55e }] });
+        }
+        const lines = posts.map((p) => `\`${p.content_id}\` — <@${p.member_discord_id}> — ${p.platform} — [link](${p.link})`);
+        return interaction.editReply({ embeds: [{ title: `Pending post verifications (${posts.length})`, description: lines.join("\n").slice(0, 4000), footer: { text: "Approve/reject/flag directly on the message in the review channel." }, color: 0xf59e0b }] });
+      } catch (error) {
+        console.error("[Discord /media-posts]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong loading pending posts.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /media-help — explain the system ── */
+    if (interaction.commandName === "media-help") {
+      return interaction.reply({
+        embeds: [{
+          title: "How the Media Network works",
+          color: 0x7c3aed,
+          description: `Approved media members get a private channel to submit and receive promotional videos for ${MEDIA_BRAND_NAME}.`,
+          fields: [
+            { name: "Submitting a video", value: "Use `/submit-media` in your personal media channel.", inline: false },
+            { name: "Getting approved videos", value: "Approved videos are posted to your personal channel and the shared `media-content-feed` channel.", inline: false },
+            { name: "Reporting a repost", value: "Click **I Posted This** on the video, or use `/report-post` as a backup.", inline: false },
+            { name: "Required hashtags", value: MEDIA_BASE_HASHTAGS.join(" ") + " #{game}", inline: false },
+            { name: "Useful commands", value: "`/media-profile` `/media-stats` `/media-members` `/media-content` `/media-leaderboard` `/media-campaign` `/media-posts`", inline: false },
+          ],
+        }],
+        ephemeral: true,
+      });
     }
 
     // ── DIAGNOSTIC: /pingtest posts a button; clicking it should reply
