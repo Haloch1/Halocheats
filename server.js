@@ -3839,7 +3839,7 @@ if (isConfiguredValue(discordBotToken)) {
           .addChannelOption(o => o.setName("channel").setDescription("Channel to post in (default: current channel)").setRequired(false)),
         new SlashCommandBuilder()
           .setName("postreview")
-          .setDescription("Manually add a review (e.g. one shared as a screenshot) — posts it and saves it like a normal review (admin only)")
+          .setDescription("Manually add a review, e.g. one shared as a screenshot (admin only)")
           .addStringOption(o => o.setName("username").setDescription("Name to show on the review").setRequired(true))
           .addStringOption(o => o.setName("text").setDescription("The review text").setRequired(true))
           .addIntegerOption(o => o.setName("rating").setDescription("Star rating 1-5").setRequired(true)
