@@ -6232,8 +6232,11 @@ ${rows || '<div class="ct">No messages.</div>'}
           const { data: updated } = await supabaseAdmin.from("media_content").update({ status: "approved", updated_at: new Date().toISOString() }).eq("id", contentDbId).select("*").single();
           await supabaseAdmin.from("media_content_reviews").insert({ content_id: contentDbId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: "approved" });
           await interaction.editReply({ embeds: [buildMediaContentEmbed(updated, { forReview: true })], components: [] });
-          await interaction.followUp({ embeds: [{ description: `Approved \`${updated.content_id}\`.${updated.redistributable ? " Distributing now..." : " Not marked redistributable, so it will not be distributed."}`, color: 0x22c55e }], ephemeral: true });
-          await sendDiscordDM(content.submitter_discord_id, `🎉 Your video \`${updated.content_id}\` was approved!${updated.redistributable ? " It's being distributed to the media network now." : ""}`).catch(() => {});
+          // Posted in-channel (not DMed) and not pinging the submitter — only rejections ping.
+          await interaction.followUp({
+            embeds: [{ description: `Approved \`${updated.content_id}\`.${updated.redistributable ? " Distributing now..." : " Not marked redistributable, so it will not be distributed."}`, color: 0x22c55e }],
+            allowedMentions: { parse: [] },
+          });
           if (updated.redistributable) await distributeMediaContent(updated);
           return;
         }
@@ -6242,7 +6245,7 @@ ${rows || '<div class="ct">No messages.</div>'}
           const { data: updated } = await supabaseAdmin.from("media_content").update({ redistributable: false, updated_at: new Date().toISOString() }).eq("id", contentDbId).select("*").single();
           await supabaseAdmin.from("media_content_reviews").insert({ content_id: contentDbId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: "not_redistributable" });
           await interaction.editReply({ embeds: [buildMediaContentEmbed(updated, { forReview: true })], components: mediaReviewButtons(contentDbId) });
-          return interaction.followUp({ embeds: [{ description: `Marked \`${updated.content_id}\` as not redistributable.`, color: 0xf59e0b }], ephemeral: true });
+          return interaction.followUp({ embeds: [{ description: `Marked \`${updated.content_id}\` as not redistributable.`, color: 0xf59e0b }], allowedMentions: { parse: [] } });
         }
       } catch (error) {
         console.error("[Media review]", error.message);
@@ -6279,9 +6282,17 @@ ${rows || '<div class="ct">No messages.</div>'}
             }
           }
 
-          await sendDiscordDM(content.submitter_discord_id, kind === "reject"
-            ? `Your video \`${content.content_id}\` was not approved: ${reason}`
-            : `Changes were requested on your video \`${content.content_id}\`: ${reason}\n\nSubmit an updated version with \`/submit-media\`.`).catch(() => {});
+          // Posted in-channel instead of DMed. Only rejections ping the submitter.
+          if (reviewChannel) {
+            const decisionText = kind === "reject"
+              ? `Your video \`${content.content_id}\` was not approved: ${reason}`
+              : `Changes were requested on \`${content.content_id}\`: ${reason}\n\nSubmit an updated version with \`/submit-media\`.`;
+            await reviewChannel.send({
+              content: kind === "reject" ? `<@${content.submitter_discord_id}>` : undefined,
+              embeds: [{ description: decisionText, color: kind === "reject" ? 0xff4444 : 0xf59e0b }],
+              allowedMentions: kind === "reject" ? { users: [content.submitter_discord_id] } : { parse: [] },
+            }).catch(() => {});
+          }
           return interaction.editReply({ embeds: [{ description: `Marked \`${content.content_id}\` as ${status.replace("_", " ")}.`, color: kind === "reject" ? 0xff4444 : 0xf59e0b }] });
         }
 
@@ -6388,9 +6399,12 @@ ${rows || '<div class="ct">No messages.</div>'}
         if (!status) return;
         const { data: post } = await supabaseAdmin.from("media_posts").update({ status, updated_at: new Date().toISOString() }).eq("id", postId).select("*").single();
         await supabaseAdmin.from("media_post_reviews").insert({ post_id: postId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: status });
+        // Only pings the submitter for rejections.
         await interaction.editReply({
+          content: status === "rejected" ? `<@${post.member_discord_id}>` : "",
           embeds: [{ description: `Reported post on **${post.platform}** for \`${post.content_id}\` marked **${status}** by ${interaction.user.tag}.`, color: status === "approved" ? 0x22c55e : 0xff4444 }],
           components: [],
+          allowedMentions: status === "rejected" ? { users: [post.member_discord_id] } : { parse: [] },
         });
       } catch (error) {
         console.error("[Media post review]", error.message);
@@ -6407,7 +6421,11 @@ ${rows || '<div class="ct">No messages.</div>'}
       try {
         const { data: post } = await supabaseAdmin.from("media_posts").update({ status: "needs_correction", updated_at: new Date().toISOString() }).eq("id", postId).select("*").single();
         await supabaseAdmin.from("media_post_reviews").insert({ post_id: postId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: "needs_correction", notes });
-        await sendDiscordDM(post.member_discord_id, `Your reported post for \`${post.content_id}\` on ${post.platform} needs a correction: ${notes}\n\nUse \`/report-post\` to submit the fixed link.`).catch(() => {});
+        // Posted in-channel instead of DMed, no ping (only rejections ping).
+        await interaction.channel?.send({
+          embeds: [{ description: `Your reported post for \`${post.content_id}\` on ${post.platform} needs a correction: ${notes}\n\nUse \`/report-post\` to submit the fixed link.`, color: 0xf59e0b }],
+          allowedMentions: { parse: [] },
+        }).catch(() => {});
         return interaction.editReply({ embeds: [{ description: "Correction requested.", color: 0xf59e0b }] });
       } catch (error) {
         console.error("[Media post correction modal]", error.message);
