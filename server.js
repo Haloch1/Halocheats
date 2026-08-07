@@ -3370,17 +3370,11 @@ function mediaReviewButtons(contentDbId) {
   }];
 }
 
-/* Distributes an approved+redistributable video to the shared content-feed
-   channel and every active media member's personal channel. Each personal
-   copy gets its own "I Posted This" button/message so posting status can be
-   tracked per member without disabling the button globally. */
+/* Distributes an approved+redistributable video to every active media
+   member's personal channel. Members report their repost via /report-post. */
 async function distributeMediaContent(content) {
   if (!discordBot || !discordGuildId) return;
   const embed = buildMediaContentEmbed(content);
-  const postedButton = (label = "I Posted This") => ([{
-    type: 1,
-    components: [{ type: 2, style: 1, label, customId: `media_posted:${content.id}`, emoji: { name: "📤" } }],
-  }]);
 
   if (supabaseAdmin) {
     const { data: members } = await supabaseAdmin
@@ -3392,7 +3386,7 @@ async function distributeMediaContent(content) {
       try {
         const channel = await discordBot.channels.fetch(member.channel_id);
         if (channel) {
-          await channel.send({ embeds: [embed], components: postedButton() });
+          await channel.send({ embeds: [embed] });
         }
       } catch (err) {
         console.warn(`[Media Network] Could not deliver to ${member.discord_id}:`, err.message);
@@ -3450,10 +3444,9 @@ async function submitMediaForReview({ submitterId, submitterUsername, videoUrl, 
   return content;
 }
 
-/* Shared by the "I Posted This" modal and the /report-post backup command.
-   Relies on the DB's unique index (content, member, platform) as the source
-   of truth for duplicate prevention — the pre-check here is just for a
-   friendlier error message before hitting that constraint. */
+/* Used by /report-post. Relies on the DB's unique index (content, member,
+   platform) as the source of truth for duplicate prevention — the pre-check
+   here is just for a friendlier error message before hitting that constraint. */
 async function recordMediaPostReport({ content, memberDiscordId, memberUsername, platform, link }) {
   if (!supabaseAdmin) return { success: false, error: "Post tracking isn't available right now." };
   if (!/^https?:\/\//i.test(link)) {
@@ -3851,7 +3844,7 @@ if (isConfiguredValue(discordBotToken)) {
           .addStringOption(o => o.setName("notes").setDescription("Anything else reviewers should know (optional)").setRequired(false)),
         new SlashCommandBuilder()
           .setName("report-post")
-          .setDescription("Report a video you published (backup for the \"I Posted This\" button)")
+          .setDescription("Report a video you published to a social platform")
           .addStringOption(o => o.setName("content_id").setDescription("The video's Content ID, e.g. MEDIA-0042").setRequired(true))
           .addStringOption(o => o.setName("platform").setDescription("Where you posted it (TikTok, Instagram, YouTube, etc.)").setRequired(true))
           .addStringOption(o => o.setName("link").setDescription("Link to your published post").setRequired(true)),
@@ -6154,7 +6147,7 @@ ${rows || '<div class="ct">No messages.</div>'}
       }
     }
 
-    /* ── /report-post — backup for the "I Posted This" button ── */
+    /* ── /report-post — how members report a repost ── */
     if (interaction.commandName === "report-post") {
       const contentIdInput = trimField(interaction.options.getString("content_id"), 30).toUpperCase();
       const platform = trimField(interaction.options.getString("platform"), 40);
@@ -6325,57 +6318,6 @@ ${rows || '<div class="ct">No messages.</div>'}
       } catch (error) {
         console.error("[Media review modal]", error.message);
         return interaction.editReply({ embeds: [{ description: "Something went wrong saving that.", color: 0xff4444 }] });
-      }
-    }
-
-    /* ── "I Posted This" button — opens a small modal for platform + link ── */
-    if (interaction.isButton?.() && interaction.customId.startsWith("media_posted:")) {
-      const contentDbId = interaction.customId.split(":")[1];
-      const modal = new ModalBuilder().setCustomId(`media_posted_modal:${contentDbId}`).setTitle("I Posted This");
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("platform").setLabel("Platform (TikTok, Instagram, YouTube...)").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(40)),
-        new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("link").setLabel("Link to your published post").setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(500)),
-      );
-      return interaction.showModal(modal);
-    }
-
-    /* ── "I Posted This" modal submit ── */
-    if (interaction.isModalSubmit?.() && interaction.customId.startsWith("media_posted_modal:")) {
-      const contentDbId = interaction.customId.split(":")[1];
-      const platform = trimField(interaction.fields.getTextInputValue("platform"), 40);
-      const link = trimField(interaction.fields.getTextInputValue("link"), 500);
-
-      await interaction.deferReply({ ephemeral: true });
-      try {
-        const { data: content } = await supabaseAdmin.from("media_content").select("*").eq("id", contentDbId).maybeSingle();
-        if (!content) return interaction.editReply({ embeds: [{ description: "Couldn't find that video.", color: 0xff4444 }] });
-
-        const result = await recordMediaPostReport({
-          content,
-          memberDiscordId: interaction.user.id,
-          memberUsername: interaction.user.username,
-          platform,
-          link,
-        });
-        if (!result.success) {
-          return interaction.editReply({ embeds: [{ description: result.error, color: 0xff4444 }] });
-        }
-
-        // Update just this member's copy of the message — posting status is
-        // tracked per member, not disabled globally for everyone who got it.
-        try {
-          await interaction.message.edit({
-            components: [{
-              type: 1,
-              components: [{ type: 2, style: 3, label: "✅ Posted", customId: `media_posted_done:${contentDbId}`, disabled: true }],
-            }],
-          });
-        } catch {}
-
-        return interaction.editReply({ embeds: [{ description: "✅ Your post has been recorded successfully. Thank you for helping promote the brand!", color: 0x22c55e }] });
-      } catch (error) {
-        console.error("[Media posted modal]", error.message);
-        return interaction.editReply({ embeds: [{ description: "Something went wrong recording your post.", color: 0xff4444 }] });
       }
     }
 
@@ -6648,7 +6590,7 @@ ${rows || '<div class="ct">No messages.</div>'}
           fields: [
             { name: "Submitting a video", value: "Use `/submit-media` in your personal media channel.", inline: false },
             { name: "Getting approved videos", value: "Approved videos are posted directly to your personal channel.", inline: false },
-            { name: "Reporting a repost", value: "Click **I Posted This** on the video, or use `/report-post` as a backup.", inline: false },
+            { name: "Reporting a repost", value: "Use `/report-post` with the video's Content ID, platform, and your published link.", inline: false },
             { name: "Required hashtags", value: [...MEDIA_BASE_HASHTAGS, "#{game}", MEDIA_TRAILING_HASHTAG].join(" "), inline: false },
             { name: "Useful commands", value: "`/media-profile` `/media-stats` `/media-members` `/media-content` `/media-leaderboard` `/media-campaign` `/media-posts`", inline: false },
           ],
