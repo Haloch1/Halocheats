@@ -510,8 +510,10 @@ function isMediaMember(member) {
 }
 
 function mediaHashtagFor(game) {
-  const slug = String(game || "").replace(/[^a-zA-Z0-9]/g, "");
-  return slug ? `#${slug}` : "#game";
+  const raw = String(game || "").trim();
+  if (!raw || raw.toLowerCase() === "not specified") return "#viral";
+  const slug = raw.replace(/[^a-zA-Z0-9]/g, "");
+  return slug ? `#${slug}` : "#viral";
 }
 
 function mediaHashtagsFor(game) {
@@ -3333,19 +3335,20 @@ async function archiveMediaChannel(guild, discordUser, { reason = null, changedB
 }
 
 function buildMediaContentEmbed(content, { forReview = false } = {}) {
-  const fields = [
-    { name: "Game", value: content.game, inline: true },
+  const fields = [];
+  if (forReview) fields.push({ name: "Game", value: content.game, inline: true });
+  fields.push(
     { name: "Content ID", value: `\`${content.content_id || "pending"}\``, inline: true },
     { name: "Redistributable", value: content.redistributable ? "Yes" : "No", inline: true },
     { name: "Creator credit", value: content.creator_credit, inline: false },
-    { name: "Caption", value: content.caption.slice(0, 1000), inline: false },
-    { name: "Hashtags", value: (content.hashtags || []).join(" ") || "—", inline: false },
-  ];
+  );
+  if (forReview) fields.push({ name: "Caption", value: content.caption.slice(0, 1000), inline: false });
+  fields.push({ name: "Hashtags", value: (content.hashtags || []).join(" ") || "—", inline: false });
   if (content.campaign) fields.push({ name: "Campaign", value: content.campaign, inline: true });
-  if (content.notes) fields.push({ name: "Notes", value: content.notes.slice(0, 500), inline: false });
+  if (forReview && content.notes) fields.push({ name: "Notes", value: content.notes.slice(0, 500), inline: false });
   if (forReview) fields.push({ name: "Submitted by", value: `<@${content.submitter_discord_id}>`, inline: true });
   return {
-    title: forReview ? "New media submission" : "New Approved Media Video",
+    title: forReview ? "New media submission" : "New video to post",
     description: content.video_url ? `[Video link](${content.video_url})` : "See attached video.",
     color: forReview ? 0x7c3aed : 0x22c55e,
     fields,
