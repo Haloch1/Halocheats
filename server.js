@@ -383,6 +383,12 @@ const discordVerifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || "";
 const discordUnverifiedRoleId = process.env.DISCORD_UNVERIFIED_ROLE_ID || "";
 const discordVerificationChannelId =
   process.env.DISCORD_VERIFICATION_CHANNEL_ID || "1528634343369736284";
+// Master on/off switch for the whole verification gate. Set
+// DISCORD_VERIFICATION_ENABLED=false in Render to turn it off — new members
+// won't be restricted, and ensureDiscordVerificationLayout() will instead
+// open up member channels to everyone instead of touching the verification
+// channel (safe even if that channel has been deleted).
+const verificationEnabled = process.env.DISCORD_VERIFICATION_ENABLED !== "false";
 /* Verification fraud controls. Ban/alt matching is done on an HMAC hash of the
    IP (never the reverse-recoverable raw address). The raw IP is additionally
    stored on discord_verification_ips (ip_address column) so /ips can show it
@@ -577,6 +583,27 @@ function buildDiscordVerificationPanel() {
 async function ensureDiscordVerificationLayout(guild) {
   if (!guild || !discordVerifiedRoleId || !discordUnverifiedRoleId) {
     console.warn("[Discord] Verification layout skipped: verified or unverified role is not configured.");
+    return;
+  }
+
+  if (!verificationEnabled) {
+    // Verification is turned off — open member channels back up instead of
+    // touching the verification channel (which may be deleted). Removes the
+    // ViewChannel:false overwrite for Unverified so nobody stays locked out
+    // from before it was disabled.
+    await guild.channels.fetch();
+    const memberChannels = guild.channels.cache.filter(
+      (channel) => discordMemberCategoryIds.includes(channel.id)
+        || (channel.parentId && discordMemberCategoryIds.includes(channel.parentId)),
+    );
+    for (const channel of memberChannels.values()) {
+      await channel.permissionOverwrites.delete(discordUnverifiedRoleId).catch(() => {});
+    }
+    const questionsChannel = await guild.channels.fetch(discordQuestionsChannelId).catch(() => null);
+    if (questionsChannel?.isTextBased()) {
+      await questionsChannel.permissionOverwrites.delete(discordUnverifiedRoleId).catch(() => {});
+    }
+    console.log("[Discord] Verification is disabled — opened up member channels for Unverified.");
     return;
   }
 
@@ -3930,7 +3957,7 @@ if (isConfiguredValue(discordBotToken)) {
     if (!discordGuildId || member.guild.id !== discordGuildId) return;
 
     // Assign unverified role to new joins (skip if already verified via OAuth)
-    if (discordUnverifiedRoleId) {
+    if (verificationEnabled && discordUnverifiedRoleId) {
       if (!discordVerifiedRoleId || !member.roles.cache.has(discordVerifiedRoleId)) {
         await member.roles.add(discordUnverifiedRoleId).catch(() => {});
       }
