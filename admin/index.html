@@ -1362,6 +1362,56 @@
         background: #fff;
       }
 
+      /* Full order IDs / license keys with a one-click copy button, instead
+         of truncated IDs and a "Yes/-" boolean the admin had to open a modal
+         to see past. */
+      .admin-page .copy-cell {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .admin-page .copy-cell code {
+        font-size: 0.76rem;
+        max-width: 220px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .admin-page .copy-btn {
+        flex-shrink: 0;
+        width: 22px;
+        height: 22px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--ink-soft);
+        font-size: 0.75rem;
+        line-height: 1;
+        cursor: pointer;
+        transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+      }
+
+      .admin-page .copy-btn:hover {
+        border-color: var(--red);
+        color: var(--red);
+      }
+
+      .admin-page .copy-btn.copied {
+        border-color: var(--red);
+        background: var(--red-soft);
+        color: var(--red-dark);
+      }
+
+      .admin-page .cell-empty {
+        color: var(--ink-faint);
+        font-size: 0.8rem;
+      }
+
       @media (max-width: 900px) {
         .admin-shell { width: min(100% - 24px, 700px); flex-direction: column; }
         .admin-sidebar { position: static; width: 100%; }
@@ -1520,7 +1570,7 @@
             <div class="panel-section-title">Recent Orders</div>
             <div class="admin-table-wrap">
               <table class="admin-table" id="overviewOrdersTable">
-                <thead><tr><th>Product</th><th>Status</th><th>Date</th><th></th></tr></thead>
+                <thead><tr><th>Order ID</th><th>Product</th><th>Status</th><th>Key</th><th>Date</th><th></th></tr></thead>
                 <tbody id="overviewOrdersBody"></tbody>
               </table>
             </div>

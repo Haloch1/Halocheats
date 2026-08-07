@@ -13700,6 +13700,7 @@ app.get("/api/admin/orders", async (req, res) => {
         createdAt: order.created_at,
         fulfilledAt: order.fulfilled_at,
         hasKey: Boolean(order.delivered_key_value),
+        key: order.delivered_key_value || null,
       };
     });
 
@@ -18016,6 +18017,7 @@ app.get("/api/admin/order-lookup", async (req, res) => {
       createdAt: order.created_at,
       fulfilledAt: order.fulfilled_at,
       hasKey: Boolean(order.delivered_key_value),
+      key: order.delivered_key_value || null,
     }));
     return res.json({ orders });
   } catch (error) {

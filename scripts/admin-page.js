@@ -34,6 +34,31 @@ function shortId(id) {
   return id.length > 12 ? id.slice(0, 8) + "..." : id;
 }
 
+/* Renders a full value (order ID, key, etc.) in monospace with a copy
+   button, instead of forcing admins to open a modal just to read/copy it. */
+function copyCell(value, emptyLabel = "—") {
+  if (!value) return `<span class="cell-empty">${emptyLabel}</span>`;
+  const safe = esc(value);
+  return `<span class="copy-cell"><code>${safe}</code><button type="button" class="copy-btn" data-copy-value="${safe}" title="Copy" aria-label="Copy">⧉</button></span>`;
+}
+
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-copy-value]");
+  if (!button) return;
+  try {
+    await navigator.clipboard.writeText(button.getAttribute("data-copy-value"));
+    const original = button.textContent;
+    button.textContent = "✓";
+    button.classList.add("copied");
+    setTimeout(() => {
+      button.textContent = original;
+      button.classList.remove("copied");
+    }, 1200);
+  } catch {
+    // Clipboard API unavailable — the value is still visible/selectable.
+  }
+});
+
 function chip(status) {
   return `<span class="chip chip-${esc(status)}">${esc(status)}</span>`;
 }
@@ -192,15 +217,17 @@ async function loadOverview() {
     const tbody = document.getElementById("overviewOrdersBody");
     if (!orders.orders.length) {
       tbody.innerHTML =
-        '<tr><td colspan="4" class="empty-state">No orders yet.</td></tr>';
+        '<tr><td colspan="6" class="empty-state">No orders yet.</td></tr>';
     } else {
       tbody.innerHTML = orders.orders
         .slice(0, 8)
         .map(
           (o) => `
         <tr>
+          <td>${copyCell(o.id)}</td>
           <td>${esc(o.productName)}</td>
           <td>${chip(o.status)}</td>
+          <td>${copyCell(o.key, "not delivered")}</td>
           <td>${fmtDate(o.createdAt)}</td>
           <td><button class="btn-view" data-view-order="${esc(o.id)}">View</button></td>
         </tr>
@@ -235,10 +262,10 @@ async function loadOrders() {
       .map(
         (o) => `
       <tr>
-        <td><code>${shortId(o.id)}</code></td>
+        <td>${copyCell(o.id)}</td>
         <td>${esc(o.productName)}</td>
         <td>${chip(o.status)}</td>
-        <td>${o.hasKey ? "Yes" : "-"}</td>
+        <td>${copyCell(o.key, "not delivered")}</td>
         <td>${fmtDate(o.createdAt)}</td>
         <td><button class="btn-view" data-view-order="${esc(o.id)}">View</button></td>
       </tr>
@@ -260,7 +287,7 @@ document.getElementById("orderSearchBtn").addEventListener("click", async () => 
     const result = await apiFetch(`/api/admin/order-lookup?q=${encodeURIComponent(query)}`);
     if (!result.orders?.length) return alert("No orders found for that member.");
     if (result.orders.length === 1) return viewOrder(result.orders[0].id);
-    document.getElementById("ordersBody").innerHTML = result.orders.map((order) => `<tr><td><code>${shortId(order.id)}</code></td><td>${esc(order.productName)}</td><td>${chip(order.status)}</td><td>${order.hasKey ? "Yes" : "-"}</td><td>${fmtDate(order.createdAt)}</td><td><button class="btn-view" data-view-order="${esc(order.id)}">View</button></td></tr>`).join("");
+    document.getElementById("ordersBody").innerHTML = result.orders.map((order) => `<tr><td>${copyCell(order.id)}</td><td>${esc(order.productName)}</td><td>${chip(order.status)}</td><td>${copyCell(order.key, "not delivered")}</td><td>${fmtDate(order.createdAt)}</td><td><button class="btn-view" data-view-order="${esc(order.id)}">View</button></td></tr>`).join("");
   } catch (error) {
     alert(error.message);
   }
@@ -381,10 +408,10 @@ function renderKeys() {
     .map(
       (key) => `
       <tr>
-        <td><code>${esc(key.keyValue)}</code></td>
+        <td>${copyCell(key.keyValue)}</td>
         <td><strong>${esc(key.productName)}</strong></td>
         <td>${chip(key.status)}</td>
-        <td>${key.assignedOrderId ? `<code>${shortId(key.assignedOrderId)}</code>` : "-"}</td>
+        <td>${key.assignedOrderId ? copyCell(key.assignedOrderId) : `<span class="cell-empty">—</span>`}</td>
         <td>${fmtDate(key.assignedAt)}</td>
       </tr>
     `
