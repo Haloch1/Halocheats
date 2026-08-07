@@ -3294,7 +3294,7 @@ async function ensureMediaChannel(guild, discordUser, member) {
       `• Post every video you make here in your channel, and post it on Discord too.\n` +
       `• Use the provided captions, credits, and hashtags.\n` +
       `• Report every video you post.\n\n` +
-      `**To submit:** just post the video here (file or link) — it goes to review automatically, no button needed.`,
+      `**To submit:** just post the video here (file or link) — it goes out to the whole media network automatically, no button needed.`,
   });
   await welcome.pin().catch(() => {});
   return channel;
@@ -3348,24 +3348,22 @@ function buildMediaContentEmbed(content, { forReview = false } = {}) {
   if (forReview && content.notes) fields.push({ name: "Notes", value: content.notes.slice(0, 500), inline: false });
   if (forReview) fields.push({ name: "Submitted by", value: `<@${content.submitter_discord_id}>`, inline: true });
   return {
-    title: forReview ? "New media submission" : "New video to post",
+    title: forReview ? "Posted to the media network" : "New video to post",
     description: content.video_url ? `[Video link](${content.video_url})` : "See attached video.",
-    color: forReview ? 0x7c3aed : 0x22c55e,
+    color: forReview ? 0x22c55e : 0x22c55e,
     fields,
     footer: { text: `${MEDIA_BRAND_NAME} Media Network` },
     timestamp: new Date().toISOString(),
   };
 }
 
+// Videos auto-approve and go out immediately — staff only need to pull
+// something down if it turns out to be bad.
 function mediaReviewButtons(contentDbId) {
   return [{
     type: 1,
     components: [
-      { type: 2, style: 3, label: "Approve", customId: `media_review_approve:${contentDbId}`, emoji: { name: "✅" } },
-      { type: 2, style: 4, label: "Reject", customId: `media_review_reject:${contentDbId}`, emoji: { name: "❌" } },
-      { type: 2, style: 2, label: "Request Changes", customId: `media_review_changes:${contentDbId}`, emoji: { name: "✏️" } },
-      { type: 2, style: 2, label: "Edit Details", customId: `media_review_edit:${contentDbId}`, emoji: { name: "🛠️" } },
-      { type: 2, style: 2, label: "Not Redistributable", customId: `media_review_norepost:${contentDbId}`, emoji: { name: "🚫" } },
+      { type: 2, style: 4, label: "Remove", customId: `media_review_remove:${contentDbId}`, emoji: { name: "🗑️" } },
     ],
   }];
 }
@@ -3401,7 +3399,10 @@ async function distributeMediaContent(content) {
 
 /* Shared by /submit-media and the auto-detected "post a video directly in
    your channel" quick-submit flow — inserts the row, generates the
-   MEDIA-xxxx Content ID, and posts it to the review channel. */
+   MEDIA-xxxx Content ID, auto-approves it, and distributes it right away.
+   Most media posts good content, so there's no manual approval gate —
+   staff just get a heads-up in the review channel with a Remove button
+   in case something needs pulling. */
 async function submitMediaForReview({ submitterId, submitterUsername, videoUrl, game, caption, creator, redistributable, campaign, notes }) {
   const { data: inserted, error: insertError } = await supabaseAdmin
     .from("media_content")
@@ -3416,7 +3417,7 @@ async function submitMediaForReview({ submitterId, submitterUsername, videoUrl, 
       campaign: campaign || null,
       notes: notes || null,
       redistributable,
-      status: "pending",
+      status: "approved",
     })
     .select("*")
     .single();
@@ -3440,6 +3441,8 @@ async function submitMediaForReview({ submitterId, submitterUsername, videoUrl, 
       await supabaseAdmin.from("media_content").update({ review_channel_message_id: message.id }).eq("id", content.id);
     }
   }
+
+  if (content.redistributable) await distributeMediaContent(content);
 
   return content;
 }
@@ -3833,7 +3836,7 @@ if (isConfiguredValue(discordBotToken)) {
           .addStringOption(o => o.setName("avatar_url").setDescription("Avatar image URL (optional)").setRequired(false)),
         new SlashCommandBuilder()
           .setName("submit-media")
-          .setDescription("Submit a promotional video for review (media members)")
+          .setDescription("Post a promotional video to the media network (media members)")
           .addStringOption(o => o.setName("game").setDescription("Which game this video is for").setRequired(true))
           .addStringOption(o => o.setName("caption").setDescription("Suggested caption for the post").setRequired(true))
           .addStringOption(o => o.setName("creator").setDescription("Original creator credit").setRequired(true))
@@ -3841,7 +3844,7 @@ if (isConfiguredValue(discordBotToken)) {
           .addAttachmentOption(o => o.setName("video").setDescription("The video file").setRequired(false))
           .addStringOption(o => o.setName("video_link").setDescription("Link to the video, if not attaching a file").setRequired(false))
           .addStringOption(o => o.setName("campaign").setDescription("Campaign name (optional)").setRequired(false))
-          .addStringOption(o => o.setName("notes").setDescription("Anything else reviewers should know (optional)").setRequired(false)),
+          .addStringOption(o => o.setName("notes").setDescription("Anything else staff should know (optional)").setRequired(false)),
         new SlashCommandBuilder()
           .setName("report-post")
           .setDescription("Report a video you published to a social platform")
@@ -3990,11 +3993,10 @@ if (isConfiguredValue(discordBotToken)) {
   });
 
   /* ── Media Network: a video posted directly in a member's own personal
-     channel is submitted for review automatically — no button/modal to
-     click. Game/creator/caption default from the message itself; a
-     reviewer can fix any of it via the "Edit Details" button before
-     approving. Still goes through the exact same review/approval pipeline
-     as /submit-media. ── */
+     channel goes out to the whole network automatically — no button/modal,
+     no manual approval. Game/creator/caption default from the message
+     itself. Staff get a heads-up in the review channel with a Remove
+     button if something needs pulling. Same pipeline as /submit-media. ── */
   discordBot.on("messageCreate", async (message) => {
     if (message.author.bot || !supabaseAdmin) return;
     if (!discordMediaReviewChannelId) return; // media network not configured yet
@@ -4023,11 +4025,11 @@ if (isConfiguredValue(discordBotToken)) {
         creator: message.author.username,
         redistributable: true,
         campaign: null,
-        notes: "Auto-submitted from personal channel post — needs game/details reviewed.",
+        notes: "Auto-submitted from personal channel post.",
       });
 
       await message.reply({
-        embeds: [{ description: `Submitted for review as \`${content.content_id}\`. A media manager will take a look shortly.`, color: 0x7c3aed }],
+        embeds: [{ description: `Posted to the media network as \`${content.content_id}\`.`, color: 0x22c55e }],
       });
     } catch (err) {
       console.error("[Media Network] Auto-submit error:", err.message);
@@ -6059,7 +6061,7 @@ ${rows || '<div class="ct">No messages.</div>'}
       }
     }
 
-    /* ── /submit-media — media member submits a video for review ── */
+    /* ── /submit-media — media member posts a video to the network ── */
     if (interaction.commandName === "submit-media") {
       if (!isMediaMember(interaction.member) && !isMediaReviewerInteraction(interaction)) {
         return interaction.reply({ embeds: [{ description: "You need the Media role to submit videos.", color: 0xff4444 }], ephemeral: true });
@@ -6098,7 +6100,7 @@ ${rows || '<div class="ct">No messages.</div>'}
         });
 
         return interaction.editReply({
-          embeds: [{ description: `Submitted for review — your Content ID is \`${content.content_id}\`. You'll be notified once it's reviewed.`, color: 0x22c55e }],
+          embeds: [{ description: `Posted to the media network — your Content ID is \`${content.content_id}\`.`, color: 0x22c55e }],
         });
       } catch (error) {
         console.error("[Discord /submit-media]", error.message);
@@ -6180,144 +6182,32 @@ ${rows || '<div class="ct">No messages.</div>'}
       }
     }
 
-    /* ── Media review buttons: Approve / Reject / Request Changes / Edit / Not Redistributable ── */
-    if (interaction.isButton?.() && interaction.customId.startsWith("media_review_")) {
+    /* ── Media review: Remove — videos auto-approve and go out immediately,
+       so this is the only action staff need: pull something that shouldn't
+       have gone out. Pings the submitter (only rejections/removals ping). ── */
+    if (interaction.isButton?.() && interaction.customId.startsWith("media_review_remove:")) {
       if (!isMediaReviewerInteraction(interaction)) {
         return interaction.reply({ embeds: [{ description: "Employees, media managers, and admins only.", color: 0xff4444 }], ephemeral: true });
       }
-      const [, action, contentDbId] = interaction.customId.match(/^media_review_([a-z]+):(\d+)$/) || [];
-      if (!action || !contentDbId) return;
-
-      // Reject / Request Changes / Edit collect input via a modal first.
-      if (action === "reject" || action === "changes") {
-        const modal = new ModalBuilder()
-          .setCustomId(`media_review_${action}_modal:${contentDbId}`)
-          .setTitle(action === "reject" ? "Reject video" : "Request changes");
-        modal.addComponents(new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId("reason")
-            .setLabel(action === "reject" ? "Why is this being rejected?" : "What needs to change?")
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(true)
-            .setMaxLength(700),
-        ));
-        return interaction.showModal(modal);
-      }
-
-      if (action === "edit") {
-        const { data: content } = await supabaseAdmin.from("media_content").select("*").eq("id", contentDbId).maybeSingle();
-        if (!content) return interaction.reply({ embeds: [{ description: "Couldn't find that submission.", color: 0xff4444 }], ephemeral: true });
-        const modal = new ModalBuilder().setCustomId(`media_review_edit_modal:${contentDbId}`).setTitle("Edit video details");
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("game").setLabel("Game").setStyle(TextInputStyle.Short).setRequired(true).setValue(content.game.slice(0, 100))),
-          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("caption").setLabel("Caption").setStyle(TextInputStyle.Paragraph).setRequired(true).setValue(content.caption.slice(0, 1000))),
-          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("hashtags").setLabel("Hashtags (space-separated)").setStyle(TextInputStyle.Short).setRequired(true).setValue((content.hashtags || []).join(" ").slice(0, 200))),
-          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("creator").setLabel("Creator credit").setStyle(TextInputStyle.Short).setRequired(true).setValue(content.creator_credit.slice(0, 120))),
-          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("campaign").setLabel("Campaign (optional)").setStyle(TextInputStyle.Short).setRequired(false).setValue((content.campaign || "").slice(0, 120))),
-        );
-        return interaction.showModal(modal);
-      }
-
-      // Approve / Not Redistributable act immediately, no modal.
+      const contentDbId = interaction.customId.split(":")[1];
       await interaction.deferUpdate();
       try {
-        const { data: content, error: fetchError } = await supabaseAdmin.from("media_content").select("*").eq("id", contentDbId).maybeSingle();
-        if (fetchError || !content) return interaction.followUp({ embeds: [{ description: "Couldn't find that submission.", color: 0xff4444 }], ephemeral: true });
+        const { data: updated } = await supabaseAdmin.from("media_content").update({ status: "rejected", updated_at: new Date().toISOString() }).eq("id", contentDbId).select("*").single();
+        if (!updated) return interaction.followUp({ embeds: [{ description: "Couldn't find that submission.", color: 0xff4444 }], ephemeral: true });
+        await supabaseAdmin.from("media_content_reviews").insert({ content_id: contentDbId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: "removed" });
 
-        if (action === "approve") {
-          const { data: updated } = await supabaseAdmin.from("media_content").update({ status: "approved", updated_at: new Date().toISOString() }).eq("id", contentDbId).select("*").single();
-          await supabaseAdmin.from("media_content_reviews").insert({ content_id: contentDbId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: "approved" });
-          await interaction.editReply({ embeds: [buildMediaContentEmbed(updated, { forReview: true })], components: [] });
-          // Posted in-channel (not DMed) and not pinging the submitter — only rejections ping.
-          await interaction.followUp({
-            embeds: [{ description: `Approved \`${updated.content_id}\`.${updated.redistributable ? " Distributing now..." : " Not marked redistributable, so it will not be distributed."}`, color: 0x22c55e }],
-            allowedMentions: { parse: [] },
-          });
-          if (updated.redistributable) await distributeMediaContent(updated);
-          return;
-        }
-
-        if (action === "norepost") {
-          const { data: updated } = await supabaseAdmin.from("media_content").update({ redistributable: false, updated_at: new Date().toISOString() }).eq("id", contentDbId).select("*").single();
-          await supabaseAdmin.from("media_content_reviews").insert({ content_id: contentDbId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: "not_redistributable" });
-          await interaction.editReply({ embeds: [buildMediaContentEmbed(updated, { forReview: true })], components: mediaReviewButtons(contentDbId) });
-          return interaction.followUp({ embeds: [{ description: `Marked \`${updated.content_id}\` as not redistributable.`, color: 0xf59e0b }], allowedMentions: { parse: [] } });
-        }
+        const embed = buildMediaContentEmbed(updated, { forReview: true });
+        embed.title = "Removed";
+        embed.color = 0xff4444;
+        await interaction.editReply({ embeds: [embed], components: [] });
+        await interaction.followUp({
+          content: `<@${updated.submitter_discord_id}>`,
+          embeds: [{ description: `\`${updated.content_id}\` was removed by ${interaction.user.tag} — it may already be posted, ask members not to repost it.`, color: 0xff4444 }],
+          allowedMentions: { users: [updated.submitter_discord_id] },
+        });
       } catch (error) {
-        console.error("[Media review]", error.message);
-        return interaction.followUp({ embeds: [{ description: "Something went wrong processing that review action.", color: 0xff4444 }], ephemeral: true });
-      }
-    }
-
-    /* ── Media review modals: Reject / Request Changes / Edit submit ── */
-    if (interaction.isModalSubmit?.() && interaction.customId.startsWith("media_review_") && interaction.customId.includes("_modal:")) {
-      if (!isMediaReviewerInteraction(interaction)) {
-        return interaction.reply({ embeds: [{ description: "Employees, media managers, and admins only.", color: 0xff4444 }], ephemeral: true });
-      }
-      const [, kind, contentDbId] = interaction.customId.match(/^media_review_([a-z]+)_modal:(\d+)$/) || [];
-      if (!kind || !contentDbId) return;
-
-      await interaction.deferReply({ ephemeral: true });
-      try {
-        const { data: content, error: fetchError } = await supabaseAdmin.from("media_content").select("*").eq("id", contentDbId).maybeSingle();
-        if (fetchError || !content) return interaction.editReply({ embeds: [{ description: "Couldn't find that submission.", color: 0xff4444 }] });
-
-        if (kind === "reject" || kind === "changes") {
-          const reason = interaction.fields.getTextInputValue("reason");
-          const status = kind === "reject" ? "rejected" : "changes_requested";
-          const { data: updated } = await supabaseAdmin.from("media_content").update({ status, updated_at: new Date().toISOString() }).eq("id", contentDbId).select("*").single();
-          await supabaseAdmin.from("media_content_reviews").insert({ content_id: contentDbId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: status, notes: reason });
-
-          const reviewChannel = discordMediaReviewChannelId ? await discordBot.channels.fetch(discordMediaReviewChannelId).catch(() => null) : null;
-          if (reviewChannel && content.review_channel_message_id) {
-            const message = await reviewChannel.messages.fetch(content.review_channel_message_id).catch(() => null);
-            if (message) {
-              const embed = buildMediaContentEmbed(updated, { forReview: true });
-              embed.footer = { text: `${kind === "reject" ? "Rejected" : "Changes requested"} by ${interaction.user.tag}: ${reason}`.slice(0, 250) };
-              await message.edit({ embeds: [embed], components: kind === "reject" ? [] : mediaReviewButtons(contentDbId) }).catch(() => {});
-            }
-          }
-
-          // Posted in-channel instead of DMed. Only rejections ping the submitter.
-          if (reviewChannel) {
-            const decisionText = kind === "reject"
-              ? `Your video \`${content.content_id}\` was not approved: ${reason}`
-              : `Changes were requested on \`${content.content_id}\`: ${reason}\n\nSubmit an updated version with \`/submit-media\`.`;
-            await reviewChannel.send({
-              content: kind === "reject" ? `<@${content.submitter_discord_id}>` : undefined,
-              embeds: [{ description: decisionText, color: kind === "reject" ? 0xff4444 : 0xf59e0b }],
-              allowedMentions: kind === "reject" ? { users: [content.submitter_discord_id] } : { parse: [] },
-            }).catch(() => {});
-          }
-          return interaction.editReply({ embeds: [{ description: `Marked \`${content.content_id}\` as ${status.replace("_", " ")}.`, color: kind === "reject" ? 0xff4444 : 0xf59e0b }] });
-        }
-
-        if (kind === "edit") {
-          const game = trimField(interaction.fields.getTextInputValue("game"), 100);
-          const caption = trimField(interaction.fields.getTextInputValue("caption"), 1000);
-          const hashtagsRaw = trimField(interaction.fields.getTextInputValue("hashtags"), 200);
-          const creator = trimField(interaction.fields.getTextInputValue("creator"), 120);
-          const campaign = trimField(interaction.fields.getTextInputValue("campaign") || "", 120) || null;
-          const hashtags = hashtagsRaw.split(/\s+/).filter(Boolean).map((tag) => (tag.startsWith("#") ? tag : `#${tag}`));
-
-          const { data: updated } = await supabaseAdmin
-            .from("media_content")
-            .update({ game, caption, hashtags, creator_credit: creator, campaign, updated_at: new Date().toISOString() })
-            .eq("id", contentDbId)
-            .select("*")
-            .single();
-          await supabaseAdmin.from("media_content_reviews").insert({ content_id: contentDbId, reviewer_discord_id: interaction.user.id, reviewer_username: interaction.user.username, decision: "edited" });
-
-          const reviewChannel = discordMediaReviewChannelId ? await discordBot.channels.fetch(discordMediaReviewChannelId).catch(() => null) : null;
-          if (reviewChannel && content.review_channel_message_id) {
-            const message = await reviewChannel.messages.fetch(content.review_channel_message_id).catch(() => null);
-            if (message) await message.edit({ embeds: [buildMediaContentEmbed(updated, { forReview: true })], components: mediaReviewButtons(contentDbId) }).catch(() => {});
-          }
-          return interaction.editReply({ embeds: [{ description: `Updated details for \`${updated.content_id}\`.`, color: 0x22c55e }] });
-        }
-      } catch (error) {
-        console.error("[Media review modal]", error.message);
-        return interaction.editReply({ embeds: [{ description: "Something went wrong saving that.", color: 0xff4444 }] });
+        console.error("[Media review remove]", error.message);
+        return interaction.followUp({ embeds: [{ description: "Something went wrong removing that.", color: 0xff4444 }], ephemeral: true });
       }
     }
 
@@ -6586,10 +6476,10 @@ ${rows || '<div class="ct">No messages.</div>'}
         embeds: [{
           title: "How the Media Network works",
           color: 0x7c3aed,
-          description: `Approved media members get a private channel to submit and receive promotional videos for ${MEDIA_BRAND_NAME}.`,
+          description: `Media members get a private channel to post and receive promotional videos for ${MEDIA_BRAND_NAME}.`,
           fields: [
-            { name: "Submitting a video", value: "Use `/submit-media` in your personal media channel.", inline: false },
-            { name: "Getting approved videos", value: "Approved videos are posted directly to your personal channel.", inline: false },
+            { name: "Posting a video", value: "Just post it in your personal channel (file or link), or use `/submit-media` — it goes out to the network instantly, no approval needed.", inline: false },
+            { name: "Getting videos", value: "New videos from other media members post directly to your personal channel.", inline: false },
             { name: "Reporting a repost", value: "Use `/report-post` with the video's Content ID, platform, and your published link.", inline: false },
             { name: "Required hashtags", value: [...MEDIA_BASE_HASHTAGS, "#{game}", MEDIA_TRAILING_HASHTAG].join(" "), inline: false },
             { name: "Useful commands", value: "`/media-profile` `/media-stats` `/media-members` `/media-content` `/media-leaderboard` `/media-campaign` `/media-posts`", inline: false },
