@@ -534,6 +534,10 @@ function isDiscordAdminInteraction(interaction) {
   return isDiscordAdmin(interaction.user.id, interaction.member);
 }
 
+function isDiscordStaffInteraction(interaction) {
+  return isDiscordStaff(interaction.user.id, interaction.member);
+}
+
 function isMediaReviewerInteraction(interaction) {
   return isMediaReviewer(interaction.user.id, interaction.member);
 }
@@ -3543,6 +3547,127 @@ async function recordMediaPostReport({ content, memberDiscordId, memberUsername,
   return { success: true };
 }
 
+/* ── Giveaways ── */
+// giveawayId -> setTimeout handle, so a restart doesn't leave two timers
+// racing to end the same giveaway (resumeActiveGiveaways reschedules fresh).
+const giveawayTimers = new Map();
+
+/* Parses "30m", "2h", "1d", "1d12h", "1h 30m", plain "45" (minutes), etc.
+   Returns milliseconds, or null if nothing valid was found. Capped by the
+   caller, not here. */
+function parseGiveawayDuration(raw) {
+  const input = String(raw || "").trim().toLowerCase();
+  if (!input) return null;
+  if (/^\d+$/.test(input)) return Number(input) * 60_000; // bare number = minutes
+  const unitMs = { d: 86_400_000, h: 3_600_000, m: 60_000, s: 1_000 };
+  const re = /(\d+)\s*(d|h|m|s)/g;
+  let match;
+  let totalMs = 0;
+  let found = false;
+  while ((match = re.exec(input))) {
+    found = true;
+    totalMs += Number(match[1]) * unitMs[match[2]];
+  }
+  return found ? totalMs : null;
+}
+
+function buildGiveawayEmbed(giveaway, entryCount) {
+  const ended = giveaway.status !== "active";
+  const fields = [
+    { name: "Hosted by", value: `<@${giveaway.host_discord_id}>`, inline: true },
+    { name: "Winners", value: String(giveaway.winners_count), inline: true },
+    { name: "Entries", value: String(entryCount), inline: true },
+  ];
+  if (ended) {
+    fields.push({
+      name: giveaway.winner_ids?.length ? "🎉 Winner(s)" : "Result",
+      value: giveaway.winner_ids?.length ? giveaway.winner_ids.map((id) => `<@${id}>`).join(", ") : "No valid entries — no winner.",
+      inline: false,
+    });
+  } else {
+    fields.push({ name: "Ends", value: `<t:${Math.floor(new Date(giveaway.ends_at).getTime() / 1000)}:R>`, inline: false });
+  }
+  return {
+    title: ended ? "🎉 Giveaway ended" : "🎉 Giveaway!",
+    description: giveaway.prize,
+    color: ended ? 0x808080 : 0x7c3aed,
+    fields,
+    footer: { text: `${MEDIA_BRAND_NAME}` },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function giveawayEnterButton(giveawayId, disabled = false) {
+  return [{
+    type: 1,
+    components: [{ type: 2, style: 1, label: "🎉 Enter Giveaway", customId: `giveaway_enter:${giveawayId}`, disabled }],
+  }];
+}
+
+async function endGiveaway(giveawayId) {
+  clearTimeout(giveawayTimers.get(giveawayId));
+  giveawayTimers.delete(giveawayId);
+  if (!supabaseAdmin || !discordBot) return;
+
+  const { data: giveaway } = await supabaseAdmin.from("giveaways").select("*").eq("id", giveawayId).maybeSingle();
+  if (!giveaway || giveaway.status !== "active") return;
+
+  const { data: entries } = await supabaseAdmin.from("giveaway_entries").select("discord_id").eq("giveaway_id", giveawayId);
+  const pool = (entries || []).map((e) => e.discord_id);
+  const winners = [];
+  const poolCopy = [...pool];
+  const winnerCount = Math.min(giveaway.winners_count, poolCopy.length);
+  for (let i = 0; i < winnerCount; i++) {
+    const idx = Math.floor(Math.random() * poolCopy.length);
+    winners.push(poolCopy.splice(idx, 1)[0]);
+  }
+
+  const { data: updated } = await supabaseAdmin
+    .from("giveaways")
+    .update({ status: "ended", winner_ids: winners, ended_at: new Date().toISOString() })
+    .eq("id", giveawayId)
+    .select("*")
+    .single();
+
+  try {
+    const channel = await discordBot.channels.fetch(giveaway.channel_id).catch(() => null);
+    if (channel) {
+      if (giveaway.message_id) {
+        const message = await channel.messages.fetch(giveaway.message_id).catch(() => null);
+        if (message) await message.edit({ embeds: [buildGiveawayEmbed(updated, pool.length)], components: giveawayEnterButton(giveawayId, true) }).catch(() => {});
+      }
+      await channel.send({
+        content: winners.length ? winners.map((id) => `<@${id}>`).join(" ") : undefined,
+        embeds: [{
+          description: winners.length
+            ? `🎉 Congrats ${winners.map((id) => `<@${id}>`).join(", ")}! You won **${giveaway.prize}**.`
+            : `No one entered **${giveaway.prize}** — no winner this time.`,
+          color: winners.length ? 0x22c55e : 0xf59e0b,
+        }],
+        allowedMentions: { users: winners },
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.error("[Giveaway] Could not announce winners:", err.message);
+  }
+}
+
+// Reschedules any giveaway still "active" in the DB so a Render restart
+// doesn't leave one running forever. Ends it immediately if time already
+// passed while the bot was down.
+async function resumeActiveGiveaways() {
+  if (!supabaseAdmin) return;
+  const { data: active } = await supabaseAdmin.from("giveaways").select("id, ends_at").eq("status", "active");
+  for (const giveaway of active || []) {
+    const remaining = new Date(giveaway.ends_at).getTime() - Date.now();
+    if (remaining <= 0) {
+      endGiveaway(giveaway.id);
+    } else {
+      giveawayTimers.set(giveaway.id, setTimeout(() => endGiveaway(giveaway.id), remaining));
+    }
+  }
+}
+
 let discordBot = null;
 
 if (isConfiguredValue(discordBotToken)) {
@@ -3616,6 +3741,8 @@ if (isConfiguredValue(discordBotToken)) {
     } catch (err) {
       console.error("[Discord] Knowledgebase permission setup failed:", err.message);
     }
+
+    resumeActiveGiveaways().catch((err) => console.error("[Giveaway] Resume failed:", err.message));
 
     if (discordTicketCategoryId && discordInactiveTicketCategoryId) {
       setTimeout(() => maintainDiscordTickets(), 15_000);
@@ -3852,6 +3979,13 @@ if (isConfiguredValue(discordBotToken)) {
         new SlashCommandBuilder()
           .setName("reseller-panel")
           .setDescription("Post the reseller program info embed (admin only)")
+          .addChannelOption(o => o.setName("channel").setDescription("Channel to post in (default: current channel)").setRequired(false)),
+        new SlashCommandBuilder()
+          .setName("giveaway")
+          .setDescription("Start a giveaway with an Enter button (staff only)")
+          .addStringOption(o => o.setName("message").setDescription("The giveaway message / prize description").setRequired(true))
+          .addStringOption(o => o.setName("duration").setDescription("How long it runs, e.g. 30m, 2h, 1d, 1d12h").setRequired(true))
+          .addIntegerOption(o => o.setName("winners").setDescription("How many winners (default 1)").setRequired(false).setMinValue(1).setMaxValue(20))
           .addChannelOption(o => o.setName("channel").setDescription("Channel to post in (default: current channel)").setRequired(false)),
         new SlashCommandBuilder()
           .setName("postreview")
@@ -6514,6 +6648,111 @@ ${rows || '<div class="ct">No messages.</div>'}
         }],
         ephemeral: true,
       });
+    }
+
+    /* ── /giveaway — staff posts a message + duration, members click Enter ── */
+    if (interaction.commandName === "giveaway") {
+      if (!isDiscordStaffInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Staff only.", color: 0xff4444 }], ephemeral: true });
+      }
+      if (!supabaseAdmin) {
+        return interaction.reply({ embeds: [{ description: "Giveaways aren't available right now — Supabase isn't configured.", color: 0xff4444 }], ephemeral: true });
+      }
+      const message = trimField(interaction.options.getString("message"), 1000);
+      const durationRaw = interaction.options.getString("duration");
+      const winnersCount = interaction.options.getInteger("winners") || 1;
+      const targetChannel = interaction.options.getChannel("channel") || interaction.channel;
+
+      const durationMs = parseGiveawayDuration(durationRaw);
+      if (!durationMs || durationMs <= 0) {
+        return interaction.reply({ embeds: [{ description: "Couldn't parse that duration — try something like `30m`, `2h`, `1d`, or `1d12h`.", color: 0xff4444 }], ephemeral: true });
+      }
+      if (durationMs > 30 * 86_400_000) {
+        return interaction.reply({ embeds: [{ description: "Giveaways can run for at most 30 days.", color: 0xff4444 }], ephemeral: true });
+      }
+      if (!targetChannel?.isTextBased?.()) {
+        return interaction.reply({ embeds: [{ description: "That channel isn't a text channel.", color: 0xff4444 }], ephemeral: true });
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const endsAt = new Date(Date.now() + durationMs).toISOString();
+        const { data: giveaway, error: insertError } = await supabaseAdmin
+          .from("giveaways")
+          .insert({
+            guild_id: interaction.guildId,
+            channel_id: targetChannel.id,
+            host_discord_id: interaction.user.id,
+            host_username: interaction.user.username,
+            prize: message,
+            winners_count: winnersCount,
+            ends_at: endsAt,
+            status: "active",
+          })
+          .select("*")
+          .single();
+        if (insertError) throw insertError;
+
+        const posted = await targetChannel.send({
+          embeds: [buildGiveawayEmbed(giveaway, 0)],
+          components: giveawayEnterButton(giveaway.id),
+        });
+        await supabaseAdmin.from("giveaways").update({ message_id: posted.id }).eq("id", giveaway.id);
+
+        giveawayTimers.set(giveaway.id, setTimeout(() => endGiveaway(giveaway.id), durationMs));
+
+        return interaction.editReply({ embeds: [{ description: `Giveaway posted in ${targetChannel}. It ends <t:${Math.floor(new Date(endsAt).getTime() / 1000)}:R>.`, color: 0x22c55e }] });
+      } catch (error) {
+        console.error("[Discord /giveaway]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong starting that giveaway.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── Giveaway "Enter" button ── */
+    if (interaction.isButton?.() && interaction.customId.startsWith("giveaway_enter:")) {
+      const giveawayId = interaction.customId.split(":")[1];
+      if (!supabaseAdmin) {
+        return interaction.reply({ embeds: [{ description: "Giveaways aren't available right now.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: giveaway } = await supabaseAdmin.from("giveaways").select("*").eq("id", giveawayId).maybeSingle();
+        if (!giveaway || giveaway.status !== "active") {
+          return interaction.editReply({ embeds: [{ description: "This giveaway has ended.", color: 0xff4444 }] });
+        }
+
+        const { data: existing } = await supabaseAdmin
+          .from("giveaway_entries")
+          .select("id")
+          .eq("giveaway_id", giveawayId)
+          .eq("discord_id", interaction.user.id)
+          .maybeSingle();
+        if (existing) {
+          return interaction.editReply({ embeds: [{ description: "You're already entered — good luck!", color: 0xf59e0b }] });
+        }
+
+        const { error: insertError } = await supabaseAdmin.from("giveaway_entries").insert({
+          giveaway_id: giveawayId,
+          discord_id: interaction.user.id,
+          username: interaction.user.username,
+        });
+        if (insertError) {
+          if (insertError.code === "23505") {
+            return interaction.editReply({ embeds: [{ description: "You're already entered — good luck!", color: 0xf59e0b }] });
+          }
+          throw insertError;
+        }
+
+        const { count } = await supabaseAdmin.from("giveaway_entries").select("id", { count: "exact", head: true }).eq("giveaway_id", giveawayId);
+        try {
+          await interaction.message.edit({ embeds: [buildGiveawayEmbed(giveaway, count || 0)], components: giveawayEnterButton(giveawayId) });
+        } catch {}
+
+        return interaction.editReply({ embeds: [{ description: "You're entered! 🎉 Good luck.", color: 0x22c55e }] });
+      } catch (error) {
+        console.error("[Discord giveaway_enter]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong entering that giveaway.", color: 0xff4444 }] });
+      }
     }
 
     // ── DIAGNOSTIC: /pingtest posts a button; clicking it should reply
