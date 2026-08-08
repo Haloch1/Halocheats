@@ -131,9 +131,14 @@ const cheatsloveStoreApiUrl = (process.env.CHEATSLOVE_STORE_API_URL
 // boot also reads /balance once) - the old per-variant storefront double-check
 // (syncCheatsLoveStoreStock, 140 requests per cycle) is retired, see the
 // project-xencheats-cheatslove-ban memory / comment near cheatsloveCoversInventory.
-/* A full catalog response contains every variant. Refresh twice daily, then
-   allow a tightly-cooldown refresh when a customer adds an item to cart. */
-const cheatslovePollMs = 12 * 60 * 60_000;
+/* A full catalog response contains every variant, fetched as ONE /products
+   request per cycle (see comment above — this is not the old 140-req/cycle
+   per-variant approach that got the key banned). At that cost, polling
+   hourly instead of twice daily is still only 24 requests/day, nowhere
+   close to the 30/minute limit — just catches restocks/sellouts much
+   sooner. Bump CHEATSLOVE_POLL_MINUTES lower if you want it even tighter,
+   but keep a few minutes of headroom around cart-triggered refreshes. */
+const cheatslovePollMs = Math.max(5, Number(process.env.CHEATSLOVE_POLL_MINUTES || 60)) * 60_000;
 const cheatsloveCartRefreshCooldownMs = 5 * 60_000;
 /* HARD PROVIDER SAFETY LIMIT: Cheats.Love documents 30 requests/minute.
    Every reseller request must pass through cheatsloveFetch(), which serializes
