@@ -4,6 +4,7 @@ import { initReveal, renderMessage } from "./site.js";
 initReveal();
 
 const REFRESH_INTERVAL_MS = 10_000;
+const SLOW_REFRESH_INTERVAL_MS = 60_000;
 
 const messageBox = document.querySelector("[data-analytics-message]");
 const accessForm = document.querySelector("[data-analytics-access-form]");
@@ -15,7 +16,34 @@ const updatedAt = document.querySelector("[data-analytics-updated]");
 const pageActivityList = document.querySelector("[data-page-activity-list]");
 const visitorViewList = document.querySelector("[data-visitor-view-list]");
 
+const funnelUpdated = document.querySelector("[data-funnel-updated]");
+const funnelNote = document.querySelector("[data-funnel-note]");
+const exitPagesList = document.querySelector("[data-exit-pages-list]");
+const abandonmentTable = document.querySelector("[data-abandonment-table]");
+const abandonmentEmpty = document.querySelector("[data-abandonment-empty]");
+const funnelStat = {
+  total: document.querySelector("[data-funnel-total]"),
+  viewedProduct: document.querySelector("[data-funnel-viewed-product]"),
+  abandoned: document.querySelector("[data-funnel-abandoned]"),
+  bounced: document.querySelector("[data-funnel-bounced]"),
+  active: document.querySelector("[data-funnel-active]"),
+  converted: document.querySelector("[data-funnel-converted]"),
+};
+
+const churnUpdated = document.querySelector("[data-churn-updated]");
+const departuresTable = document.querySelector("[data-departures-table]");
+const departuresEmpty = document.querySelector("[data-departures-empty]");
+const churnStat = {
+  total: document.querySelector("[data-churn-total]"),
+  avgDays: document.querySelector("[data-churn-avg-days]"),
+  medianDays: document.querySelector("[data-churn-median-days]"),
+  d7: document.querySelector("[data-churn-7d]"),
+  d30: document.querySelector("[data-churn-30d]"),
+  verified: document.querySelector("[data-churn-verified]"),
+};
+
 let refreshTimer = null;
+let slowRefreshTimer = null;
 
 function formatTimestamp(value) {
   if (!value) {
@@ -115,6 +143,133 @@ function renderRecentViews(views) {
     .join("");
 }
 
+function formatMoney(cents) {
+  return `$${(Number(cents || 0) / 100).toFixed(2)}`;
+}
+
+function formatDays(value) {
+  if (value === null || value === undefined) return "-";
+  return `${value}d`;
+}
+
+function formatDate(value) {
+  if (!value) return "Unknown";
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(value));
+}
+
+function renderExitPages(pages) {
+  if (!exitPagesList) return;
+  if (!pages.length) {
+    exitPagesList.innerHTML = '<div class="member-empty">No data yet.</div>';
+    return;
+  }
+  exitPagesList.innerHTML = pages
+    .map(
+      (page) => `
+        <article class="analytics-page-row">
+          <span>${escapeHtml(page.pagePath)}</span>
+          <strong>${Number(page.exits || 0)}</strong>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderAbandonment(rows) {
+  if (!abandonmentTable) return;
+  const body = rows
+    .map(
+      (row) => `
+        <div class="analytics-table-row">
+          <span>${escapeHtml(row.productSlug)}</span>
+          <span>${Number(row.abandonedCount || 0)}</span>
+          <span>${formatMoney(row.abandonedValueCents)}</span>
+          <span>${Number(row.completedCount || 0)}</span>
+        </div>
+      `
+    )
+    .join("");
+  abandonmentTable.querySelectorAll(".analytics-table-row:not(.analytics-table-head)").forEach((el) => el.remove());
+  if (abandonmentEmpty) abandonmentEmpty.hidden = rows.length > 0;
+  abandonmentTable.insertAdjacentHTML("beforeend", body);
+}
+
+function renderFunnelStats(summary) {
+  if (!funnelStat.total) return;
+  funnelStat.total.textContent = String(summary.totalVisitors || 0);
+  funnelStat.viewedProduct.textContent = String(summary.viewedProduct || 0);
+  funnelStat.abandoned.textContent = String(summary.abandonedAfterProductView || 0);
+  funnelStat.bounced.textContent = String(summary.bouncedNoProductView || 0);
+  funnelStat.active.textContent = String(summary.stillActive || 0);
+  funnelStat.converted.textContent = String(summary.converted || 0);
+
+  if (funnelNote) {
+    const showNote = summary.converted === 0 && summary.cancelledAtCheckout === 0 && summary.abandonedAfterProductView > 0;
+    funnelNote.hidden = !showNote;
+    if (showNote) {
+      funnelNote.textContent =
+        "No checkout-success or checkout-cancel page views tracked yet in this window — tracking on those two pages just went live, so this number fills in over the next few days.";
+    }
+  }
+}
+
+async function loadFunnelAnalytics() {
+  const response = await fetch("/api/admin/analytics/funnel?days=30&idleHours=2", {
+    credentials: "same-origin",
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error || "Unable to load funnel analytics.");
+  }
+  renderFunnelStats(payload.summary || {});
+  renderExitPages(payload.exitPages || []);
+  renderAbandonment(payload.checkoutAbandonment || []);
+  if (funnelUpdated) funnelUpdated.textContent = `Updated ${formatTimestamp(payload.updatedAt)} · last 30 days`;
+}
+
+function renderDepartures(rows) {
+  if (!departuresTable) return;
+  const body = rows
+    .map(
+      (row) => `
+        <div class="analytics-table-row analytics-table-row-5col">
+          <span>${escapeHtml(row.tag || row.username || row.discordId)}</span>
+          <span>${formatDate(row.joinedAt)}</span>
+          <span>${formatDate(row.leftAt)}</span>
+          <span>${formatDays(row.membershipDays)}</span>
+          <span>${row.wasVerified ? "Yes" : "No"}</span>
+        </div>
+      `
+    )
+    .join("");
+  departuresTable.querySelectorAll(".analytics-table-row:not(.analytics-table-head)").forEach((el) => el.remove());
+  if (departuresEmpty) departuresEmpty.hidden = rows.length > 0;
+  departuresTable.insertAdjacentHTML("beforeend", body);
+}
+
+function renderChurnStats(summary) {
+  if (!churnStat.total) return;
+  churnStat.total.textContent = String(summary.totalDepartures || 0);
+  churnStat.avgDays.textContent = formatDays(summary.avgMembershipDays);
+  churnStat.medianDays.textContent = formatDays(summary.medianMembershipDays);
+  churnStat.d7.textContent = String(summary.leftWithin7Days || 0);
+  churnStat.d30.textContent = String(summary.leftWithin30Days || 0);
+  churnStat.verified.textContent = String(summary.wasVerifiedCount || 0);
+}
+
+async function loadChurnAnalytics() {
+  const response = await fetch("/api/admin/analytics/churn?days=90", {
+    credentials: "same-origin",
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.error || "Unable to load churn analytics.");
+  }
+  renderChurnStats(payload.summary || {});
+  renderDepartures(payload.recent || []);
+  if (churnUpdated) churnUpdated.textContent = `Updated ${formatTimestamp(payload.updatedAt)} · last 90 days`;
+}
+
 async function loadAnalytics() {
   const session = await getCurrentSession();
 
@@ -142,6 +297,16 @@ async function loadAnalytics() {
   renderMessage(messageBox, "Panel unlocked.", "success");
 }
 
+// Funnel/churn are heavier aggregate queries than the live-visitor panel, so
+// they load independently and don't block it — one failing doesn't take
+// down the rest of the page.
+async function loadSlowAnalytics() {
+  const results = await Promise.allSettled([loadFunnelAnalytics(), loadChurnAnalytics()]);
+  for (const result of results) {
+    if (result.status === "rejected") console.error("[Analytics]", result.reason);
+  }
+}
+
 function startRefreshLoop() {
   window.clearInterval(refreshTimer);
   refreshTimer = window.setInterval(() => {
@@ -153,6 +318,9 @@ function startRefreshLoop() {
       );
     });
   }, REFRESH_INTERVAL_MS);
+
+  window.clearInterval(slowRefreshTimer);
+  slowRefreshTimer = window.setInterval(loadSlowAnalytics, SLOW_REFRESH_INTERVAL_MS);
 }
 
 // Auto-check role and load if admin

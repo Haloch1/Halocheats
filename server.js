@@ -4148,6 +4148,30 @@ if (isConfiguredValue(discordBotToken)) {
     if (discordGuildId && member.guild.id === discordGuildId) {
       console.log(`[Discord] User ${member.user.tag} left the server.`);
 
+      // Persist for churn analytics — the leaves channel embed below is
+      // just a log, this is what /api/admin/analytics/churn reads from.
+      if (supabaseAdmin) {
+        try {
+          const joinedAt = member.joinedAt || null;
+          const leftAt = new Date();
+          const membershipDays = joinedAt ? Math.max(0, Math.round((leftAt.getTime() - joinedAt.getTime()) / 86_400_000)) : null;
+          const roles = member.roles?.cache?.filter((r) => r.name !== "@everyone").map((r) => r.name) || [];
+          const wasVerified = Boolean(discordVerifiedRoleId && member.roles?.cache?.has?.(discordVerifiedRoleId));
+          await supabaseAdmin.from("member_departures").insert({
+            discord_id: member.user.id,
+            username: member.user.username,
+            tag: member.user.tag,
+            joined_at: joinedAt ? joinedAt.toISOString() : null,
+            left_at: leftAt.toISOString(),
+            membership_days: membershipDays,
+            roles,
+            was_verified: wasVerified,
+          });
+        } catch (err) {
+          console.error("[Analytics] member_departures insert failed:", err.message);
+        }
+      }
+
       // Log to leaves channel
       try {
         const leavesChannel = discordLeavesChannelId
@@ -14476,6 +14500,124 @@ app.get("/api/admin/visitors", async (req, res) => {
     return res.status(error.status || 500).json({
       error: "Unable to load panel.",
     });
+  }
+});
+
+/* ── Drop-off funnel: built entirely from the existing page_views heartbeat
+   log + orders table, no new client tracking needed. See
+   supabase-analytics-dropoff-churn.sql for the SQL functions this calls. ── */
+app.get("/api/admin/analytics/funnel", async (req, res) => {
+  try {
+    await ensureRoleAccess(req, res, "admin");
+    if (!supabaseAdmin) {
+      return res.status(500).json({ error: "Analytics storage is not configured." });
+    }
+
+    const daysBack = Math.min(Math.max(Number(req.query.days) || 30, 1), 365);
+    const idleHours = Math.min(Math.max(Number(req.query.idleHours) || 2, 1), 48);
+
+    const [summaryResult, exitPagesResult, abandonmentResult] = await Promise.all([
+      supabaseAdmin.rpc("get_funnel_summary", { days_back: daysBack, idle_hours: idleHours }),
+      supabaseAdmin.rpc("get_funnel_exit_pages", { days_back: daysBack, idle_hours: idleHours, limit_n: 15 }),
+      supabaseAdmin.rpc("get_checkout_abandonment", { days_back: daysBack, stale_hours: idleHours }),
+    ]);
+
+    if (summaryResult.error) throw summaryResult.error;
+    if (exitPagesResult.error) throw exitPagesResult.error;
+    if (abandonmentResult.error) throw abandonmentResult.error;
+
+    const summary = summaryResult.data?.[0] || {
+      total_visitors: 0, viewed_product: 0, reached_checkout_result: 0, converted: 0,
+      cancelled_at_checkout: 0, abandoned_after_product_view: 0, bounced_no_product_view: 0, still_active: 0,
+    };
+
+    return res.json({
+      daysBack,
+      idleHours,
+      summary: {
+        totalVisitors: Number(summary.total_visitors) || 0,
+        viewedProduct: Number(summary.viewed_product) || 0,
+        reachedCheckoutResult: Number(summary.reached_checkout_result) || 0,
+        converted: Number(summary.converted) || 0,
+        cancelledAtCheckout: Number(summary.cancelled_at_checkout) || 0,
+        abandonedAfterProductView: Number(summary.abandoned_after_product_view) || 0,
+        bouncedNoProductView: Number(summary.bounced_no_product_view) || 0,
+        stillActive: Number(summary.still_active) || 0,
+      },
+      exitPages: (exitPagesResult.data || []).map((row) => ({ pagePath: row.page_path, exits: Number(row.exits) || 0 })),
+      checkoutAbandonment: (abandonmentResult.data || []).map((row) => ({
+        productSlug: row.product_slug,
+        abandonedCount: Number(row.abandoned_count) || 0,
+        abandonedValueCents: Number(row.abandoned_value_cents) || 0,
+        completedCount: Number(row.completed_count) || 0,
+        completedValueCents: Number(row.completed_value_cents) || 0,
+        canceledCount: Number(row.canceled_count) || 0,
+      })),
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("[Analytics /funnel]", error.message);
+    return res.status(error.status || 500).json({ error: "Unable to load funnel analytics." });
+  }
+});
+
+/* ── Discord churn: who left, how long they'd been a member, and whether
+   they were verified when they left. Populated from member_departures,
+   written on every guildMemberRemove. ── */
+app.get("/api/admin/analytics/churn", async (req, res) => {
+  try {
+    await ensureRoleAccess(req, res, "admin");
+    if (!supabaseAdmin) {
+      return res.status(500).json({ error: "Analytics storage is not configured." });
+    }
+
+    const daysBack = Math.min(Math.max(Number(req.query.days) || 90, 1), 730);
+
+    const [summaryResult, trendResult, recentResult] = await Promise.all([
+      supabaseAdmin.rpc("get_churn_summary", { days_back: daysBack }),
+      supabaseAdmin.rpc("get_churn_trend", { days_back: daysBack }),
+      supabaseAdmin
+        .from("member_departures")
+        .select("discord_id, username, tag, joined_at, left_at, membership_days, was_verified, roles")
+        .order("left_at", { ascending: false })
+        .limit(50),
+    ]);
+
+    if (summaryResult.error) throw summaryResult.error;
+    if (trendResult.error) throw trendResult.error;
+    if (recentResult.error) throw recentResult.error;
+
+    const summary = summaryResult.data?.[0] || {
+      total_departures: 0, avg_membership_days: null, median_membership_days: null,
+      left_within_7_days: 0, left_within_30_days: 0, was_verified_count: 0,
+    };
+
+    return res.json({
+      daysBack,
+      summary: {
+        totalDepartures: Number(summary.total_departures) || 0,
+        avgMembershipDays: summary.avg_membership_days === null ? null : Number(summary.avg_membership_days),
+        medianMembershipDays: summary.median_membership_days === null ? null : Number(summary.median_membership_days),
+        leftWithin7Days: Number(summary.left_within_7_days) || 0,
+        leftWithin30Days: Number(summary.left_within_30_days) || 0,
+        wasVerifiedCount: Number(summary.was_verified_count) || 0,
+      },
+      trend: (trendResult.data || []).map((row) => ({ weekStart: row.week_start, departures: Number(row.departures) || 0 })),
+      recent: (recentResult.data || []).map((row) => ({
+        discordId: row.discord_id,
+        username: row.username,
+        tag: row.tag,
+        joinedAt: row.joined_at,
+        leftAt: row.left_at,
+        membershipDays: row.membership_days,
+        wasVerified: row.was_verified,
+        roles: row.roles || [],
+      })),
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("[Analytics /churn]", error.message);
+    return res.status(error.status || 500).json({ error: "Unable to load churn analytics." });
   }
 });
 
