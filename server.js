@@ -5500,6 +5500,14 @@ if (isConfiguredValue(discordBotToken)) {
       ],
     },
     {
+      game: /spoofer/i,
+      label: "Spoofer",
+      variants: [
+        { match: /lunar/i, slug: "spoofer-lunar" },
+        { match: /shadow/i, slug: "spoofer-shadow" },
+      ],
+    },
+    {
       game: /escape\s*from\s*tarkov|\beft\b|tarkov/i,
       label: "Escape from Tarkov",
       variants: [
