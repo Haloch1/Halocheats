@@ -5721,9 +5721,14 @@ if (isConfiguredValue(discordBotToken)) {
       }
 
       const recent = await sourceChannel.messages.fetch({ limit: 20 }).catch(() => null);
+      // The source bot spreads the full status list across up to 3 embeds
+      // (25-field cap per embed) — sometimes as 3 embeds in one message,
+      // sometimes as separate messages landing together. Match on ANY embed
+      // in the message, not just the first, or the 2nd/3rd embed's fields
+      // (and any game that only appears in them) get silently dropped.
       const allStatusMessages = recent
         ? [...recent.values()]
-            .filter((m) => isProductStatusEmbed(m.embeds?.[0]))
+            .filter((m) => (m.embeds || []).some(isProductStatusEmbed))
             .sort(
               (a, b) =>
                 (b.editedTimestamp || b.createdTimestamp) -
@@ -5735,11 +5740,12 @@ if (isConfiguredValue(discordBotToken)) {
         return;
       }
 
-      // The source bot posts a fresh pair of messages every hour instead of
-      // editing in place, so the channel history can contain several past
-      // batches of the same fields. Only use the most recent batch (within
-      // 10 minutes of the newest matching message) to avoid re-processing
-      // stale duplicates.
+      // The source bot posts a fresh batch of messages/embeds every hour
+      // (plus an extra one at a random ~30min offset) instead of editing in
+      // place, so the channel history can contain several past batches of
+      // the same fields. Only use the most recent batch (within 10 minutes
+      // of the newest matching message) to avoid re-processing stale
+      // duplicates.
       const newestTimestamp = allStatusMessages[0].createdTimestamp;
       const statusMessages = allStatusMessages.filter(
         (m) => newestTimestamp - m.createdTimestamp <= 10 * 60 * 1000
@@ -5747,7 +5753,9 @@ if (isConfiguredValue(discordBotToken)) {
 
       const allRows = [];
       for (const msg of statusMessages) {
-        allRows.push(...parseStatusEmbedFields(msg.embeds[0]));
+        for (const embed of msg.embeds || []) {
+          if (isProductStatusEmbed(embed)) allRows.push(...parseStatusEmbedFields(embed));
+        }
       }
 
       // De-dupe by product slug (keep the first/newest hit) in case the
