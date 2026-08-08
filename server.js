@@ -430,6 +430,11 @@ const discordInactiveTicketCategoryId = process.env.DISCORD_INACTIVE_TICKET_CATE
 const discordTicketQueueChannelId = process.env.DISCORD_TICKET_QUEUE_CHANNEL_ID || "";
 const discordTicketIdleHours = Math.max(1, Number(process.env.DISCORD_TICKET_IDLE_HOURS || 24));
 const discordTicketReplyWaitMinutes = Math.max(5, Number(process.env.DISCORD_TICKET_REPLY_WAIT_MINUTES || 20));
+// A ticket that's been sitting in the inactive category with zero activity
+// (from anyone, customer or staff) for this many days gets auto-closed:
+// transcript saved + posted to the transcript channel, then the channel is
+// deleted. Set DISCORD_TICKET_AUTO_DELETE_DAYS=0 to disable.
+const discordTicketAutoDeleteDays = Math.max(0, Number(process.env.DISCORD_TICKET_AUTO_DELETE_DAYS ?? 7));
 // How often the SAME ticket can re-post to the queue channel while it keeps
 // sitting unanswered (e.g. the customer sends several follow-up messages).
 // Without this, every new customer message re-triggered an alert as soon as
@@ -3172,11 +3177,159 @@ async function maintainDiscordTickets() {
         await postTicketQueueAlert(guild, channel, messages, waitingSince, alertKey);
       }
     }
+
+    /* Tickets that have been sitting inactive (no messages from anyone) for
+       discordTicketAutoDeleteDays get transcript-saved and deleted, same as
+       a manual close_ticket. Checked every maintenance pass, so a ticket
+       that gets reopened (see the messageCreate handler that moves it back
+       to discordTicketCategoryId) drops out of this loop automatically. */
+    if (discordTicketAutoDeleteDays > 0) {
+      const inactiveTickets = guild.channels.cache
+        .filter((channel) => channel.type === ChannelType.GuildText && channel.parentId === discordInactiveTicketCategoryId && channel.name.startsWith("ticket-"))
+        .first(50);
+      const autoDeleteMs = discordTicketAutoDeleteDays * 24 * 60 * 60 * 1000;
+
+      for (const channel of inactiveTickets.values()) {
+        const recent = await channel.messages.fetch({ limit: 1 }).catch(() => null);
+        const lastMessage = recent?.first();
+        const lastActivityAt = lastMessage?.createdTimestamp || channel.createdTimestamp;
+        if (Date.now() - lastActivityAt >= autoDeleteMs) {
+          await autoCloseInactiveTicket(channel).catch((err) =>
+            console.error("[Discord ticket auto-delete]", channel.name, err.message)
+          );
+        }
+      }
+    }
   } catch (error) {
     console.error("[Discord ticket maintenance]", error.message);
   } finally {
     ticketMaintenanceRunning = false;
   }
+}
+
+/* Set from inside the clientReady closure once postTicketTranscript exists
+   (same pattern as requestCheatsLoveStockRefresh below) — lets this
+   top-level auto-delete path reuse the exact same transcript renderer the
+   manual close_ticket button uses, without restructuring where either one
+   lives. */
+let postTicketTranscriptRef = null;
+
+/* Auto-close path for tickets that timed out in the inactive category
+   (see maintainDiscordTickets above). Mirrors what the close_ticket button
+   does — fetch full history, build + store a transcript, post it to the
+   transcript channel, then delete the channel — just without an
+   `interaction` to reply on, since nobody clicked anything. */
+async function autoCloseInactiveTicket(channel) {
+  let allMessages = [];
+  let lastId = null;
+  while (true) {
+    const options = { limit: 100 };
+    if (lastId) options.before = lastId;
+    const batch = await channel.messages.fetch(options);
+    if (batch.size === 0) break;
+    allMessages.push(...batch.values());
+    lastId = batch.last().id;
+    if (batch.size < 100) break;
+  }
+  allMessages.reverse();
+
+  let ticketTopic = channel.name;
+  let ticketCreator = "Unknown";
+  let ticketCreatorUsername = "Unknown";
+  let ticketCreatorAvatar = null;
+  let ticketCreatedAt = null;
+  const firstEmbed = allMessages.find((m) => m.author.bot && m.embeds.length > 0 && m.embeds[0].title?.startsWith("Ticket:"));
+  if (firstEmbed) {
+    ticketTopic = firstEmbed.embeds[0].title.replace("Ticket: ", "");
+    const creatorField = firstEmbed.embeds[0].fields?.find((f) => f.name === "Opened by");
+    if (creatorField) {
+      ticketCreator = creatorField.value;
+      const creatorId = creatorField.value.replace(/<@|>/g, "");
+      try {
+        const creatorMember = await channel.guild.members.fetch(creatorId);
+        ticketCreatorUsername = creatorMember.user.username;
+        ticketCreatorAvatar = creatorMember.user.displayAvatarURL({ extension: "png", size: 128 });
+      } catch {
+        ticketCreatorUsername = creatorId;
+      }
+    }
+    ticketCreatedAt = firstEmbed.createdTimestamp;
+  }
+
+  const msgDataForCount = allMessages.filter((m) => {
+    if (m.content?.includes("Closing ticket and saving transcript")) return false;
+    if (m.author.bot && m.embeds.length > 0 && m.embeds[0].title?.startsWith("Ticket:")) return false;
+    return m.content || (m.author.bot && m.embeds.length > 0);
+  });
+  const messageCount = msgDataForCount.length;
+  const duration = ticketCreatedAt ? Math.floor((Date.now() - ticketCreatedAt) / 60000) : 0;
+  const durationText = duration < 60 ? `${duration}m` : `${Math.floor(duration / 60)}h ${duration % 60}m`;
+
+  const storedTranscriptMessages = msgDataForCount.map((m) => ({
+    author: m.author.username,
+    authorId: m.author.id,
+    avatarUrl: m.author.displayAvatarURL({ extension: "png", size: 128 }),
+    role: m.author.bot ? "bot" : isDiscordStaff(m.author.id, m.member) ? "staff" : "user",
+    isBot: m.author.bot,
+    content: m.author.bot && m.embeds.length > 0 ? (m.embeds[0].description || "") : (m.content || ""),
+    timestamp: new Date(m.createdTimestamp).toISOString(),
+    attachments: m.attachments?.size
+      ? [...m.attachments.values()].map((attachment) => ({ name: attachment.name, url: attachment.url }))
+      : [],
+  }));
+
+  let transcriptViewerUrl = "";
+  if (supabaseAdmin) {
+    try {
+      const { data: transcript, error: dbErr } = await supabaseAdmin
+        .from("ticket_transcripts")
+        .insert({
+          channel_name: channel.name,
+          topic: ticketTopic,
+          opened_by: ticketCreatorUsername,
+          closed_by: `Auto-closed (${discordTicketAutoDeleteDays}d inactive)`,
+          duration_minutes: duration,
+          message_count: messageCount,
+          messages: storedTranscriptMessages,
+        })
+        .select("id")
+        .single();
+      if (dbErr) throw dbErr;
+      if (transcript?.id) transcriptViewerUrl = `${baseUrl}/admin/transcripts/${transcript.id}`;
+    } catch (dbErr) {
+      console.error("[Ticket transcript DB]", dbErr.message);
+    }
+  }
+
+  if (postTicketTranscriptRef) {
+    try {
+      await postTicketTranscriptRef(
+        {
+          topic: ticketTopic,
+          channelName: channel.name,
+          openedByName: ticketCreatorUsername,
+          openedByMention: ticketCreator,
+          openedByAvatar: ticketCreatorAvatar,
+          closedByName: "Auto-close",
+          closedByMention: `Auto-closed after ${discordTicketAutoDeleteDays} day${discordTicketAutoDeleteDays === 1 ? "" : "s"} of inactivity`,
+          durationText,
+          viewerUrl: transcriptViewerUrl,
+        },
+        storedTranscriptMessages.map((m) => ({
+          username: m.author,
+          avatarUrl: m.avatarUrl,
+          role: m.role,
+          content: m.content,
+          timestamp: new Date(m.timestamp).getTime(),
+          attachments: m.attachments,
+        })),
+      );
+    } catch (tErr) {
+      console.error("[Ticket transcript post]", tErr.message);
+    }
+  }
+
+  await channel.delete(`Auto-closed: ${discordTicketAutoDeleteDays}d inactive`).catch(() => {});
 }
 
 /* Shared by the Discord /resellerapp modal AND the website application form
@@ -6053,6 +6206,10 @@ ${rows || '<div class="ct">No messages.</div>'}
       });
     }
   }
+  // Expose to the top-level ticket auto-delete path (see maintainDiscordTickets
+  // / autoCloseInactiveTicket) — that code runs outside this clientReady
+  // closure, so it can't call postTicketTranscript directly.
+  postTicketTranscriptRef = postTicketTranscript;
 
   discordBot.on("interactionCreate", async (interaction) => {
     // ── Diagnostic: surface how long it took the process to even start
