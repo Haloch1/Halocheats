@@ -4105,17 +4105,26 @@ if (isConfiguredValue(discordBotToken)) {
           // runtime role check below remains the final authorization gate.
           json.default_member_permissions = PermissionFlagsBits.ManageGuild.toString();
         }
+        // Let people install XenCheats as a personal app and run every
+        // command in DMs or any server, not just this one. Runtime checks
+        // (isDiscordStaff/isDiscordAdmin/etc.) are the real gate — those use
+        // optional chaining on interaction.member, so they fail safely
+        // ("staff only" style replies) rather than throwing when there's no
+        // guild context. integration_types: 0=guild install, 1=user install.
+        // contexts: 0=guild, 1=bot DM, 2=group/private DM.
+        json.integration_types = [0, 1];
+        json.contexts = [0, 1, 2];
         return json;
       });
 
+      // DM/user-install commands only work when registered globally — guild
+      // commands can't have a DM context. Global propagation can take up to
+      // ~1 hour to reach every server, unlike guild commands (near-instant).
       if (discordGuildId) {
-        // Clear global commands to avoid duplicates, then set guild commands
-        await rest.put(Routes.applicationCommands(discordClientId), { body: [] });
-        await rest.put(Routes.applicationGuildCommands(discordClientId, discordGuildId), { body: commands });
-      } else {
-        await rest.put(Routes.applicationCommands(discordClientId), { body: commands });
+        await rest.put(Routes.applicationGuildCommands(discordClientId, discordGuildId), { body: [] });
       }
-      console.log("[Discord] Slash commands registered");
+      await rest.put(Routes.applicationCommands(discordClientId), { body: commands });
+      console.log("[Discord] Slash commands registered globally (DM + any server)");
     } catch (err) {
       console.error("[Discord] Slash command registration failed:", err.message);
     }
