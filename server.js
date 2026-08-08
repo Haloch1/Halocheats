@@ -608,6 +608,7 @@ async function ensureDiscordVerificationLayout(guild) {
       await questionsChannel.permissionOverwrites.delete(discordUnverifiedRoleId).catch(() => {});
     }
     console.log("[Discord] Verification is disabled — opened up member channels for Unverified.");
+    autoVerifyAllMembers(guild).catch((err) => console.error("[Discord] Auto-verify backfill failed:", err.message));
     return;
   }
 
@@ -742,6 +743,28 @@ async function ensureDiscordVerificationLayout(guild) {
   }
 
   console.log(`[Discord] Verification layout ready in #${verificationChannel.name}.`);
+}
+
+/* One-time-per-boot backfill: when verification is disabled, give everyone
+   the Verified role (and drop Unverified) instead of only opening channel
+   permissions — some features check the role directly, not just channel
+   access. Runs sequentially with a small delay to stay well under Discord's
+   rate limits; safe to re-run since it skips members who already match. */
+async function autoVerifyAllMembers(guild) {
+  if (!guild || !discordVerifiedRoleId) return;
+  const members = await guild.members.fetch();
+  let changed = 0;
+  for (const member of members.values()) {
+    if (member.user?.bot) continue;
+    const hasVerified = member.roles.cache.has(discordVerifiedRoleId);
+    const hasUnverified = discordUnverifiedRoleId && member.roles.cache.has(discordUnverifiedRoleId);
+    if (hasVerified && !hasUnverified) continue;
+    if (!hasVerified) await member.roles.add(discordVerifiedRoleId).catch(() => {});
+    if (hasUnverified) await member.roles.remove(discordUnverifiedRoleId).catch(() => {});
+    changed++;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (changed) console.log(`[Discord] Auto-verified ${changed} member(s).`);
 }
 
 /* Per-user cooldown for public slash commands (they hit Supabase admin APIs).
@@ -4090,11 +4113,14 @@ if (isConfiguredValue(discordBotToken)) {
   discordBot.on("guildMemberAdd", async (member) => {
     if (!discordGuildId || member.guild.id !== discordGuildId) return;
 
-    // Assign unverified role to new joins (skip if already verified via OAuth)
     if (verificationEnabled && discordUnverifiedRoleId) {
+      // Assign unverified role to new joins (skip if already verified via OAuth)
       if (!discordVerifiedRoleId || !member.roles.cache.has(discordVerifiedRoleId)) {
         await member.roles.add(discordUnverifiedRoleId).catch(() => {});
       }
+    } else if (!verificationEnabled && discordVerifiedRoleId) {
+      // Verification is off — everyone is auto-verified on join instead.
+      await member.roles.add(discordVerifiedRoleId).catch(() => {});
     }
   });
 
