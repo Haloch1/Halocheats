@@ -4011,6 +4011,17 @@ if (isConfiguredValue(discordBotToken)) {
           .addIntegerOption(o => o.setName("winners").setDescription("How many winners (default 1)").setRequired(false).setMinValue(1).setMaxValue(20))
           .addChannelOption(o => o.setName("channel").setDescription("Channel to post in (default: current channel)").setRequired(false)),
         new SlashCommandBuilder()
+          .setName("giveaway-keys-add")
+          .setDescription("Add giveaway keys to the pool (staff only)")
+          .addStringOption(o => o.setName("keys").setDescription("Keys separated by spaces, commas, or new lines").setRequired(true))
+          .addStringOption(o => o.setName("label").setDescription("Optional label, e.g. the product name").setRequired(false)),
+        new SlashCommandBuilder()
+          .setName("giveaway-keys-next")
+          .setDescription("Get the next unused giveaway key and mark it used (staff only)"),
+        new SlashCommandBuilder()
+          .setName("giveaway-keys-status")
+          .setDescription("See how many giveaway keys are left (staff only)"),
+        new SlashCommandBuilder()
           .setName("postreview")
           .setDescription("Manually add a review, e.g. one shared as a screenshot (admin only)")
           .addStringOption(o => o.setName("username").setDescription("Name to show on the review").setRequired(true))
@@ -6778,6 +6789,127 @@ ${rows || '<div class="ct">No messages.</div>'}
       } catch (error) {
         console.error("[Discord giveaway_enter]", error.message);
         return interaction.editReply({ embeds: [{ description: "Something went wrong entering that giveaway.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /giveaway-keys-add — bulk add keys to the giveaway pool ── */
+    if (interaction.commandName === "giveaway-keys-add") {
+      if (!isDiscordStaffInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Staff only.", color: 0xff4444 }], ephemeral: true });
+      }
+      if (!supabaseAdmin) {
+        return interaction.reply({ embeds: [{ description: "Not available right now — Supabase isn't configured.", color: 0xff4444 }], ephemeral: true });
+      }
+      const raw = interaction.options.getString("keys");
+      const label = trimField(interaction.options.getString("label") || "", 200) || null;
+      const keys = [...new Set(raw.split(/[\s,]+/).map((k) => k.trim()).filter(Boolean))];
+      if (!keys.length) {
+        return interaction.reply({ embeds: [{ description: "Didn't find any keys in that — separate them with spaces, commas, or new lines.", color: 0xff4444 }], ephemeral: true });
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: inserted, error: insertError } = await supabaseAdmin
+          .from("giveaway_keys")
+          .upsert(
+            keys.map((key_value) => ({ key_value, label, added_by: interaction.user.username })),
+            { onConflict: "key_value", ignoreDuplicates: true },
+          )
+          .select("id");
+        if (insertError) throw insertError;
+
+        const addedCount = inserted?.length || 0;
+        const dupeCount = keys.length - addedCount;
+        return interaction.editReply({
+          embeds: [{
+            description: `Added **${addedCount}** key(s) to the pool.${dupeCount ? ` ${dupeCount} were already in there and skipped.` : ""}`,
+            color: 0x22c55e,
+          }],
+        });
+      } catch (error) {
+        console.error("[Discord /giveaway-keys-add]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong adding those keys.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /giveaway-keys-next — hand out the next unused key, mark it used ── */
+    if (interaction.commandName === "giveaway-keys-next") {
+      if (!isDiscordStaffInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Staff only.", color: 0xff4444 }], ephemeral: true });
+      }
+      if (!supabaseAdmin) {
+        return interaction.reply({ embeds: [{ description: "Not available right now — Supabase isn't configured.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const { data: key } = await supabaseAdmin
+          .from("giveaway_keys")
+          .select("*")
+          .eq("status", "unused")
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (!key) {
+          return interaction.editReply({ embeds: [{ description: "No unused giveaway keys left — add more with `/giveaway-keys-add`.", color: 0xf59e0b }] });
+        }
+
+        // Atomic-ish guard: only claim it if it's still unused, so two staff
+        // members hitting the command at the same moment can't get the same key.
+        const { data: claimed, error: claimError } = await supabaseAdmin
+          .from("giveaway_keys")
+          .update({ status: "used", used_by_discord_id: interaction.user.id, used_by_username: interaction.user.username, used_at: new Date().toISOString() })
+          .eq("id", key.id)
+          .eq("status", "unused")
+          .select("*")
+          .maybeSingle();
+        if (claimError) throw claimError;
+        if (!claimed) {
+          return interaction.editReply({ embeds: [{ description: "That key was just claimed by someone else — run the command again.", color: 0xf59e0b }] });
+        }
+
+        const { count: remaining } = await supabaseAdmin.from("giveaway_keys").select("id", { count: "exact", head: true }).eq("status", "unused");
+        return interaction.editReply({
+          embeds: [{
+            title: "Giveaway key",
+            description: `\`${claimed.key_value}\``,
+            fields: [{ name: "Remaining unused", value: String(remaining || 0), inline: true }],
+            color: 0x22c55e,
+          }],
+        });
+      } catch (error) {
+        console.error("[Discord /giveaway-keys-next]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong pulling a key.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /giveaway-keys-status — pool counts ── */
+    if (interaction.commandName === "giveaway-keys-status") {
+      if (!isDiscordStaffInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Staff only.", color: 0xff4444 }], ephemeral: true });
+      }
+      if (!supabaseAdmin) {
+        return interaction.reply({ embeds: [{ description: "Not available right now — Supabase isn't configured.", color: 0xff4444 }], ephemeral: true });
+      }
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        const [{ count: unused }, { count: used }] = await Promise.all([
+          supabaseAdmin.from("giveaway_keys").select("id", { count: "exact", head: true }).eq("status", "unused"),
+          supabaseAdmin.from("giveaway_keys").select("id", { count: "exact", head: true }).eq("status", "used"),
+        ]);
+        return interaction.editReply({
+          embeds: [{
+            title: "Giveaway key pool",
+            fields: [
+              { name: "Unused", value: String(unused || 0), inline: true },
+              { name: "Used", value: String(used || 0), inline: true },
+              { name: "Total", value: String((unused || 0) + (used || 0)), inline: true },
+            ],
+            color: 0x7c3aed,
+          }],
+        });
+      } catch (error) {
+        console.error("[Discord /giveaway-keys-status]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong loading the key pool.", color: 0xff4444 }] });
       }
     }
 
