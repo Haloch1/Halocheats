@@ -435,6 +435,8 @@ const discordTicketReplyWaitMinutes = Math.max(5, Number(process.env.DISCORD_TIC
 // transcript saved + posted to the transcript channel, then the channel is
 // deleted. Set DISCORD_TICKET_AUTO_DELETE_DAYS=0 to disable.
 const discordTicketAutoDeleteDays = Math.max(0, Number(process.env.DISCORD_TICKET_AUTO_DELETE_DAYS ?? 7));
+// discordRestockChannelId is already declared above (line ~379); reused here for
+// postRestockAnnouncement, called from syncCheatsLoveStock, without redeclaring it.
 // How often the SAME ticket can re-post to the queue channel while it keeps
 // sitting unanswered (e.g. the customer sends several follow-up messages).
 // Without this, every new customer message re-triggered an alert as soon as
@@ -4164,6 +4166,11 @@ if (isConfiguredValue(discordBotToken)) {
           .addIntegerOption(o => o.setName("winners").setDescription("How many winners (default 1)").setRequired(false).setMinValue(1).setMaxValue(20))
           .addChannelOption(o => o.setName("channel").setDescription("Channel to post in (default: current channel)").setRequired(false)),
         new SlashCommandBuilder()
+          .setName("reroll")
+          .setDescription("Reroll winner(s) for an ended giveaway (staff only)")
+          .addStringOption(o => o.setName("message_id").setDescription("The giveaway message ID (default: most recent ended giveaway in this channel)").setRequired(false))
+          .addIntegerOption(o => o.setName("winners").setDescription("How many new winners to pick (default: same as original)").setRequired(false).setMinValue(1).setMaxValue(20)),
+        new SlashCommandBuilder()
           .setName("giveaway-keys-add")
           .setDescription("Add giveaway keys to the pool (staff only)")
           .addStringOption(o => o.setName("keys").setDescription("Keys separated by spaces, commas, or new lines").setRequired(true))
@@ -6948,6 +6955,96 @@ ${rows || '<div class="ct">No messages.</div>'}
       } catch (error) {
         console.error("[Discord /giveaway]", error.message);
         return interaction.editReply({ embeds: [{ description: "Something went wrong starting that giveaway.", color: 0xff4444 }] });
+      }
+    }
+
+    /* ── /reroll — pick new winner(s) for a giveaway that already ended ──
+       Excludes the previous winner(s) from the new draw by default (that's
+       almost always why staff are rerolling — the original winner didn't
+       claim, or was invalid), unless the entry pool is too small to do that. */
+    if (interaction.commandName === "reroll") {
+      if (!isDiscordStaffInteraction(interaction)) {
+        return interaction.reply({ embeds: [{ description: "Staff only.", color: 0xff4444 }], ephemeral: true });
+      }
+      if (!supabaseAdmin) {
+        return interaction.reply({ embeds: [{ description: "Giveaways aren't available right now — Supabase isn't configured.", color: 0xff4444 }], ephemeral: true });
+      }
+      const messageId = interaction.options.getString("message_id")?.trim() || null;
+      const winnersOverride = interaction.options.getInteger("winners");
+
+      await interaction.deferReply({ ephemeral: true });
+      try {
+        let giveaway = null;
+        if (messageId) {
+          const { data } = await supabaseAdmin.from("giveaways").select("*").eq("message_id", messageId).maybeSingle();
+          giveaway = data;
+          if (!giveaway) {
+            return interaction.editReply({ embeds: [{ description: "No giveaway found with that message ID.", color: 0xff4444 }] });
+          }
+        } else {
+          const { data } = await supabaseAdmin
+            .from("giveaways")
+            .select("*")
+            .eq("channel_id", interaction.channelId)
+            .eq("status", "ended")
+            .order("ended_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          giveaway = data;
+          if (!giveaway) {
+            return interaction.editReply({ embeds: [{ description: "No ended giveaway found in this channel — pass `message_id` to target one elsewhere.", color: 0xff4444 }] });
+          }
+        }
+        if (giveaway.status === "active") {
+          return interaction.editReply({ embeds: [{ description: "That giveaway is still running — wait for it to end, or use `message_id` to target a different one.", color: 0xff4444 }] });
+        }
+
+        const { data: entries } = await supabaseAdmin.from("giveaway_entries").select("discord_id").eq("giveaway_id", giveaway.id);
+        const fullPool = (entries || []).map((e) => e.discord_id);
+        const previousWinners = new Set(giveaway.winner_ids || []);
+        const wantCount = Math.max(1, winnersOverride || giveaway.winners_count || 1);
+
+        // Prefer a pool that excludes the previous winner(s); fall back to the
+        // full pool only if excluding them leaves too few people to draw from.
+        const freshPool = fullPool.filter((id) => !previousWinners.has(id));
+        const pool = freshPool.length >= wantCount ? freshPool : fullPool;
+        const poolCopy = [...pool];
+        const winners = [];
+        const winnerCount = Math.min(wantCount, poolCopy.length);
+        for (let i = 0; i < winnerCount; i++) {
+          const idx = Math.floor(Math.random() * poolCopy.length);
+          winners.push(poolCopy.splice(idx, 1)[0]);
+        }
+
+        const { data: updated } = await supabaseAdmin
+          .from("giveaways")
+          .update({ winner_ids: winners, ended_at: new Date().toISOString() })
+          .eq("id", giveaway.id)
+          .select("*")
+          .single();
+
+        const channel = await discordBot.channels.fetch(giveaway.channel_id).catch(() => null);
+        if (channel) {
+          if (giveaway.message_id) {
+            const message = await channel.messages.fetch(giveaway.message_id).catch(() => null);
+            if (message) await message.edit({ embeds: [buildGiveawayEmbed(updated, fullPool.length)], components: giveawayEnterButton(giveaway.id, true) }).catch(() => {});
+          }
+          await channel.send({
+            content: winners.length ? winners.map((id) => `<@${id}>`).join(" ") : undefined,
+            embeds: [{
+              description: winners.length
+                ? `🔁 Rerolled! New winner${winners.length > 1 ? "s" : ""} for **${giveaway.prize}**: ${winners.map((id) => `<@${id}>`).join(", ")}`
+                : `Rerolled **${giveaway.prize}**, but there's no one left to pick from.`,
+              color: winners.length ? 0x22c55e : 0xf59e0b,
+            }],
+            allowedMentions: { users: winners },
+          }).catch(() => {});
+        }
+
+        return interaction.editReply({ embeds: [{ description: winners.length ? `Rerolled — new winner(s): ${winners.map((id) => `<@${id}>`).join(", ")}` : "Rerolled, but there were no entries to pick from.", color: 0x22c55e }] });
+      } catch (error) {
+        console.error("[Discord /reroll]", error.message);
+        return interaction.editReply({ embeds: [{ description: "Something went wrong rerolling that giveaway.", color: 0xff4444 }] });
       }
     }
 
@@ -20288,6 +20385,35 @@ async function loadProductStatusOverrides() {
     return `${n}${unit}`;
   }
 
+  /* Posts one batched embed for every variant that flipped from out-of-stock
+     (or a known 0 count) to available during this sync pass. Batched instead
+     of one message per variant since a single supplier catalog refresh can
+     restock several variants at once. */
+  async function postRestockAnnouncement(restocked) {
+    if (!discordBot || !discordRestockChannelId || !restocked.length) return;
+    try {
+      const channel = await discordBot.channels.fetch(discordRestockChannelId).catch(() => null);
+      if (!channel?.isTextBased?.()) return;
+      const shown = restocked.slice(0, 40);
+      const lines = shown.map((r) => {
+        const countText = Number.isInteger(r.stockCount) ? ` — **${r.stockCount}** available` : "";
+        return `• **${r.productName} — ${r.variantName}**${countText}`;
+      });
+      const extra = restocked.length > shown.length ? `\n...and ${restocked.length - shown.length} more.` : "";
+      await channel.send({
+        embeds: [{
+          title: "📦 Back in stock",
+          description: `${lines.join("\n")}${extra}`,
+          color: 0x22c55e,
+          footer: { text: "XenCheats | Stock sync" },
+          timestamp: new Date().toISOString(),
+        }],
+      });
+    } catch (err) {
+      console.error("[Restock announce]", err.message);
+    }
+  }
+
   async function syncCheatsLoveStock({ refreshBalance = true } = {}) {
     if (!cheatsloveApiKey) return;
     if (cheatsloveSyncRunning) {
@@ -20388,12 +20514,23 @@ async function loadProductStatusOverrides() {
       let updatedCount = 0;
       const unmatched = [];
       const cacheRows = [];
+      // Variants that flip from out-of-stock/0 to available during this
+      // pass — collected here, announced once as a batch after the loop.
+      const restocked = [];
 
       for (const product of products) {
         const productId = Number(product.cheatsLoveProductId);
         for (const variant of product.variants || []) {
           const inventorySlug = variant.inventorySlug || `${product.slug}-${variant.slug}`;
           if (!resolvedVidBySlug.has(inventorySlug)) continue; // not pinned/matched — leave as-is
+
+          // Snapshot the state BEFORE this pass overwrites it. Only fire a
+          // restock alert when we actually had a prior known state (so a
+          // brand-new product/variant showing up for the first time isn't
+          // announced as a "restock") and that state was out-of-stock/0.
+          const hadPriorState = cheatsloveStockKnown.has(inventorySlug);
+          const wasOutOfStock = hadPriorState
+            && (cheatsloveStockKnown.get(inventorySlug) !== "In Stock" || cheatsloveStockCountKnown.get(inventorySlug) === 0);
 
           const stockInfo = byVid.get(String(resolvedVidBySlug.get(inventorySlug))) || null;
           if (!stockInfo || stockInfo.stock == null) {
@@ -20409,6 +20546,15 @@ async function loadProductStatusOverrides() {
               cost_cents: null,
             });
             continue;
+          }
+
+          const willBeInStock = stockInfo.stock === "In Stock" && (!Number.isInteger(stockInfo.stockCount) || stockInfo.stockCount > 0);
+          if (hadPriorState && wasOutOfStock && willBeInStock) {
+            restocked.push({
+              productName: product.name,
+              variantName: variant.name,
+              stockCount: Number.isInteger(stockInfo.stockCount) ? stockInfo.stockCount : null,
+            });
           }
 
           cheatsloveStockKnown.set(inventorySlug, stockInfo.stock);
@@ -20453,6 +20599,9 @@ async function loadProductStatusOverrides() {
 
       if (updatedCount) {
         console.log(`[Cheats.Love] Updated stock for ${updatedCount} variant(s).`);
+      }
+      if (restocked.length) {
+        postRestockAnnouncement(restocked).catch((err) => console.error("[Restock announce]", err.message));
       }
       if (unmatched.length && !cheatsloveUnmatchedLogged) {
         cheatsloveUnmatchedLogged = true;
